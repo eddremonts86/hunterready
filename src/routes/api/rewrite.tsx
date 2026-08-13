@@ -1,0 +1,110 @@
+/**
+ * POST a `Resume`, get back a suggestion per bullet. Nothing is applied here.
+ *
+ * The endpoint deliberately returns *suggestions* rather than a modified resume. Enforcement layer 3
+ * (docs/06-ai-optimization.md) is that the candidate accepts each one, and an endpoint that returned
+ * an improved CV would make that a formality — the work would already be done and the diff would be
+ * a receipt rather than a decision.
+ *
+ * Consent applies exactly as it does to extraction: without it, this does nothing at all. Rewriting
+ * has no local fallback — there is no deterministic way to write a better sentence — so declining
+ * here means the feature is unavailable, and saying so is more honest than a silent no-op.
+ */
+import { createFileRoute } from '@tanstack/react-router'
+import { Resume } from '@/schema/resume'
+import { rewriteBullets } from '@/optimize/rewrite'
+import { resolveProvider } from '@/structure/provider'
+import { checkRateLimit, clientKey } from '@/lib/rate-limit'
+import { event, requestId } from '@/lib/log'
+
+export const Route = createFileRoute('/api/rewrite')({
+  server: {
+    handlers: {
+      POST: async ({ request }) => {
+        const id = requestId()
+        const started = Date.now()
+
+        // A rewrite pass is ~25 model calls. Rate limiting this is not optional.
+        const limit = checkRateLimit(clientKey(request))
+        if (!limit.allowed) {
+          event('rewrite.rate_limited', { requestId: id })
+          return Response.json(
+            {
+              error: 'rate_limited',
+              message: `You have asked for a lot of rewrites in a short time. Please wait ${Math.ceil(limit.retryAfterSeconds / 60)} minutes and try again.`,
+            },
+            {
+              status: 429,
+              headers: { 'retry-after': String(limit.retryAfterSeconds) },
+            },
+          )
+        }
+
+        let body: unknown
+        try {
+          body = await request.json()
+        } catch {
+          return Response.json(
+            {
+              error: 'bad_request',
+              message: 'That request did not arrive intact.',
+            },
+            { status: 400 },
+          )
+        }
+
+        const payload = body as { resume?: unknown; processing?: unknown }
+
+        // Same fail-closed default as ingestion: absent is not consent.
+        if (payload.processing !== 'provider') {
+          return Response.json(
+            {
+              error: 'consent_required',
+              message:
+                'Improving your wording needs the AI model, so your CV would have to be sent to the provider. You chose to keep it here, which is why this is switched off.',
+            },
+            { status: 403 },
+          )
+        }
+
+        if (resolveProvider() === undefined) {
+          return Response.json(
+            {
+              error: 'not_configured',
+              message:
+                'Rewriting is not available on this installation. Everything else still works.',
+            },
+            { status: 503 },
+          )
+        }
+
+        const parsed = Resume.safeParse(payload.resume)
+        if (!parsed.success) {
+          return Response.json(
+            { error: 'invalid_resume', message: 'We could not read that CV.' },
+            { status: 400 },
+          )
+        }
+
+        const result = await rewriteBullets({
+          resume: parsed.data,
+          signal: request.signal,
+        })
+
+        // Counts only — never a bullet, never a suggestion (docs/07-privacy.md).
+        event('rewrite.done', {
+          requestId: id,
+          promptVersion: result.promptVersion,
+          bullets: result.rewrites.length,
+          ...result.tally,
+          ms: Date.now() - started,
+        })
+
+        return Response.json(
+          { rewrites: result.rewrites, tally: result.tally },
+          { headers: { 'cache-control': 'no-store' } },
+        )
+      },
+    },
+  },
+})

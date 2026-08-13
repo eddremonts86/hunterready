@@ -39,6 +39,14 @@ const ExtractionPayload = z.object({
 
 export interface ExtractOptions {
   signal?: AbortSignal
+  /**
+   * Set false when the user declined to have their CV sent to a model provider.
+   *
+   * This is what makes the consent gate's second button true rather than decorative: declining has to
+   * change what the server *does*, not just what the interface says. With it false, no request leaves
+   * this process and extraction runs entirely on the deterministic rules path.
+   */
+  useProvider?: boolean
 }
 
 export interface ExtractSuccess {
@@ -82,10 +90,13 @@ export async function extractResume(
   normalizedText: string,
   options: ExtractOptions = {},
 ): Promise<ExtractResult> {
-  const provider = resolveProvider()
+  // `useProvider: false` means the user declined the transfer. Treated exactly like an absent
+  // provider, because from this function's point of view it is the same fact: there is no provider it
+  // is allowed to call.
+  const provider = options.useProvider === false ? undefined : resolveProvider()
 
-  // No provider configured: fall back to rules rather than failing. The promise in every error
-  // message here is "you can still build your CV", and that promise has to be true.
+  // No provider configured, or consent withheld: fall back to rules rather than failing. The promise
+  // in every error message here is "you can still build your CV", and that promise has to be true.
   if (provider === undefined) {
     const { resume, provenance } = extractByRules(normalizedText)
     return {

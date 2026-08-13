@@ -17,6 +17,11 @@ concurrency:
   group: coolify-deploy
   cancel-in-progress: false
 
+env:
+  # The application's name in Coolify, and the host it is expected to answer on. Both are asserted
+  # against the live API before anything is deployed — see the resolve step.
+  COOLIFY_APP_NAME: hunterready
+
 jobs:
   deploy:
     if: github.event.workflow_run.conclusion == 'success'
@@ -24,37 +29,102 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check the deploy is configured before touching anything
+        env:
+          COOLIFY_API_URL: ${{ secrets.COOLIFY_API_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
         run: |
           set -uo pipefail
           missing=()
-          [ -z "${{ secrets.COOLIFY_API_URL }}" ]   && missing+=(COOLIFY_API_URL)
-          [ -z "${{ secrets.COOLIFY_API_TOKEN }}" ] && missing+=(COOLIFY_API_TOKEN)
-          [ -z "${{ secrets.COOLIFY_APP_UUID }}" ]  && missing+=(COOLIFY_APP_UUID)
-          [ -z "${{ vars.PRODUCTION_URL }}" ]       && missing+=(PRODUCTION_URL)
+          [ -z "${COOLIFY_API_URL}" ]   && missing+=(COOLIFY_API_URL)
+          [ -z "${COOLIFY_API_TOKEN}" ] && missing+=(COOLIFY_API_TOKEN)
+          [ -z "${PRODUCTION_URL}" ]    && missing+=(PRODUCTION_URL)
           if [ ${#missing[@]} -gt 0 ]; then
             echo "::error::Not configured for deploys yet. Missing: ${missing[*]}. See docs/operations/deploy-runbook.md"
             exit 1
           fi
 
+      # Resolved by name from the live API, every run — never read from a stored UUID.
+      #
+      # The Coolify server hosts a dozen applications and a saved `COOLIFY_APP_UUID` belongs to
+      # whichever app was provisioned when it was written. Deploying the wrong uuid restarts somebody
+      # else's production app, and **Coolify reports success**. There is no error to notice.
+      #
+      # So: match on name, then assert the app's own `fqdn` is the host we expect. Two independent
+      # facts have to agree before a deploy is triggered.
+      - name: Resolve the application by name, and verify it is the right one
+        id: resolve
+        env:
+          COOLIFY_API_URL: ${{ secrets.COOLIFY_API_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+        run: |
+          set -uo pipefail
+          apps=$(curl -fsS -m 30 \
+            -H "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
+            -H "Accept: application/json" \
+            "${COOLIFY_API_URL}/api/v1/applications") || {
+              echo "::error::could not list Coolify applications — check COOLIFY_API_URL and that the token is still valid (a rotated token answers 401 Unauthenticated)"
+              exit 1
+            }
+
+          uuid=$(printf '%s' "$apps" | APP_NAME="${COOLIFY_APP_NAME}" EXPECTED="${PRODUCTION_URL}" node -e '
+            let d = ""
+            process.stdin.on("data", (c) => (d += c)).on("end", () => {
+              const apps = JSON.parse(d)
+              const wanted = process.env.APP_NAME
+              const matches = apps.filter((a) => a.name === wanted)
+              if (matches.length === 0) {
+                console.error(`::error::no Coolify application named "${wanted}". Present: ${apps.map((a) => a.name).join(", ")}`)
+                process.exit(1)
+              }
+              if (matches.length > 1) {
+                console.error(`::error::${matches.length} applications named "${wanted}" — refusing to guess which one to deploy`)
+                process.exit(1)
+              }
+              const app = matches[0]
+              // The second, independent fact. A name collision across environments is exactly how the
+              // wrong app gets deployed, and the fqdn is what a user would actually visit.
+              const host = (url) => String(url || "").replace(/^https?:\/\//, "").replace(/\/.*$/, "")
+              if (host(app.fqdn) !== host(process.env.EXPECTED)) {
+                console.error(`::error::"${wanted}" answers on ${app.fqdn}, but PRODUCTION_URL is ${process.env.EXPECTED} — one of the two is wrong, so nothing was deployed`)
+                process.exit(1)
+              }
+              process.stdout.write(app.uuid)
+            })
+          ')
+          echo "app_uuid=$uuid" >> "$GITHUB_OUTPUT"
+          echo "Resolved $COOLIFY_APP_NAME to an application whose fqdn matches PRODUCTION_URL."
+
       - name: Trigger deployment
         id: trigger
+        env:
+          COOLIFY_API_URL: ${{ secrets.COOLIFY_API_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
         run: |
-          resp=$(curl -fsS -X POST \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}" \
+          set -uo pipefail
+          resp=$(curl -fsS -X POST -m 30 \
+            -H "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
             -H "Accept: application/json" \
-            "${{ secrets.COOLIFY_API_URL }}/api/v1/applications/${{ secrets.COOLIFY_APP_UUID }}/start")
-          echo "$resp"
+            "${COOLIFY_API_URL}/api/v1/applications/${{ steps.resolve.outputs.app_uuid }}/start")
           uuid=$(printf '%s' "$resp" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{process.stdout.write(JSON.parse(d).deployment_uuid||"")}catch{process.stdout.write("")}})')
+          if [ -z "$uuid" ]; then
+            echo "::error::Coolify accepted the request but returned no deployment_uuid"
+            exit 1
+          fi
           echo "deployment_uuid=$uuid" >> "$GITHUB_OUTPUT"
 
       - name: Wait for deployment to finish
-        if: steps.trigger.outputs.deployment_uuid != ''
+        env:
+          COOLIFY_API_URL: ${{ secrets.COOLIFY_API_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
         run: |
+          set -uo pipefail
           uuid="${{ steps.trigger.outputs.deployment_uuid }}"
           for i in $(seq 1 60); do
             sleep 10
-            resp=$(curl -fsS -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}" \
-              "${{ secrets.COOLIFY_API_URL }}/api/v1/deployments/$uuid")
+            resp=$(curl -fsS -m 30 -H "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
+              "${COOLIFY_API_URL}/api/v1/deployments/$uuid") || continue
             dstatus=$(printf '%s' "$resp" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{process.stdout.write(JSON.parse(d).status||"?")}catch{process.stdout.write("?")}})')
             echo "poll $i: $dstatus"
             case "$dstatus" in
@@ -76,9 +146,10 @@ jobs:
       # Deliberately no `-L`. A domain parked on URL forwarding answers 302 on every path and lands on
       # a 200 homepage, which would read as health — the same failure, one level more subtle.
       - name: Verify production actually renders
+        env:
+          BASE: ${{ vars.PRODUCTION_URL }}
         run: |
           set -uo pipefail
-          BASE="${{ vars.PRODUCTION_URL }}"
 
           for i in $(seq 1 30); do
             code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$BASE/api/health" || echo 000)
@@ -94,7 +165,7 @@ jobs:
             *'"status":"ok"'*) ;;
             *) echo "::error::200 but not the health payload — a proxy or error page answered: $body"; exit 1 ;;
           esac
-          # The two that a green build can still get wrong.
+          # The two things a green build can still get wrong.
           case "$body" in
             *'"wasm":true'*) ;;
             *) echo "::error::the PDF renderer's WASM is missing from the image — every export would 500"; exit 1 ;;

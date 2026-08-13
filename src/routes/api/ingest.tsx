@@ -52,8 +52,18 @@ export const Route = createFileRoute('/api/ingest')({
 
         let bytes: Uint8Array
         let filename = ''
+        /**
+         * Whether the user agreed to their CV being sent to the model provider.
+         *
+         * Defaults to **false**, and that direction is deliberate: a malformed request, an older
+         * client or a missing field must not be read as consent. The cost of getting it wrong this
+         * way is a slightly worse extraction; the cost of the other way is a transfer nobody agreed
+         * to (docs/07-privacy.md).
+         */
+        let mayUseProvider = false
         try {
           const form = await request.formData()
+          mayUseProvider = form.get('processing') === 'provider'
           const file = form.get('file')
           if (!(file instanceof File)) {
             return Response.json(
@@ -101,7 +111,9 @@ export const Route = createFileRoute('/api/ingest')({
           warnings: ingested.warnings.length,
         })
 
-        const extracted = await extractResume(ingested.normalized.text)
+        const extracted = await extractResume(ingested.normalized.text, {
+          useProvider: mayUseProvider,
+        })
         if (!extracted.ok) {
           errorEvent('ingest.extract_failed', {
             requestId: id,
@@ -113,10 +125,18 @@ export const Route = createFileRoute('/api/ingest')({
           )
         }
 
-        // `method: 'rules'` while a provider is configured means the provider call failed. That is
+        // `method: 'rules'` while a provider is configured and allowed means the call failed. That is
         // the metric that catches a silent outage — the user still got a CV, so nothing else would.
+        //
+        // `mayUseProvider` has to be in the condition: a user who declined the transfer is the system
+        // working exactly as designed, and counting that as degradation would poison the one signal
+        // that catches a real failure.
         const providerConfigured = resolveProvider() !== undefined
-        if (providerConfigured && extracted.method === 'rules') {
+        if (
+          providerConfigured &&
+          mayUseProvider &&
+          extracted.method === 'rules'
+        ) {
           errorEvent('ingest.provider_degraded', {
             requestId: id,
             method: extracted.method,
