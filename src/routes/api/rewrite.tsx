@@ -53,7 +53,11 @@ export const Route = createFileRoute('/api/rewrite')({
           )
         }
 
-        const payload = body as { resume?: unknown; processing?: unknown }
+        const payload = body as {
+          resume?: unknown
+          processing?: unknown
+          answers?: unknown
+        }
 
         // Same fail-closed default as ingestion: absent is not consent.
         if (payload.processing !== 'provider') {
@@ -88,6 +92,13 @@ export const Route = createFileRoute('/api/rewrite')({
 
         const result = await rewriteBullets({
           resume: parsed.data,
+          // What the candidate told us when we asked. Source material, so the guard will permit a
+          // figure they supplied — which is the entire point of asking rather than inventing.
+          answers: Array.isArray(payload.answers)
+            ? payload.answers.filter(
+                (value): value is string => typeof value === 'string',
+              )
+            : undefined,
           signal: request.signal,
         })
 
