@@ -104,6 +104,14 @@ export interface RewriteReviewProps {
   onAccept: (rewrite: BulletRewrite) => void
   onDismiss: (rewrite: BulletRewrite) => void
   accepted: Set<string>
+  /**
+   * Called with everything the candidate has typed in reply to our questions.
+   *
+   * Asking a question and giving nowhere to answer it is worse than not asking: it names the gap and
+   * then leaves the person to fix it alone. The answers go back through the pipeline as source
+   * material, which is what lets the guard permit the figure.
+   */
+  onAnswer?: (answers: Array<string>) => void
 }
 
 export function keyOf(rewrite: {
@@ -118,8 +126,10 @@ export function RewriteReview({
   onAccept,
   onDismiss,
   accepted,
+  onAnswer,
 }: RewriteReviewProps) {
   const [showAll, setShowAll] = useState(false)
+  const [answers, setAnswers] = useState<Record<string, string>>({})
 
   const suggestions = rewrites.filter((r) => r.outcome === 'suggested')
   const guarded = rewrites.filter((r) => r.outcome === 'fabricated')
@@ -177,16 +187,30 @@ export function RewriteReview({
                 are about this sentence and answering one is how the bullet gets its number — from
                 the candidate, which is the entire design.
               */
-              <ul className="flex flex-col gap-1 border-l border-l-safelight/40 pl-3">
+              <div className="flex flex-col gap-2 border-l border-l-safelight/40 pl-3">
                 {rewrite.questions.map((question) => (
-                  <li
-                    key={question}
-                    className="text-[10px] leading-relaxed text-safelight/80"
-                  >
-                    {question}
-                  </li>
+                  <div key={question} className="flex flex-col gap-1">
+                    <label
+                      htmlFor={`answer-${keyOf(rewrite)}-${question.slice(0, 12)}`}
+                      className="text-[10px] leading-relaxed text-safelight/80"
+                    >
+                      {question}
+                    </label>
+                    <input
+                      id={`answer-${keyOf(rewrite)}-${question.slice(0, 12)}`}
+                      value={answers[question] ?? ''}
+                      onChange={(event) =>
+                        setAnswers({
+                          ...answers,
+                          [question]: event.target.value,
+                        })
+                      }
+                      placeholder="Your answer, in your own words"
+                      className="rim bg-print-black/40 px-2 py-1.5 text-[11px] text-tray-enamel placeholder:text-developer-gray/60"
+                    />
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
 
             <div className="flex gap-2">
@@ -209,6 +233,23 @@ export function RewriteReview({
           </div>
         )
       })}
+
+      {onAnswer !== undefined &&
+        Object.values(answers).some((text) => text.trim() !== '') && (
+          <button
+            type="button"
+            onClick={() =>
+              onAnswer(
+                Object.entries(answers)
+                  .filter(([, text]) => text.trim() !== '')
+                  .map(([question, text]) => `${question} ${text}`),
+              )
+            }
+            className="rim stencil px-3 py-2 text-[9px] text-tray-enamel transition-colors hover:bg-amber-shadow/25"
+          >
+            Try again with what I told you
+          </button>
+        )}
 
       {pending.length > 1 && (
         <div className="flex flex-col gap-1">
