@@ -133,15 +133,47 @@ Still to do:
 - A genuine multi-page CV, still owed to Block 4's page-break verifier.
 - No education section is found in the private Spanish CV, and MiniMax sometimes returns no provenance.
 
-## v0.3 — "It improves the CV" (≈2 weeks)
+## v0.3 — "It improves the CV" · in progress
 
 The first feature a competitor cannot trivially copy.
 
-- Bullet rewriting with the 3-layer anti-fabrication enforcement
-- Side-by-side diff UI, per-bullet accept/reject
-- The `questions` flow ("how many users?") feeding answers back as source material
+### Shipped
+
+- **Bullet rewriting with all three enforcement layers.** The prompt asks (layer 1), deterministic
+  code checks (layer 2), and the candidate accepts one line at a time (layer 3). A suggestion that
+  adds a fact is discarded, retried once with the violation named, and if the second attempt also
+  invents, the original wording stands. Nothing that fails the guard reaches the screen.
+- **Side-by-side diff, per-bullet accept/reject.** Accept-all exists and defaults off. A suggestion
+  the guard threw away is _shown_, saying what it added — the only place a user sees the guard work
+  for them.
+- **The `questions` flow.** Every generic AI CV tool answers "this bullet has no outcome" by
+  inventing one; this asks the candidate instead, so the number stays theirs.
+- **Consent gate + privacy notice.** Names the provider, and declining changes what the server does
+  rather than what the screen says: `useProvider: false` means no request leaves the process. A
+  missing field is not consent.
+
+### What the guard is worth, measured
+
+Three consecutive runs against the real model, same four bullets:
+
+| run                                               | suggested | fabricated |
+| ------------------------------------------------- | --------- | ---------- |
+| rewrite-v1                                        | 1         | 2          |
+| rewrite-v2 — prompt taught the two observed traps | 2         | 1          |
+| v2 + explanatory text checked for numbers only    | **3**     | **0**      |
+
+Both corrections came from running it, not from reasoning about it. The model abbreviated
+`Sales Development Representative` to `SDR` and counted something the CV never counted; separately,
+the guard flagged `Led` and `Supported` as invented names because a rationale quotes the wording it
+changed. See ADR-016's rule: the failure you have observed beats the one you imagined.
+
+### Still to do
+
 - Template `showcase` (2-column, honestly labelled design-first)
-- Consent gate + privacy notice shipped
+- Answers to `questions` fed back as source material — they are asked, not yet captured
+- A cache in front of the rewrite call. `rewriteCacheKey` exists and nothing uses it yet, so a
+  re-run pays for every bullet again.
+- Model routing per docs/06: extraction and rewriting currently share one provider.
 
 ## v0.4 — "It targets a job" (≈2 weeks)
 
