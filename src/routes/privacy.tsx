@@ -133,10 +133,10 @@ function Privacy() {
             restriction, portability and objection. Most of them are answered by
             the design: we hold nothing about you. For anything else, write to{' '}
             <a
-              href="mailto:ei@schilling.dk"
+              href="mailto:eddremonts86@gmail.com"
               className="text-safelight underline underline-offset-4"
             >
-              ei@schilling.dk
+              eddremonts86@gmail.com
             </a>
             .
           </p>
