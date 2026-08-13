@@ -175,13 +175,36 @@ changed. See ADR-016's rule: the failure you have observed beats the one you ima
   re-run pays for every bullet again.
 - Model routing per docs/06: extraction and rewriting currently share one provider.
 
-## v0.4 — "It targets a job" (≈2 weeks)
+## v0.4 — "It targets a job" · mostly shipped
 
-- Paste a job description → requirement extraction
-- Matched / weak-evidence / missing gap report
-- Reorder + re-emphasize, generating a **variant** rather than mutating
-- Transparent rule-based score with a fix checklist
-- Tailored `basics.summary` from existing material
+- ✅ Requirement matching with a **three-way** verdict: matched / weak / missing. `weak` is the one
+  that earns its keep — a requirement present only in the skills list, or only in a job that ended
+  eight years ago, is a claim with no story behind it, and that is exactly what tailoring exists to
+  resurface.
+- ✅ The gap report **shows** its evidence rather than asserting it. "You have this" is an opinion;
+  "you have this, here" is checkable.
+- ✅ Reorder + re-emphasize as a **variant**, never a mutation. Without a model in the loop the only
+  moves are reorderings, because a reordering cannot make a CV say something untrue.
+- ✅ Transparent rule-based score with a fix checklist. docs/06's weights unchanged; every point
+  traces to a rule you can read.
+- ⬜ Requirement extraction _from pasted prose_ still takes a structured `JobRequirements`. The
+  matching, scoring and tailoring are done and tested; what is missing is the model call that turns
+  an advert into that shape.
+- ⬜ Tailored `basics.summary` from existing material.
+
+## v0.5 — "It remembers" · blocked, see ADR-018
+
+The blocker is not the missing Convex deployment. **Shipping persistence makes `/privacy` false** —
+it currently says a CV is never written to a disk or a database, and docs/07 requires that copy to
+change in the same PR. Trading the strongest claim this product makes for the ability to remember a
+CV between visits is Edd's decision, not an implementation detail.
+
+- ✅ Version history and diffs between variants (`src/optimize/variant-diff.ts`) — pure functions of
+  two documents, so they needed no storage and are ready the moment storage exists.
+- ⬜ Accounts, saved CVs, application tracker — needs a Convex deployment and its credentials.
+- ⬜ Encryption at rest — needs a key-management decision. "Encrypted" with the key in the same env
+  file is a compliance sentence, not a protection.
+- ⬜ 90-day retention default, export, delete-everything, audit log.
 
 ## v0.5 — "It remembers" (≈2 weeks)
 
