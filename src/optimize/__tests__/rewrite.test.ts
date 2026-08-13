@@ -238,3 +238,89 @@ describe('the cache key', () => {
     expect(REWRITE_PROMPT_VERSION).toMatch(/^rewrite-v\d+$/)
   })
 })
+
+describe('answering a question makes the number the candidate’s own', () => {
+  /**
+   * The mechanism the whole feature is built around.
+   *
+   * A weak bullet is weak because it has no scale, and the industry answer is to invent one. We ask
+   * instead — and when the candidate answers, that answer becomes source material. The guard then
+   * *permits* the figure, because they wrote it. The number reaches the CV because it is theirs.
+   */
+  it('lets a rewrite use a figure the candidate supplied, which would otherwise be rejected', async () => {
+    const suggestion = {
+      suggestion: 'Ran quarterly business reviews for 12 key accounts.',
+      rationale: 'Used the number you gave us.',
+      questions: [],
+      changed: ['verb'],
+    }
+
+    const { rewriteBullets } = await withModelReturning(suggestion)
+    const withoutAnswer = await rewriteBullets({
+      resume: RESUME,
+      only: [{ workIndex: 0, highlightIndex: 1 }],
+    })
+    // 12 is nowhere in the CV, so the guard throws it away.
+    expect(withoutAnswer.rewrites[0].outcome).toBe('fabricated')
+
+    const { rewriteBullets: second } = await withModelReturning(suggestion)
+    const withAnswer = await second({
+      resume: RESUME,
+      only: [{ workIndex: 0, highlightIndex: 1 }],
+      answers: ['There were 12 key accounts in the review cycle.'],
+    })
+    expect(withAnswer.rewrites[0].outcome).toBe('suggested')
+    expect(withAnswer.rewrites[0].suggestion).toContain('12')
+  })
+})
+
+describe('the cache', () => {
+  it('does not pay for the same bullet twice', async () => {
+    const { cacheClear } = await import('../cache')
+    cacheClear()
+
+    const { rewriteBullets, turns } = await withModelReturning({
+      suggestion: 'Managed a book of 40 mid-market retail accounts.',
+      rationale: '',
+      questions: [],
+      changed: ['verb'],
+    })
+
+    await rewriteBullets({ resume: RESUME, ...FIRST })
+    expect(turns()).toBe(1)
+    await rewriteBullets({ resume: RESUME, ...FIRST })
+    // Same bullet, same answers, same prompt version: no second call.
+    expect(turns()).toBe(1)
+  })
+
+  it('does not serve a stale suggestion once a question has been answered', async () => {
+    const { cacheClear } = await import('../cache')
+    cacheClear()
+
+    const { rewriteBullets, turns } = await withModelReturning({
+      suggestion: 'Managed a book of 40 mid-market retail accounts.',
+      rationale: '',
+      questions: [],
+      changed: ['verb'],
+    })
+
+    await rewriteBullets({ resume: RESUME, ...FIRST })
+    await rewriteBullets({
+      resume: RESUME,
+      ...FIRST,
+      answers: ['The book was worth about £2M.'],
+    })
+    // Answering is exactly when the right rewrite changes, so the answer is part of the key.
+    expect(turns()).toBe(2)
+  })
+
+  it('never caches a failure — an outage is a fact about the last ten seconds', async () => {
+    const { cacheClear, cacheSize } = await import('../cache')
+    cacheClear()
+
+    const { rewriteBullets } = await withModelReturning('throw')
+    await rewriteBullets({ resume: RESUME, ...FIRST })
+    // Caching it would turn one transient outage into a permanently unimprovable line.
+    expect(cacheSize()).toBe(0)
+  })
+})

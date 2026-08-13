@@ -196,36 +196,42 @@ function PrintRoom() {
    * with the upload: a rewrite pass costs ~25 model calls and the candidate has not yet checked that
    * we read their CV correctly. Improving wording we misread is worse than not improving it.
    */
-  const askForRewrites = useCallback(async () => {
-    if (loaded === undefined) return
-    setRewriting(true)
-    setRewriteNote(undefined)
-    try {
-      const response = await fetch('/api/rewrite', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          resume: loaded.resume,
-          processing: consent.choice === 'granted' ? 'provider' : 'local',
-        }),
-      })
-      const payload = (await response.json()) as Record<string, unknown>
-      if (!response.ok) {
-        setRewriteNote(
-          typeof payload.message === 'string'
-            ? payload.message
-            : 'We could not look at your wording just now.',
+  const askForRewrites = useCallback(
+    async (answers?: Array<string>) => {
+      if (loaded === undefined) return
+      setRewriting(true)
+      setRewriteNote(undefined)
+      try {
+        const response = await fetch('/api/rewrite', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            resume: loaded.resume,
+            processing: consent.choice === 'granted' ? 'provider' : 'local',
+            answers,
+          }),
+        })
+        const payload = (await response.json()) as Record<string, unknown>
+        if (!response.ok) {
+          setRewriteNote(
+            typeof payload.message === 'string'
+              ? payload.message
+              : 'We could not look at your wording just now.',
+          )
+          return
+        }
+        setRewrites(
+          (payload.rewrites as Array<BulletRewrite> | undefined) ?? [],
         )
-        return
+        setAccepted(new Set())
+      } catch {
+        setRewriteNote('We could not reach the server. Your CV is untouched.')
+      } finally {
+        setRewriting(false)
       }
-      setRewrites((payload.rewrites as Array<BulletRewrite> | undefined) ?? [])
-      setAccepted(new Set())
-    } catch {
-      setRewriteNote('We could not reach the server. Your CV is untouched.')
-    } finally {
-      setRewriting(false)
-    }
-  }, [loaded, consent.choice])
+    },
+    [loaded, consent.choice],
+  )
 
   /**
    * Apply one accepted suggestion. One bullet, one decision — there is no path in this component
@@ -431,6 +437,7 @@ function PrintRoom() {
                   accepted={accepted}
                   onAccept={acceptRewrite}
                   onDismiss={dismissRewrite}
+                  onAnswer={(answers) => void askForRewrites(answers)}
                 />
               )}
 
