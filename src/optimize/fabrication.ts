@@ -355,9 +355,26 @@ export function buildGrounding(resume: Resume, extraSource = ''): GroundingSet {
  * An empty array means the rewrite says nothing new about the world — it may still be a worse
  * sentence, which is what layer 3 (the human) is for.
  */
+export interface FabricationCheckOptions {
+  /**
+   * Check numbers only, leaving names and abbreviations alone.
+   *
+   * For text that explains a suggestion rather than becoming part of the CV — a rationale, a question
+   * for the candidate. Those legitimately quote the new wording: *"Led is stronger than Helped with"*
+   * names two verbs that are, correctly, not in the document. Checking them as claims flagged `Led`
+   * and `Supported` as invented names on a real run and threw away a perfectly good rewrite.
+   *
+   * Numbers stay checked, because they are the one thing this text can still do damage with. A
+   * question reading "Was that the 25% growth year?" plants a figure the candidate may then type in
+   * themselves, and it arrives looking like help.
+   */
+  numbersOnly?: boolean
+}
+
 export function findFabrications(
   rewrite: string,
   grounding: GroundingSet,
+  options: FabricationCheckOptions = {},
 ): Array<FabricationFinding> {
   const findings: Array<FabricationFinding> = []
   const seen = new Set<string>()
@@ -396,15 +413,17 @@ export function findFabrications(
     }
   }
 
-  for (const acronym of acronymsIn(rewrite)) {
-    if (!grounding.words.has(normalizeWord(acronym))) {
-      report('acronym', acronym)
+  if (options.numbersOnly !== true) {
+    for (const acronym of acronymsIn(rewrite)) {
+      if (!grounding.words.has(normalizeWord(acronym))) {
+        report('acronym', acronym)
+      }
     }
-  }
 
-  for (const name of namesIn(rewrite)) {
-    if (!grounding.words.has(normalizeWord(name))) {
-      report('name', name)
+    for (const name of namesIn(rewrite)) {
+      if (!grounding.words.has(normalizeWord(name))) {
+        report('name', name)
+      }
     }
   }
 
