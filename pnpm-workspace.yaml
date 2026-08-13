@@ -1,0 +1,5 @@
+allowBuilds:
+  esbuild: true
+  lightningcss: true
+  # eslint-plugin-import-x resolver, pulled in by @tanstack/eslint-config.
+  unrs-resolver: true

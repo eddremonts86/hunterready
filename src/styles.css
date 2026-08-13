@@ -1,0 +1,99 @@
+@import 'tailwindcss';
+
+/* App chrome faces — bundled, open-licensed, and NOT on DESIGN.md's banned-defaults list.
+   Courier Prime is a real typewriter face (the exposure-notes voice), Archivo Narrow is the
+   DIN-adjacent condensed of a stencilled tray label, Caveat Brush is the grease pencil. */
+@import '@fontsource/courier-prime/latin-400.css';
+@import '@fontsource/courier-prime/latin-700.css';
+@import '@fontsource/archivo-narrow/latin-400.css';
+@import '@fontsource/archivo-narrow/latin-700.css';
+@import '@fontsource/caveat-brush/latin-400.css';
+
+/**
+ * The Print Room — app chrome tokens (DESIGN.md).
+ *
+ * Two light states with a hard edge between them. Safelight amber for working, white light
+ * for inspecting a finished print. Amber never appears inside a document.
+ *
+ * Fonts resolved in Block 3b, all open-licensed (OFL) and bundled into the repo — nothing
+ * here depends on the host having a font installed.
+ */
+@theme {
+  /* Safelight — the working room */
+  --color-safelight: #ffb100;
+  --color-amber-shadow: #b36a00;
+  --color-darkroom-brown: #2a1b0b;
+  --color-print-black: #0d0d0d;
+
+  /* White light — the inspection surface */
+  --color-tray-enamel: #f3e6c4;
+  --color-silver-gray: #bdbdbd;
+  --color-developer-gray: #6e6e6e;
+
+  /* Resolved in Block 3b — bundled, no host dependency. A true seven-segment face (DSEG7)
+     is a v0.2 upgrade; until then the numerals are Courier Prime with tabular figures, which
+     keeps the counter honest without shipping a sixth family for eleven glyphs. */
+  --font-label: 'Archivo Narrow', ui-sans-serif, sans-serif;
+  --font-note: 'Courier Prime', ui-monospace, monospace;
+  --font-display: 'Caveat Brush', ui-serif, cursive;
+  --font-segment: 'Courier Prime', ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-print-black);
+  color: var(--color-tray-enamel);
+  font-family: var(--font-note);
+}
+
+/**
+ * The tray rim: a 1px inner line inset from the edge, the way an enamel tray's lip reads.
+ * DESIGN.md calls this the system's most recognizable geometry with all content removed.
+ */
+.rim {
+  box-shadow: inset 0 0 0 1px var(--color-amber-shadow);
+}
+
+/**
+ * Depth is light, never shadow (The Falloff Rule). A surface sits forward by catching more
+ * amber, not by casting a shadow — so there is no box-shadow token in this system, and the
+ * one on `.rim` above is a border, not a lift.
+ */
+.bench {
+  background: var(--color-darkroom-brown);
+  background-image: radial-gradient(
+    120% 100% at 50% 0%,
+    color-mix(in srgb, var(--color-safelight) 9%, transparent) 0%,
+    transparent 60%
+  );
+}
+
+/** Wet sheen — reserved for the single active surface. Two at once reads as a bug. */
+.wet {
+  border-top: 1px solid
+    color-mix(in srgb, var(--color-safelight) 45%, transparent);
+}
+
+/** Labels are stenciled onto trays and bottles: caps, tracked, small. */
+.stencil {
+  font-family: var(--font-label);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+/** Elapsed and counted things only (The Seven-Segment Rule). */
+.segment {
+  font-family: var(--font-segment);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}

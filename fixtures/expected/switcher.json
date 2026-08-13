@@ -1,0 +1,153 @@
+{
+  "schemaVersion": "1.0",
+  "locale": "es",
+  "basics": {
+    "fullName": "Rocío Delgado Fuentes",
+    "headline": "Warehouse Supervisor moving into Logistics Coordination",
+    "email": "rocio.delgado@example.es",
+    "phone": "+34 655 21 09 44",
+    "location": { "city": "Zaragoza", "country": "Spain" },
+    "links": [],
+    "summary": "Eleven years on the warehouse floor, the last four supervising a 30-person shift. Moving into logistics coordination, with route and inventory planning already a daily part of the job.",
+    "photoUrl": "fixtures/input/assets/rocio.jpg",
+    "personalDetails": [
+      { "label": "Date of birth", "value": "1988-04-12" },
+      { "label": "Nationality", "value": "Spanish" },
+      { "label": "Driving licence", "value": "B, C1" }
+    ]
+  },
+  "work": [
+    {
+      "company": "Grupo Logístico Ebro",
+      "role": "Warehouse Supervisor",
+      "employmentType": "full-time",
+      "location": "Zaragoza",
+      "startDate": "2021-06",
+      "endDate": null,
+      "summary": "Regional distribution centre, 30-person shift across two docks.",
+      "highlights": [
+        "Supervise a 30-person shift across inbound and outbound docks.",
+        "Rebuilt the pick-path layout after mapping where pickers actually walked.",
+        "Run the weekly cycle-count programme and reconcile discrepancies.",
+        "Trained the team through the migration to a new warehouse management system."
+      ],
+      "tech": ["SAP EWM", "forklift", "RF scanners"]
+    },
+    {
+      "company": "Grupo Logístico Ebro",
+      "role": "Warehouse Operative",
+      "employmentType": "full-time",
+      "location": "Zaragoza",
+      "startDate": "2015-03",
+      "endDate": "2021-05",
+      "highlights": [
+        "Picked, packed and loaded outbound orders on a rotating shift.",
+        "Became the shift's reference point for the labelling exceptions nobody else wanted."
+      ],
+      "tech": ["forklift", "RF scanners"]
+    },
+    {
+      "company": "Transportes Aragón",
+      "role": "Warehouse Operative",
+      "employmentType": "full-time",
+      "location": "Zaragoza",
+      "startDate": "2014-01",
+      "endDate": "2015-02",
+      "highlights": ["Loaded and unloaded regional distribution routes."],
+      "tech": []
+    }
+  ],
+  "education": [
+    {
+      "institution": "IES Miguel Servet",
+      "degree": "Ciclo Formativo de Grado Superior",
+      "field": "Transporte y Logística",
+      "location": "Zaragoza",
+      "startDate": "2022",
+      "endDate": "2024",
+      "highlights": ["Studied part-time alongside full-time shift work."]
+    }
+  ],
+  "skills": [
+    {
+      "category": "Logistics",
+      "items": [
+        "Inventory control",
+        "Route planning",
+        "Cycle counting",
+        "Goods-in / goods-out",
+        "Load planning"
+      ]
+    },
+    {
+      "category": "Leadership",
+      "items": ["Shift supervision", "Training", "Shift scheduling"]
+    },
+    { "category": "Systems", "items": ["SAP EWM", "Excel"] }
+  ],
+  "projects": [
+    {
+      "name": "Pick-path redesign",
+      "role": "Lead",
+      "description": "Remapped the picking route of the regional distribution centre after tracking actual walking patterns over three weeks.",
+      "highlights": [
+        "Observed and recorded real pick routes rather than working from the plan on file.",
+        "Reorganised fast-moving stock into the shortest walk from the dispatch dock."
+      ],
+      "tech": ["Excel", "SAP EWM"],
+      "startDate": "2023-02",
+      "endDate": "2023-05"
+    },
+    {
+      "name": "WMS migration support",
+      "role": "Shift trainer",
+      "description": "Prepared and trained a 30-person shift through a warehouse management system change.",
+      "highlights": [
+        "Wrote the shift's quick-reference sheets in plain language.",
+        "Ran floor-side training during live operation without stopping dispatch."
+      ],
+      "tech": ["SAP EWM"],
+      "startDate": "2022-09",
+      "endDate": "2022-11"
+    }
+  ],
+  "certifications": [
+    {
+      "name": "Carné de carretillero (forklift licence)",
+      "issuer": "Grupo Logístico Ebro",
+      "date": "2015-04"
+    },
+    {
+      "name": "Prevención de riesgos laborales, nivel básico",
+      "date": "2019-10"
+    }
+  ],
+  "languages": [
+    { "name": "Spanish", "level": "native", "raw": "lengua materna" },
+    { "name": "English", "level": "B1", "raw": "nivel intermedio" }
+  ],
+  "awards": [],
+  "publications": [],
+  "volunteer": [
+    {
+      "company": "Banco de Alimentos de Zaragoza",
+      "role": "Volunteer warehouse coordinator",
+      "location": "Zaragoza",
+      "startDate": "2018",
+      "endDate": null,
+      "highlights": [
+        "Coordinate the monthly food-collection intake and storage."
+      ],
+      "tech": []
+    }
+  ],
+  "custom": [
+    {
+      "title": "Availability",
+      "items": [
+        "Available for rotating shifts",
+        "Willing to relocate within Aragón"
+      ]
+    }
+  ]
+}

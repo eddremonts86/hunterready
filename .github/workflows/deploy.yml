@@ -1,0 +1,113 @@
+name: Deploy to Coolify
+
+# Only after Quality has gone green on master. Never on the push itself: a deploy that races its own
+# test run is a deploy that can ship red code.
+on:
+  workflow_run:
+    workflows: [Quality]
+    types: [completed]
+    branches: [master]
+
+permissions:
+  contents: read
+
+# Serialised, and deliberately *not* cancel-in-progress. Cancelling a half-finished container swap is
+# worse than queueing behind it.
+concurrency:
+  group: coolify-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check the deploy is configured before touching anything
+        run: |
+          set -uo pipefail
+          missing=()
+          [ -z "${{ secrets.COOLIFY_API_URL }}" ]   && missing+=(COOLIFY_API_URL)
+          [ -z "${{ secrets.COOLIFY_API_TOKEN }}" ] && missing+=(COOLIFY_API_TOKEN)
+          [ -z "${{ secrets.COOLIFY_APP_UUID }}" ]  && missing+=(COOLIFY_APP_UUID)
+          [ -z "${{ vars.PRODUCTION_URL }}" ]       && missing+=(PRODUCTION_URL)
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Not configured for deploys yet. Missing: ${missing[*]}. See docs/operations/deploy-runbook.md"
+            exit 1
+          fi
+
+      - name: Trigger deployment
+        id: trigger
+        run: |
+          resp=$(curl -fsS -X POST \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}" \
+            -H "Accept: application/json" \
+            "${{ secrets.COOLIFY_API_URL }}/api/v1/applications/${{ secrets.COOLIFY_APP_UUID }}/start")
+          echo "$resp"
+          uuid=$(printf '%s' "$resp" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{process.stdout.write(JSON.parse(d).deployment_uuid||"")}catch{process.stdout.write("")}})')
+          echo "deployment_uuid=$uuid" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for deployment to finish
+        if: steps.trigger.outputs.deployment_uuid != ''
+        run: |
+          uuid="${{ steps.trigger.outputs.deployment_uuid }}"
+          for i in $(seq 1 60); do
+            sleep 10
+            resp=$(curl -fsS -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}" \
+              "${{ secrets.COOLIFY_API_URL }}/api/v1/deployments/$uuid")
+            dstatus=$(printf '%s' "$resp" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{process.stdout.write(JSON.parse(d).status||"?")}catch{process.stdout.write("?")}})')
+            echo "poll $i: $dstatus"
+            case "$dstatus" in
+              finished|success) exit 0 ;;
+              failed|error|cancelled) echo "::error::Deployment $dstatus"; exit 1 ;;
+            esac
+          done
+          echo "::error::timeout waiting for the Coolify deployment"; exit 1
+
+      # Coolify saying "finished" means the container started. That is not the same claim as "the app
+      # works", and this project's one production incident lives in the gap between them: `vite build`
+      # exited 0, the container started clean, and every render 500'd because Rollup had never emitted
+      # the renderer's WASM. Nothing in the pipeline was red.
+      #
+      # So the health payload is asserted field by field rather than by status code. `/api/health`
+      # reports `wasm` and `fonts` precisely because those are the two things that can be absent from
+      # a "successful" build, and a deploy that does not check them is a deploy a user reports to you.
+      #
+      # Deliberately no `-L`. A domain parked on URL forwarding answers 302 on every path and lands on
+      # a 200 homepage, which would read as health — the same failure, one level more subtle.
+      - name: Verify production actually renders
+        run: |
+          set -uo pipefail
+          BASE="${{ vars.PRODUCTION_URL }}"
+
+          for i in $(seq 1 30); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$BASE/api/health" || echo 000)
+            [ "$code" = "200" ] && break
+            echo "poll $i: /api/health -> $code"
+            [ "$i" = 30 ] && { echo "::error::$BASE/api/health never returned 200 after the deploy"; exit 1; }
+            sleep 5
+          done
+
+          body=$(curl -sS --max-time 10 "$BASE/api/health" || echo '')
+          echo "health: $body"
+          case "$body" in
+            *'"status":"ok"'*) ;;
+            *) echo "::error::200 but not the health payload — a proxy or error page answered: $body"; exit 1 ;;
+          esac
+          # The two that a green build can still get wrong.
+          case "$body" in
+            *'"wasm":true'*) ;;
+            *) echo "::error::the PDF renderer's WASM is missing from the image — every export would 500"; exit 1 ;;
+          esac
+          case "$body" in
+            *'"fonts":true'*) ;;
+            *) echo "::error::the bundled fonts are missing from the image — renders would fall back or fail"; exit 1 ;;
+          esac
+
+          page=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$BASE/" || echo 000)
+          if [ "$page" != "200" ]; then
+            echo "::error::$BASE/ returned $page — the process is up but not serving the app"
+            exit 1
+          fi
+
+          echo "✅ Deployed and verified: $BASE (health ok, wasm ok, fonts ok, landing 200)" >> "$GITHUB_STEP_SUMMARY"
