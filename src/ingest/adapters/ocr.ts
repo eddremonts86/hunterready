@@ -47,9 +47,23 @@ const tesseractBin = () => process.env.TESSERACT_BIN ?? 'tesseract'
  */
 const DPI = 300
 
-/** Rasterizing and reading are both slow; these are per-invocation ceilings, not per page. */
-const RASTER_TIMEOUT_MS = 30_000
-const OCR_TIMEOUT_MS = 45_000
+/**
+ * Ceilings against a hung process — **not** latency targets.
+ *
+ * The first values (30s / 45s) were measured on a fast laptop with nothing else running, and they
+ * failed on the first CI run: two test files rasterizing 300-dpi pages at once on a two-core runner
+ * pushed a single page past 45 seconds, `extractByOcr` returned undefined, and the user-facing result
+ * was "this PDF has no text layer" for a scan that reads perfectly well.
+ *
+ * That is not a CI artifact. Production is a small VPS, two concurrent scans contend the same way, and
+ * the failure mode there is identical — except nobody sees a red build, only a person told their CV is
+ * unreadable. So these are set to survive contention rather than to describe a good day.
+ *
+ * Latency is handled where it belongs: the rate limiter caps concurrent work, and the upload copy says
+ * "longer for a scan or a photo" instead of promising seconds.
+ */
+const RASTER_TIMEOUT_MS = 90_000
+const OCR_TIMEOUT_MS = 120_000
 
 /**
  * OCR is minutes, not milliseconds, on a long document. A CV is one or two pages; anything past this
