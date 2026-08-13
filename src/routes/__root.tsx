@@ -15,8 +15,21 @@ export const Route = createRootRoute({
         content: 'width=device-width, initial-scale=1',
       },
       {
-        title: 'TanStack Start Starter',
+        title: 'HunterReady — a CV automated screening can actually read',
       },
+      {
+        name: 'description',
+        content:
+          'Upload the CV you already have. We read it back to you the way a machine reads it, you check every detail, and you get a clean PDF that automated screening can parse.',
+      },
+      // The document is the product; a preview card that misrepresents it costs a share.
+      { property: 'og:title', content: 'HunterReady' },
+      {
+        property: 'og:description',
+        content:
+          'Your CV, read back to you the way a machine reads it. Verifiably parseable PDFs.',
+      },
+      { property: 'og:type', content: 'website' },
     ],
     links: [
       {
