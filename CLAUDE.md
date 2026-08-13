@@ -1,0 +1,114 @@
+# HunterReady — instructions for AI CLIs
+
+Read `~/Projects/ai-os/CLAUDE.md` first. This file adds project-specific rules.
+
+## What this is
+
+CV optimizer: ingest `.pdf`/`.docx`/`.doc`/`.txt`/`.md` → canonical `Resume` schema
+→ user review → verifiably ATS-safe designed PDF via pdfcn + takumi-pdf.
+
+Status: planning. Start at [docs/10-plan-v0.1.md](docs/10-plan-v0.1.md), Block 0.
+Active Spec: [specs/current_spec.md](specs/current_spec.md).
+
+## Before touching code
+
+1. Read [PRODUCT.md](PRODUCT.md) — product truth. The audience is **all sectors**, not
+   tech; that single fact invalidates most default assumptions about a "CV app".
+2. Read [DESIGN.md](DESIGN.md) — the visual world and its named rules. Before building
+   any surface, read its brief in `.impeccable/surfaces/`.
+3. Read [docs/02-architecture.md](docs/02-architecture.md) and [docs/03-resume-schema.md](docs/03-resume-schema.md).
+4. Check [docs/09-decisions.md](docs/09-decisions.md) — do not re-litigate settled ADRs.
+5. New architectural choice? Append an ADR. Do not rewrite existing ones.
+
+## Hard rules
+
+- **`src/schema/resume.ts` is the contract.** Changing it means touching ingestion,
+  templates, tests and fixtures. Bump `schemaVersion` and add a migration.
+- **Never edit `src/components/pdf/` or `src/components/ui/` by hand.** Vendored
+  copy-paste code; hand edits destroy the ability to diff against upstream. Wrap it.
+- **Every template obeys the ATS ruleset** in [docs/05-pdf-rendering.md](docs/05-pdf-rendering.md)
+  and must pass the round-trip test. No exceptions, including "just for this design".
+- **No fabrication in AI features.** Numbers, employers, dates, technologies and
+  outcomes may never be invented. See [docs/06-ai-optimization.md](docs/06-ai-optimization.md).
+- **No CV content in logs, errors, analytics or telemetry.** Ever. See [docs/07-privacy.md](docs/07-privacy.md).
+- **Amber never touches the print.** DESIGN.md's hardest rule: Safelight Amber
+  (`#FFB100`) and Amber Shadow (`#B36A00`) belong to the app chrome and appear nowhere
+  in a CV preview or an exported PDF. Documents are Print Black / Silver Gray /
+  Developer Gray on Tray Enamel or white. A CV carrying our accent carries our brand
+  into someone else's job application.
+- **Nothing is irreversible, and nothing warns that it is.** The darkroom world says
+  "there is no undo"; this product says the opposite. Variants are test strips.
+- **PDF colors are hex.** The renderer rejects `oklch`. Themes are a hand-maintained
+  hex mirror of the app tokens (ADR-003).
+- **Flexbox only** in PDF templates. No CSS grid — Satori-lineage subset.
+- **No `box-shadow` for elevation** anywhere. Depth is amber falloff (DESIGN.md).
+- **Never assume a tech career** in copy, fixtures, skill taxonomies or sample content.
+- Secrets come from `dev-env/env-config/.env`. Never hardcode, never echo, never commit.
+
+## Verification (AI-OS rule: runtime evidence, not builds)
+
+Never claim a block done on `pnpm build` alone. **This is not a style preference here —
+it is a bug that already happened.** The Block 1 spike passed `vite dev` and passed
+`pnpm build` with exit 0, then 500'd in production because Rollup never emitted the
+renderer's WASM. For anything touching the render path, the only valid evidence is:
+
+```bash
+pnpm build && pnpm start   # then request the route and open the PDF
+```
+
+- Render changes → produce a PDF, open it, describe what you saw.
+- Ingestion changes → print the field-accuracy table across fixtures.
+- UI changes → exercise it in the browser, screenshot it.
+- Deploy → report URL + one-line status.
+
+`pnpm test ats` is the gate that matters most. If it has never failed, it is not
+working — break it deliberately to confirm.
+
+## Branches and deploys
+
+Same policy as `builderhunt`. Read [docs/operations/deploy-runbook.md](docs/operations/deploy-runbook.md)
+before pushing anything.
+
+- `master` is **production**: Quality green there triggers the Coolify deploy. Treat a merge as a
+  release, and **confirm with Edd before pushing to it**.
+- `dev` is integration. Quality runs; nothing deploys.
+- Work happens on `feat/…`, `fix/…`, `chore/…`, `docs/…`, `ci/…`, `test/…` — kebab-case, one change
+  each — and merges via PR into `dev`.
+- `.githooks/pre-push` runs `pnpm ci:local` on **every** branch, because CI only fires on pull
+  requests and on `master`/`dev`. `pnpm prepare` wires it; `SKIP_CI_LOCAL=1 git push` bypasses it, and
+  doing that on `master` is how red code reaches production.
+
+**`pnpm test` is not the gate, and it will not tell you.** LibreOffice, Tesseract and poppler live in
+the image and deliberately not on a laptop (ADR-012), so the `.doc` and OCR suites skip themselves —
+176 tests green instead of 183. Use `pnpm test:docker` before claiming ingestion work is done.
+
+## Conventions
+
+- Language: **English** in all files, commits, comments and logs. Chat with Edd in Spanish.
+- Commits: conventional with a scope, imperative, and say _why_ when the why is not obvious —
+  `fix(ingest): read a scan through OCR instead of refusing it`.
+- Package manager: `pnpm` only.
+- Dates in data: `YYYY` or `YYYY-MM` strings. Never `Date`. `null` end date = current.
+- Tests live next to what they test in `__tests__/`.
+
+## Commands
+
+```bash
+pnpm dev                    # dev server on :3000
+pnpm build && pnpm start    # the only way to trust the WASM render path
+pnpm test                   # unit suite, incl. ATS round-trip and the accuracy table
+pnpm test:docker            # the same suite WITH system binaries — nothing skips
+pnpm test:parity            # builds, boots a server, requests the real routes
+pnpm lint                   # eslint
+```
+
+**Use `pnpm test:docker` before claiming ingestion work is done.** On a bare machine the
+LibreOffice (`.doc`) and Tesseract (OCR) suites skip themselves, because those binaries
+live in the image and deliberately not on a laptop (ADR-012) — so `pnpm test` reports
+green on code it never executed. The `test` stage exists for exactly this: the runtime
+image has the tools but no `node_modules`, the build stage has `node_modules` but no
+tools. 180 tests in the container, 176 outside it.
+
+Fixture generators (`scripts/make-fixtures.mjs`, `make-interleaved.mjs`,
+`make-scanned.mjs`) are documented in [fixtures/input/README.md](fixtures/input/README.md).
+Read ADR-016 before touching one: a fixture that is harder than reality wastes days.

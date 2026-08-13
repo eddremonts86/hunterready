@@ -1,0 +1,14 @@
+# Review is required on the paths where a mistake is expensive and invisible in a diff.
+#
+# The schema is the contract every other layer is written against (ADR-001); the ingestion pipeline
+# handles untrusted files from the open internet and shells out to LibreOffice and Tesseract; the
+# render path is the one that has already shipped a production 500; and privacy and logging are where
+# a CV's contents could leak.
+/src/schema/            @eddremonts86
+/src/ingest/            @eddremonts86
+/src/render/            @eddremonts86
+/src/lib/log.ts         @eddremonts86
+/src/routes/api/        @eddremonts86
+/Dockerfile             @eddremonts86
+/.github/workflows/     @eddremonts86
+/.githooks/             @eddremonts86

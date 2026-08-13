@@ -1,0 +1,83 @@
+name: Quality
+
+# Pull requests, and pushes to the two long-lived branches.
+#
+# A feature branch pushed straight up is guarded by `.githooks/pre-push` (which runs `pnpm ci:local`,
+# a faithful copy of the job below) and by the pull request it eventually opens. Running here on every
+# branch as well would measure the same commit two or three times on its way to master while the
+# branch it measured was still moving.
+on:
+  pull_request:
+  push:
+    branches: [master, dev]
+    # Prose does not need a run. Nothing under these paths is imported by the app or asserted on by
+    # a test — the checks that do read documentation read source, not Markdown.
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+
+permissions:
+  contents: read
+
+# One run per ref. A superseded run tells you about code nobody is going to merge.
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    # A hung job otherwise bills the runner default of six hours.
+    timeout-minutes: 20
+    env:
+      # Load-bearing, not decoration. With anything else Vite emits the *development* JSX transform
+      # into a bundle running against production React, and every SSR render dies with "jsxDEV is not
+      # a function" (found in v0.1 Block 1b). `scripts/ci/local-quality.sh` pins the same value; the
+      # two must agree or "it passed locally" stops meaning anything.
+      NODE_ENV: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # `--ignore-scripts` skips the `prepare` hook, which only configures git hooks for a human.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - run: pnpm exec prettier --check .
+      - run: pnpm exec eslint
+      - run: pnpm exec tsc --noEmit
+
+      # The fast suite. Skips the `.doc` and OCR cases, which is why the Docker step below is not
+      # optional.
+      - run: pnpm exec vitest run
+
+      # The suites that need system binaries. LibreOffice, Tesseract and poppler live in the image
+      # and deliberately nowhere else (ADR-012), so this is the only place they run — and a laptop's
+      # `pnpm test` reports green on 176 of 183 tests without it.
+      #
+      # It builds the same Dockerfile the deploy builds, so a pass is also evidence the image is
+      # still buildable before master ever triggers a release.
+      - name: Suites that need the image's system binaries
+        run: pnpm test:docker
+
+      # Builds, boots a real server, requests the real routes. `vite build` exits 0 without emitting
+      # the renderer's WASM — that shipped a 500 to production once, and this is what catches it.
+      - name: Production parity
+        run: pnpm test:parity
+
+      # The extraction quality table, kept as an artifact rather than a threshold-in-prose. The
+      # floors themselves are asserted inside the suite.
+      - name: Upload the accuracy report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: accuracy-report
+          path: accuracy-report.txt
+          if-no-files-found: warn

@@ -1,0 +1,137 @@
+{
+  "schemaVersion": "1.0",
+  "locale": "en",
+  "basics": {
+    "fullName": "Marta Sørensen",
+    "headline": "Registered Nurse — Intensive Care",
+    "email": "marta.sorensen@example.org",
+    "phone": "+45 22 14 88 03",
+    "location": { "city": "Copenhagen", "country": "Denmark" },
+    "links": [],
+    "summary": "Registered nurse with 12 years in intensive and post-operative care. Shift lead for a 24-bed unit, responsible for handover quality and the induction of new graduates.",
+    "personalDetails": []
+  },
+  "work": [
+    {
+      "company": "Rigshospitalet",
+      "role": "Shift Lead Nurse, Intensive Care",
+      "employmentType": "full-time",
+      "location": "Copenhagen",
+      "startDate": "2019-03",
+      "endDate": null,
+      "summary": "24-bed intensive care unit, rotating three-shift pattern.",
+      "highlights": [
+        "Led nursing handover for a 24-bed unit across rotating three-shift cover.",
+        "Rewrote the ward's handover checklist after auditing recurring information gaps.",
+        "Precepted 14 newly graduated nurses through their first six months.",
+        "Sat on the unit's medication-safety group for four years."
+      ],
+      "tech": ["Epic", "Columna", "ventilator management", "CRRT"]
+    },
+    {
+      "company": "Herlev Hospital",
+      "role": "Nurse, Post-Operative Recovery",
+      "employmentType": "full-time",
+      "location": "Herlev",
+      "startDate": "2016-01",
+      "endDate": "2019-02",
+      "summary": "18-bed post-anaesthesia care unit serving orthopaedic and abdominal theatres.",
+      "highlights": [
+        "Recovered post-surgical patients across orthopaedic and abdominal lists.",
+        "Introduced a structured pain-assessment round at the start of each shift.",
+        "Covered triage during the department's winter escalation periods.",
+        "Acted as link nurse between recovery and the orthopaedic ward on discharge planning.",
+        "Kept the unit's emergency trolley checks and restocking schedule."
+      ],
+      "tech": ["Columna", "patient-controlled analgesia"]
+    },
+    {
+      "company": "Herlev Hospital",
+      "role": "Nurse, General Surgical Ward",
+      "employmentType": "full-time",
+      "location": "Herlev",
+      "startDate": "2014-08",
+      "endDate": "2015-12",
+      "highlights": [
+        "Cared for a 6-patient bay on a 28-bed general surgical ward.",
+        "Completed the hospital's newly qualified nurse programme.",
+        "Volunteered for the ward's wound-care working group in the first year."
+      ],
+      "tech": []
+    },
+    {
+      "company": "Plejecenter Sølund",
+      "role": "Nursing Assistant",
+      "employmentType": "part-time",
+      "location": "Copenhagen",
+      "startDate": "2011-09",
+      "endDate": "2014-06",
+      "highlights": [
+        "Worked evenings and weekends throughout the nursing degree.",
+        "Supported residents with dementia through personal care and mealtimes."
+      ],
+      "tech": []
+    }
+  ],
+  "education": [
+    {
+      "institution": "Københavns Professionshøjskole",
+      "degree": "BSc",
+      "field": "Nursing",
+      "location": "Copenhagen",
+      "startDate": "2010",
+      "endDate": "2014",
+      "highlights": []
+    }
+  ],
+  "skills": [
+    {
+      "category": "Clinical",
+      "items": [
+        "Intensive care",
+        "Ventilator management",
+        "Post-operative recovery",
+        "Triage",
+        "Medication safety"
+      ]
+    },
+    {
+      "category": "Leadership",
+      "items": ["Shift leadership", "Preceptorship", "Handover design"]
+    }
+  ],
+  "projects": [],
+  "certifications": [
+    {
+      "name": "Danish nursing authorisation",
+      "issuer": "Styrelsen for Patientsikkerhed",
+      "date": "2014-07",
+      "identifier": "AUT-2014-88213"
+    },
+    {
+      "name": "Advanced Life Support (ALS)",
+      "issuer": "European Resuscitation Council",
+      "date": "2024-02",
+      "expires": "2028-02"
+    },
+    {
+      "name": "Continuous renal replacement therapy (CRRT)",
+      "issuer": "Rigshospitalet",
+      "date": "2021-05"
+    },
+    {
+      "name": "Clinical preceptor programme",
+      "issuer": "Københavns Professionshøjskole",
+      "date": "2020-09"
+    }
+  ],
+  "languages": [
+    { "name": "Danish", "level": "native", "raw": "mother tongue" },
+    { "name": "English", "level": "C1", "raw": "fluent" },
+    { "name": "German", "level": "B1", "raw": "conversational" }
+  ],
+  "awards": [],
+  "publications": [],
+  "volunteer": [],
+  "custom": []
+}

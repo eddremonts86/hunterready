@@ -1,0 +1,39 @@
+# --- scaffold (TanStack Start / Vite / Nitro) ---
+node_modules
+dist
+dist-ssr
+.output
+.nitro
+.tanstack
+.wrangler
+.vinxi
+__unconfig*
+todos.json
+*.local
+coverage/
+
+# --- env ---
+.env
+.env.*
+!.env.example
+
+# --- os / editor ---
+.DS_Store
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# --- HunterReady: PII ---
+# Real CVs used as fixtures contain personal data — never commit them.
+# Commit only anonymized samples under fixtures/input/.
+fixtures/private/
+*.private.pdf
+*.private.docx
+*.private.doc
+
+# --- generated PDFs ---
+/tmp-pdf/
+*.out.pdf
+.env
+.env.*
+accuracy-report.txt

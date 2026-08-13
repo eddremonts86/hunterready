@@ -1,0 +1,12 @@
+node_modules
+.output
+dist
+.git
+.impeccable
+docs
+specs
+*.md
+!README.md
+.env*
+coverage
+*.out.pdf
