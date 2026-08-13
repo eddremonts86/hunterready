@@ -16,6 +16,11 @@
  */
 import { useCallback, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
+import {
+  ConsentGate,
+  needsConsent,
+  useProcessingConsent,
+} from '@/components/consent-gate'
 import { Dropzone } from '@/components/dropzone'
 import { PaperPreview } from '@/components/paper-preview'
 import { ReviewForm } from '@/components/review-form'
@@ -119,6 +124,7 @@ function PrintRoom() {
   const [loaded, setLoaded] = useState<Loaded | undefined>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>()
+  const consent = useProcessingConsent()
   const [rewrites, setRewrites] = useState<Array<BulletRewrite> | undefined>()
   const [rewriting, setRewriting] = useState(false)
   const [rewriteNote, setRewriteNote] = useState<string | undefined>()
@@ -126,50 +132,64 @@ function PrintRoom() {
   const [templateId, setTemplateId] = useState<TemplateId>('modern-intl')
   const [themeId, setThemeId] = useState<ThemeId>('modern')
 
-  const upload = useCallback(async (file: File) => {
-    setBusy(true)
-    setError(undefined)
-    try {
-      const body = new FormData()
-      body.append('file', file)
-      const response = await fetch('/api/ingest', { method: 'POST', body })
-      const payload = (await response.json()) as Record<string, unknown>
-
-      if (!response.ok) {
-        setError(
-          typeof payload.message === 'string'
-            ? payload.message
-            : 'Something went wrong reading that file. Please try again.',
+  const upload = useCallback(
+    async (file: File) => {
+      setBusy(true)
+      setError(undefined)
+      try {
+        const body = new FormData()
+        body.append('file', file)
+        /**
+         * The consent decision travels with the file, and the server defaults to *not* sending when
+         * the field is absent. Declining has to change what happens, not what is displayed — otherwise
+         * the second button on the gate is decoration.
+         */
+        body.append(
+          'processing',
+          consent.choice === 'granted' ? 'provider' : 'local',
         )
-        return
-      }
+        const response = await fetch('/api/ingest', { method: 'POST', body })
+        const payload = (await response.json()) as Record<string, unknown>
 
-      // Validate what came back rather than trusting it: the renderer must never see a shape it
-      // would reject, and a bad response should surface here, not as a blank preview.
-      const parsed = Resume.safeParse(payload.resume)
-      if (!parsed.success) {
+        if (!response.ok) {
+          setError(
+            typeof payload.message === 'string'
+              ? payload.message
+              : 'Something went wrong reading that file. Please try again.',
+          )
+          return
+        }
+
+        // Validate what came back rather than trusting it: the renderer must never see a shape it
+        // would reject, and a bad response should surface here, not as a blank preview.
+        const parsed = Resume.safeParse(payload.resume)
+        if (!parsed.success) {
+          setError(
+            'We read your file but could not make sense of the result. Please try again.',
+          )
+          return
+        }
+
+        setLoaded({
+          resume: parsed.data,
+          provenance:
+            (payload.provenance as Array<FieldProvenance> | undefined) ?? [],
+          warnings: (payload.warnings as Array<string> | undefined) ?? [],
+          method: payload.method === 'rules' ? 'rules' : 'llm',
+          ocr: payload.ocr === true,
+        })
+      } catch {
         setError(
-          'We read your file but could not make sense of the result. Please try again.',
+          'We could not reach the server. Check your connection and try again.',
         )
-        return
+      } finally {
+        setBusy(false)
       }
-
-      setLoaded({
-        resume: parsed.data,
-        provenance:
-          (payload.provenance as Array<FieldProvenance> | undefined) ?? [],
-        warnings: (payload.warnings as Array<string> | undefined) ?? [],
-        method: payload.method === 'rules' ? 'rules' : 'llm',
-        ocr: payload.ocr === true,
-      })
-    } catch {
-      setError(
-        'We could not reach the server. Check your connection and try again.',
-      )
-    } finally {
-      setBusy(false)
-    }
-  }, [])
+      // `consent.choice` is read inside, so it belongs here. Without it the first upload after a
+      // decision would still send the previous answer — the exact bug this gate exists to prevent.
+    },
+    [consent.choice],
+  )
 
   /**
    * Ask for suggestions. Deliberately a separate, explicit action rather than something that runs
@@ -274,7 +294,20 @@ function PrintRoom() {
         </header>
 
         <div className="flex flex-1 flex-col items-center justify-center gap-8 p-6">
-          <Dropzone onFile={upload} busy={busy} error={error} />
+          {/*
+            The decision comes before the file, not after it. Asking once a document is already
+            chosen is how a "consent" screen becomes a formality someone clicks through — and by then
+            they have committed to the flow. `needsConsent` is false when no provider is configured,
+            because there is no transfer to consent to.
+          */}
+          {needsConsent(consent) ? (
+            <ConsentGate
+              provider={consent.provider as string}
+              onDecide={consent.decide}
+            />
+          ) : (
+            <Dropzone onFile={upload} busy={busy} error={error} />
+          )}
 
           <div className="flex flex-col items-center gap-2">
             <span className="stencil text-[9px] text-tray-enamel/40">
