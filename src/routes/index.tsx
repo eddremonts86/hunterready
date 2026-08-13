@@ -19,6 +19,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import { Dropzone } from '@/components/dropzone'
 import { PaperPreview } from '@/components/paper-preview'
 import { ReviewForm } from '@/components/review-form'
+import { keyOf, RewriteReview } from '@/components/rewrite-review'
+import type { BulletRewrite } from '@/optimize/rewrite'
 import { Resume } from '@/schema/resume'
 import type { FieldProvenance } from '@/schema/provenance'
 import { needsReview } from '@/schema/provenance'
@@ -117,6 +119,10 @@ function PrintRoom() {
   const [loaded, setLoaded] = useState<Loaded | undefined>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>()
+  const [rewrites, setRewrites] = useState<Array<BulletRewrite> | undefined>()
+  const [rewriting, setRewriting] = useState(false)
+  const [rewriteNote, setRewriteNote] = useState<string | undefined>()
+  const [accepted, setAccepted] = useState<Set<string>>(new Set())
   const [templateId, setTemplateId] = useState<TemplateId>('modern-intl')
   const [themeId, setThemeId] = useState<ThemeId>('modern')
 
@@ -163,6 +169,73 @@ function PrintRoom() {
     } finally {
       setBusy(false)
     }
+  }, [])
+
+  /**
+   * Ask for suggestions. Deliberately a separate, explicit action rather than something that runs
+   * with the upload: a rewrite pass costs ~25 model calls and the candidate has not yet checked that
+   * we read their CV correctly. Improving wording we misread is worse than not improving it.
+   */
+  const askForRewrites = useCallback(async () => {
+    if (loaded === undefined) return
+    setRewriting(true)
+    setRewriteNote(undefined)
+    try {
+      const response = await fetch('/api/rewrite', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          resume: loaded.resume,
+          processing: consent.choice === 'granted' ? 'provider' : 'local',
+        }),
+      })
+      const payload = (await response.json()) as Record<string, unknown>
+      if (!response.ok) {
+        setRewriteNote(
+          typeof payload.message === 'string'
+            ? payload.message
+            : 'We could not look at your wording just now.',
+        )
+        return
+      }
+      setRewrites((payload.rewrites as Array<BulletRewrite> | undefined) ?? [])
+      setAccepted(new Set())
+    } catch {
+      setRewriteNote('We could not reach the server. Your CV is untouched.')
+    } finally {
+      setRewriting(false)
+    }
+  }, [loaded, consent.choice])
+
+  /**
+   * Apply one accepted suggestion. One bullet, one decision — there is no path in this component
+   * that writes a suggestion the user did not click (docs/06, enforcement layer 3).
+   */
+  const acceptRewrite = useCallback((rewrite: BulletRewrite) => {
+    if (rewrite.suggestion === undefined) return
+    setLoaded((current) => {
+      if (current === undefined) return current
+      const work = current.resume.work.map((job, jobIndex) =>
+        jobIndex === rewrite.workIndex
+          ? {
+              ...job,
+              highlights: job.highlights.map((text, index) =>
+                index === rewrite.highlightIndex
+                  ? (rewrite.suggestion as string)
+                  : text,
+              ),
+            }
+          : job,
+      )
+      return { ...current, resume: { ...current.resume, work } }
+    })
+    setAccepted((current) => new Set(current).add(keyOf(rewrite)))
+  }, [])
+
+  const dismissRewrite = useCallback((rewrite: BulletRewrite) => {
+    setRewrites((current) =>
+      current?.filter((item) => keyOf(item) !== keyOf(rewrite)),
+    )
   }, [])
 
   const loadSample = useCallback(async (id: string) => {
@@ -293,6 +366,50 @@ function PrintRoom() {
               ocr={loaded.ocr}
               onChange={(resume) => setLoaded({ ...loaded, resume })}
             />
+
+            {/*
+              Wording comes *after* the check, never before it. The order is the argument: improving
+              a sentence we misread is worse than leaving it alone, and asking the candidate to judge
+              a rewrite of something they have not yet confirmed is asking the wrong question.
+            */}
+            <div className="bench rim flex flex-col gap-3 p-3">
+              <div className="flex flex-col gap-1">
+                <Label>Wording</Label>
+                <p className="text-[10px] leading-relaxed text-developer-gray">
+                  Once your details are right, we can suggest stronger wording
+                  for each bullet. Nothing changes unless you accept it.
+                </p>
+              </div>
+
+              {rewrites === undefined ? (
+                <button
+                  type="button"
+                  disabled={rewriting}
+                  onClick={() => void askForRewrites()}
+                  className="rim stencil px-3 py-2 text-[9px] text-tray-enamel transition-colors hover:bg-amber-shadow/25 disabled:opacity-50"
+                >
+                  {rewriting
+                    ? 'Reading your bullets…'
+                    : 'Suggest better wording'}
+                </button>
+              ) : (
+                <RewriteReview
+                  rewrites={rewrites}
+                  accepted={accepted}
+                  onAccept={acceptRewrite}
+                  onDismiss={dismissRewrite}
+                />
+              )}
+
+              {rewriteNote !== undefined && (
+                <p
+                  role="status"
+                  className="text-[10px] leading-relaxed text-tray-enamel/80"
+                >
+                  {rewriteNote}
+                </p>
+              )}
+            </div>
 
             <div className="bench rim flex flex-col gap-4 p-3">
               <div className="flex flex-col gap-2">

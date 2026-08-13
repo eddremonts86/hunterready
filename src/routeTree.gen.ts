@@ -14,6 +14,7 @@ import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiIngestRouteImport } from './routes/api/ingest'
 import { Route as ApiRenderRouteImport } from './routes/api/render'
 import { Route as ApiResumeRouteImport } from './routes/api/resume'
+import { Route as ApiRewriteRouteImport } from './routes/api/rewrite'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -40,6 +41,11 @@ const ApiResumeRoute = ApiResumeRouteImport.update({
   path: '/api/resume',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiRewriteRoute = ApiRewriteRouteImport.update({
+  id: '/api/rewrite',
+  path: '/api/rewrite',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -47,6 +53,7 @@ export interface FileRoutesByFullPath {
   '/api/ingest': typeof ApiIngestRoute
   '/api/render': typeof ApiRenderRoute
   '/api/resume': typeof ApiResumeRoute
+  '/api/rewrite': typeof ApiRewriteRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -54,6 +61,7 @@ export interface FileRoutesByTo {
   '/api/ingest': typeof ApiIngestRoute
   '/api/render': typeof ApiRenderRoute
   '/api/resume': typeof ApiResumeRoute
+  '/api/rewrite': typeof ApiRewriteRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -62,12 +70,25 @@ export interface FileRoutesById {
   '/api/ingest': typeof ApiIngestRoute
   '/api/render': typeof ApiRenderRoute
   '/api/resume': typeof ApiResumeRoute
+  '/api/rewrite': typeof ApiRewriteRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/health' | '/api/ingest' | '/api/render' | '/api/resume'
+  fullPaths:
+    | '/'
+    | '/api/health'
+    | '/api/ingest'
+    | '/api/render'
+    | '/api/resume'
+    | '/api/rewrite'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/health' | '/api/ingest' | '/api/render' | '/api/resume'
+  to:
+    | '/'
+    | '/api/health'
+    | '/api/ingest'
+    | '/api/render'
+    | '/api/resume'
+    | '/api/rewrite'
   id:
     | '__root__'
     | '/'
@@ -75,6 +96,7 @@ export interface FileRouteTypes {
     | '/api/ingest'
     | '/api/render'
     | '/api/resume'
+    | '/api/rewrite'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -83,6 +105,7 @@ export interface RootRouteChildren {
   ApiIngestRoute: typeof ApiIngestRoute
   ApiRenderRoute: typeof ApiRenderRoute
   ApiResumeRoute: typeof ApiResumeRoute
+  ApiRewriteRoute: typeof ApiRewriteRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -122,6 +145,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiResumeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/rewrite': {
+      id: '/api/rewrite'
+      path: '/api/rewrite'
+      fullPath: '/api/rewrite'
+      preLoaderRoute: typeof ApiRewriteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -131,6 +161,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiIngestRoute: ApiIngestRoute,
   ApiRenderRoute: ApiRenderRoute,
   ApiResumeRoute: ApiResumeRoute,
+  ApiRewriteRoute: ApiRewriteRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
