@@ -437,6 +437,48 @@ Cost, measured: ~23s for one page end to end. The upload copy no longer promises
 
 ---
 
+## ADR-018 — v0.5's persistence is blocked, and the blocker is a promise, not a credential
+
+**2026-08-14 · Accepted**
+
+v0.5 is "It remembers": accounts, a saved base CV, one variant per application, version history,
+GDPR controls, encryption at rest, an audit log. Everything before it in this file was buildable by
+writing code. This is not, and the reason worth recording is not the missing Convex deployment.
+
+**Shipping persistence makes the product's current promise false.** `/privacy` says, today:
+
+> We do not. Your CV is processed in memory to answer your request and is gone when the request ends
+> — it is never written to a disk or a database.
+
+That sentence is load-bearing. `docs/07-privacy.md` calls "we never store your CV" _"a claim
+competitors cannot make"_, and requires that if statelessness ever ends, **the copy changes in the
+same PR**. So v0.5 is not a feature that adds storage; it is a decision to trade the strongest thing
+this product says about itself for the ability to remember a CV between visits. That is Edd's call,
+not an implementation detail, and making it quietly by landing a database would be the single most
+dishonest thing available here.
+
+Three things are genuinely blocked on it:
+
+1. **A Convex deployment**, its credentials, and whose account holds them.
+2. **Key management for encryption at rest.** "Encrypted" with a key sitting beside the data in the
+   same env file is a compliance sentence, not a protection.
+3. **The retention default.** docs/07 proposes 90 days of inactivity. That is a product decision with
+   a real cost either way, and it belongs to the person who will answer for it.
+
+### What was built anyway
+
+The parts that are pure functions of two documents, because they need no storage and are needed the
+moment storage exists:
+
+- `src/optimize/variant-diff.ts` — v0.5's "version history and diffs between variants", written and
+  tested now. It is useful before persistence too: tailoring produces a variant and rewriting changes
+  bullets, and "show me what changed" is a question that does not require an account.
+
+The rest is deliberately not started. A half-built persistence layer holding real CVs is worse than
+none, and an in-memory imitation of one would be a lie told to ourselves.
+
+---
+
 # Open questions — need Edd's answer
 
 These do **not** block starting v0.1. They are listed at the point where each one
