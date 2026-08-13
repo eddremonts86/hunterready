@@ -13,11 +13,12 @@
 import { execFileSync } from 'node:child_process'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { ingest } from '@/ingest'
 import { ocrAvailable } from '@/ingest/adapters/ocr'
 import { Resume } from '@/schema/resume'
 import { extractByRules } from '../fallback'
+import type { AccuracyReport } from '../accuracy'
 import { formatReport, scoreExtraction } from '../accuracy'
 
 const ROOT = process.cwd()
@@ -138,25 +139,52 @@ async function run(input: string, expectedFile: string) {
   return { report: scoreExtraction(resume, expected), resume, expected }
 }
 
+/**
+ * Every fixture scored exactly once, before any assertion runs.
+ *
+ * Each of the three checks below used to call `run()` for all eight inputs, so the same documents
+ * were ingested twenty-four times — including the scan, which spends about two seconds in Tesseract
+ * every pass. On a laptop that was merely wasteful. On a CI runner it blew through vitest's 5s
+ * default and the suite failed on a timeout, green locally and red on the first push: precisely the
+ * "it passed on my machine" divergence `scripts/ci/local-quality.sh` exists to prevent, and the one
+ * thing it cannot copy is the runner's CPU.
+ *
+ * Ingesting once is the fix. The timeout below is the belt: generous, because OCR is genuinely slow,
+ * and stated once here rather than sprinkled over individual tests.
+ */
+const SCORE_ALL_TIMEOUT_MS = 120_000
+
+const reports = new Map<string, AccuracyReport>()
+
+beforeAll(async () => {
+  for (const testCase of CASES) {
+    const { report } = await run(testCase.input, testCase.expected)
+    reports.set(testCase.input, report)
+  }
+}, SCORE_ALL_TIMEOUT_MS)
+
+/** The report for one input, or a loud failure — never a silently skipped assertion. */
+function reportFor(input: string): AccuracyReport {
+  const report = reports.get(input)
+  if (report === undefined) {
+    throw new Error(`no report for ${input} — beforeAll did not score it`)
+  }
+  return report
+}
+
 describe('extraction accuracy (rule-based baseline)', () => {
-  const table: Array<string> = []
+  it.each(CASES)('$input scores at least $floor', ({ input, floor }) => {
+    const report = reportFor(input)
 
-  it.each(CASES)(
-    '$input scores at least $floor',
-    async ({ input, expected: expectedFile, floor }) => {
-      const { report } = await run(input, expectedFile)
-      table.push(formatReport(input, report))
+    expect(
+      report.overall,
+      `${input} scored ${Math.round(report.overall * 100)}%, floor is ${Math.round(floor * 100)}%.\nMissed:\n  ${report.misses.slice(0, 12).join('\n  ')}`,
+    ).toBeGreaterThanOrEqual(floor)
+  })
 
-      expect(
-        report.overall,
-        `${input} scored ${Math.round(report.overall * 100)}%, floor is ${Math.round(floor * 100)}%.\nMissed:\n  ${report.misses.slice(0, 12).join('\n  ')}`,
-      ).toBeGreaterThanOrEqual(floor)
-    },
-  )
-
-  it('never scrambles reading order, on any input', async () => {
+  it('never scrambles reading order, on any input', () => {
     for (const testCase of CASES) {
-      const { report } = await run(testCase.input, testCase.expected)
+      const report = reportFor(testCase.input)
       expect(
         report.orderPreserved,
         `${testCase.input}: employers came back out of order — a column or table was read wrong`,
@@ -164,9 +192,9 @@ describe('extraction accuracy (rule-based baseline)', () => {
     }
   })
 
-  it('always recovers the identity fields, which are the ones that cost an interview', async () => {
+  it('always recovers the identity fields, which are the ones that cost an interview', () => {
     for (const testCase of CASES) {
-      const { report } = await run(testCase.input, testCase.expected)
+      const report = reportFor(testCase.input)
       const identity = report.scores.filter((s) =>
         ['name', 'email'].includes(s.field),
       )
@@ -182,9 +210,11 @@ describe('extraction accuracy (rule-based baseline)', () => {
   it('writes the table where CI and a human can both read it', async () => {
     // The suite's real output. Written to a file as well as stdout, because vitest suppresses
     // console output by default and a quality number nobody can see is not a quality gate.
-    const rendered = table.join('\n\n')
+    const rendered = CASES.map((testCase) =>
+      formatReport(testCase.input, reportFor(testCase.input)),
+    ).join('\n\n')
     await writeFile(join(ROOT, 'accuracy-report.txt'), rendered + '\n', 'utf8')
     process.stdout.write('\n' + rendered + '\n\n')
-    expect(table.length).toBeGreaterThan(0)
+    expect(reports.size).toBe(CASES.length)
   })
 })
