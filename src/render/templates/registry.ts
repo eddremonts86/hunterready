@@ -7,8 +7,9 @@
  */
 import { createModernTemplate } from './modern-base'
 import type { Convention } from './modern-base'
+import { ShowcaseTemplate } from './showcase'
 
-export const TEMPLATE_IDS = ['modern-intl', 'modern-eu'] as const
+export const TEMPLATE_IDS = ['modern-intl', 'modern-eu', 'showcase'] as const
 export type TemplateId = (typeof TEMPLATE_IDS)[number]
 
 export const DEFAULT_TEMPLATE_ID: TemplateId = 'modern-intl'
@@ -49,6 +50,25 @@ export const templates: Record<
     atsRating: 'verified',
     warning: '',
     Component: createModernTemplate('eu'),
+  },
+  /**
+   * Registered as `verified`, and that is a claim the round-trip suite checks on every build —
+   * `TEMPLATE_IDS` is iterated there, so this cannot be added without being proven.
+   *
+   * It is design-first in look only. docs/05 rule 1 allows a decorative sidebar to hold *redundant*
+   * information and nothing else, so the conventional showcase layout — skills and contact in a
+   * column beside the content — is not available to us at any price. What this does instead is set
+   * each section's name in a left gutter beside its content: visually distinct, one unbroken reading
+   * order, nothing an extractor sees out of sequence.
+   */
+  showcase: {
+    id: 'showcase',
+    label: 'Showcase',
+    convention: 'intl',
+    hint: 'More space and a stronger name block. The section names sit beside the content rather than above it.',
+    atsRating: 'verified',
+    warning: '',
+    Component: ShowcaseTemplate,
   },
 }
 
