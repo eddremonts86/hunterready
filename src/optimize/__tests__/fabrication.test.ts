@@ -267,3 +267,32 @@ describe('a real CV, in another language, with clinical abbreviations', () => {
     expect(findFabrications(rewrite, clinical).length).toBeGreaterThan(0)
   })
 })
+
+describe('explanatory text is checked for numbers only', () => {
+  /**
+   * A rationale quotes the wording it changed — that is its job. "Led is stronger than Helped with"
+   * names two verbs that are, correctly, not in the CV.
+   *
+   * Checking that text for names threw away a good rewrite on a real run against MiniMax, reporting
+   * `Led` and `Supported` as invented. The rationale never enters the document, so the only claim it
+   * can still do damage with is a figure the candidate might then type in themselves.
+   */
+  it('does not flag a verb a rationale quotes', () => {
+    const rationale =
+      'Owned is stronger than Responsible for, and Supported was vaguer than the alternative.'
+    expect(
+      findFabrications(rationale, grounding, { numbersOnly: true }),
+    ).toEqual([])
+    // Without the option it is flagged, which is why the option exists.
+    expect(findFabrications(rationale, grounding).length).toBeGreaterThan(0)
+  })
+
+  it('still flags a figure planted in a question', () => {
+    const findings = findFabrications(
+      'Was that the 25% growth year?',
+      grounding,
+      { numbersOnly: true },
+    )
+    expect(findings).toContainEqual({ kind: 'number', value: '25%' })
+  })
+})
