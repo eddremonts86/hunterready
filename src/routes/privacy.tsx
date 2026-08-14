@@ -34,9 +34,14 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <section className="flex flex-col gap-2">
-      <h2 className="stencil text-[11px] text-safelight">{title}</h2>
-      <div className="flex flex-col gap-2 text-[12px] leading-relaxed text-tray-enamel">
+    <section className="flex flex-col gap-2.5">
+      <h2 className="text-title text-ink">{title}</h2>
+      {/*
+        A real reading measure. This page exists to be read end to end by somebody deciding whether
+        to trust us, so the column is capped near 70 characters and the body is set at 15px on the
+        primary ink — not the secondary gray that legal pages default to.
+      */}
+      <div className="flex max-w-[68ch] flex-col gap-2.5 text-[15px] leading-relaxed text-ink">
         {children}
       </div>
     </section>
@@ -51,20 +56,28 @@ function Privacy() {
       : undefined
 
   return (
-    <div className="flex min-h-screen flex-col bg-print-black">
-      <header className="bench rim mx-4 mt-4 flex items-baseline gap-3 px-4 py-3 lg:mx-6">
-        <a href="/" className="stencil text-[13px] text-safelight">
-          HunterReady
-        </a>
-        <span className="text-[10px] text-developer-gray">privacy</span>
+    <div className="flex min-h-screen flex-col bg-ground">
+      <header className="sticky top-0 z-20 border-b border-hairline bg-ground/95 backdrop-blur">
+        <div className="mx-auto flex h-14 w-full max-w-3xl items-center justify-between gap-4 px-5">
+          <a
+            href="/"
+            className="font-bold tracking-[-0.03em] text-ink text-[17px]"
+          >
+            HunterReady<span className="text-signal">.</span>
+          </a>
+          <span className="text-meta text-ink-soft">Privacy</span>
+        </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-2xl flex-col gap-7 p-6 py-10">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-2xl leading-tight text-tray-enamel">
+      <main className="mx-auto flex w-full max-w-3xl flex-col gap-9 px-5 py-12 lg:py-16">
+        <div className="flex flex-col gap-4">
+          <h1 className="text-hero text-ink">
             What we do with your CV
+            <span className="text-signal">.</span>
           </h1>
-          <p className="text-[12px] leading-relaxed text-developer-gray">
+          {/* The whole page in four lines, set as a lead. Somebody who reads only this is not
+              misinformed — which is the test a privacy summary has to pass. */}
+          <p className="max-w-[62ch] text-lead text-ink-soft">
             The short version: we read it, we show you what we read, and if you
             have not signed in, we forget it. If you have, we keep it for{' '}
             {RETENTION_DAYS} days after your last visit and then delete it — and
@@ -90,16 +103,16 @@ function Privacy() {
             <>
               <p>
                 To read a CV well we send its text to{' '}
-                <strong className="text-safelight">{provider}</strong>, the
-                company that runs the AI model we use. That is the only place it
-                goes.
+                <strong className="font-semibold text-ink">{provider}</strong>,
+                the company that runs the AI model we use. That is the only
+                place it goes.
               </p>
-              <p className="text-developer-gray">
+              <p className="text-ink-soft">
                 Your phone number and street address are removed before the text
                 is sent. They do not help a model read a CV, so they never leave
                 our server.
               </p>
-              <p className="text-developer-gray">
+              <p className="text-ink-soft">
                 You can decline. We ask before your first upload, and if you say
                 no, your CV is read by a model running on our own server instead
                 — it never leaves our machines, and no other company sees it. It
@@ -112,7 +125,7 @@ function Privacy() {
 
         <Section title="How long we keep it">
           <p>
-            <strong className="text-safelight">
+            <strong className="font-semibold text-ink">
               If you do not have an account, we do not keep it at all.
             </strong>{' '}
             Your CV is processed in memory to answer your request and is gone
@@ -123,12 +136,14 @@ function Privacy() {
             If you sign in so we can remember your CV between visits, then we do
             store it — that is the point of the account, and it would be
             dishonest to describe it any other way. We keep it for{' '}
-            <strong className="text-safelight">{RETENTION_DAYS} days</strong>{' '}
+            <strong className="font-semibold text-ink">
+              {RETENTION_DAYS} days
+            </strong>{' '}
             after the last time you sign in, and then we delete it: your CV, any
             tailored versions, and the account itself. Signing in resets that
             clock, so nothing disappears while you are still using it.
           </p>
-          <p className="text-developer-gray">
+          <p className="text-ink-soft">
             The deletion is real, not a flag on a row. It happens whether or not
             you ask, and you can also ask at any moment with the button below.
           </p>
@@ -161,7 +176,7 @@ function Privacy() {
             anything else, write to{' '}
             <a
               href="mailto:eddremonts86@gmail.com"
-              className="text-safelight underline underline-offset-4"
+              className="font-medium text-signal underline decoration-signal/30 underline-offset-4 hover:decoration-signal"
             >
               eddremonts86@gmail.com
             </a>
@@ -169,8 +184,10 @@ function Privacy() {
           </p>
         </Section>
 
-        <div className="rim flex flex-col gap-3 bg-darkroom-brown/60 p-4">
-          <p className="text-[11px] leading-relaxed text-tray-enamel">
+        {/* Where you stand right now, on the page that explains the choice. A privacy notice that
+            cannot tell you what you already agreed to is asking you to remember for it. */}
+        <div className="flex flex-col items-start gap-3 rounded-card border border-signal-edge bg-signal-wash p-5">
+          <p className="text-[15px] leading-relaxed text-ink">
             {consent.choice === 'granted'
               ? `You have agreed to your CV being sent to ${provider ?? 'the model provider'}.`
               : consent.choice === 'declined'
@@ -181,7 +198,7 @@ function Privacy() {
             <button
               type="button"
               onClick={consent.reset}
-              className="rim stencil self-start px-3 py-1.5 text-[9px] text-tray-enamel/70 transition-colors hover:bg-amber-shadow/25 hover:text-tray-enamel"
+              className="btn btn-quiet px-4 py-2 text-[14px]"
             >
               Ask me again
             </button>
@@ -197,9 +214,9 @@ function Privacy() {
 
         <a
           href="/"
-          className="stencil text-[10px] text-safelight/70 underline underline-offset-4 hover:text-safelight"
+          className="btn btn-quiet self-start px-4 py-2.5 text-[14px]"
         >
-          Back
+          Back to your CV
         </a>
       </main>
     </div>

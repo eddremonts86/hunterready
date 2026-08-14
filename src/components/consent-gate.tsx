@@ -146,68 +146,83 @@ export function ConsentGate({
     <div
       role="group"
       aria-labelledby="consent-heading"
-      className="rim bench mx-auto flex w-full max-w-xl flex-col gap-4 p-5"
+      className="mx-auto flex w-full max-w-xl flex-col gap-7"
     >
-      <div className="flex flex-col gap-2">
-        <h2 id="consent-heading" className="stencil text-[11px] text-safelight">
-          Before you upload
+      <div className="flex flex-col gap-3 text-center">
+        <h2 id="consent-heading" className="text-display text-ink">
+          Who should read your CV?
         </h2>
-        <p className="text-[12px] leading-relaxed text-tray-enamel">
-          To read your CV we send its text to{' '}
-          <strong className="text-safelight">{provider}</strong>, a company that
-          runs the AI model we use. That is the only place it goes, and we do
-          not keep a copy.
-        </p>
-        <p className="text-[11px] leading-relaxed text-developer-gray">
-          Your phone number and street address are removed before anything is
-          sent — the model does not need them to read a CV.
+        <p className="text-lead text-ink-soft">
+          Either way we pull out your details and you check them. The only
+          difference is which computer does the reading.
         </p>
       </div>
 
       {/*
         Equal visual weight, deliberately.
 
-        A filled primary button beside an outlined one is the right pattern for an action with an
+        A filled primary pill beside an outlined one is the right pattern for an action with an
         obvious best answer — and the wrong one here. This is a consent decision, and styling the
         answer that suits us as the default is the same nudge docs/07-privacy.md rules out when it
-        says "not buried in a ToS checkbox". Whichever way someone leans should be their lean.
+        says "not buried in a ToS checkbox". So both options are the same choice card, in the same
+        order every time, and neither is pre-selected.
+
+        The reference's stacked option cards are exactly the right form for it: two answers, each
+        with a title and the one sentence that actually distinguishes them.
       */}
-      <div className="flex flex-col gap-2 sm:flex-row">
+      <div className="flex flex-col gap-3">
         <button
           type="button"
           onClick={() => onDecide('granted')}
-          className="rim flex-1 px-4 py-3 text-[11px] text-tray-enamel transition-colors hover:bg-amber-shadow/25 focus-visible:bg-amber-shadow/25"
+          className="choice"
         >
-          <span className="stencil">Yes, send it to {provider}</span>
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[16px] font-semibold">
+              Send it to {provider}
+            </span>
+            <span className="text-[14px] leading-relaxed text-ink-soft">
+              The larger model, and the most accurate read. Its text goes to{' '}
+              {provider} and nowhere else; we do not keep a copy.
+            </span>
+          </span>
         </button>
+
+        {/*
+          Not a consolation prize, and it must not read like one. It is a real model on our own
+          hardware — smaller than the one above, so a very unusual layout may need more correcting,
+          and that is the whole of the trade. Overstating it would be dishonest; understating it
+          makes the private choice look like a penalty.
+        */}
         <button
           type="button"
           onClick={() => onDecide('declined')}
-          className="rim flex-1 px-4 py-3 text-[11px] text-tray-enamel transition-colors hover:bg-amber-shadow/25 focus-visible:bg-amber-shadow/25"
+          className="choice"
         >
-          <span className="stencil">No — use your own model</span>
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[16px] font-semibold">
+              Keep it on your server
+            </span>
+            <span className="text-[14px] leading-relaxed text-ink-soft">
+              A model running on our own machines, so the file never leaves
+              them. It is smaller, so an unusual layout may leave you a little
+              more to correct.
+            </span>
+          </span>
         </button>
       </div>
 
-      {/*
-        Not a consolation prize, and it must not read like one. It is a real model on our own hardware —
-        smaller than the one above, so a very unusual layout may need more correcting, and that is the
-        whole of the trade. Overstating it would be dishonest; understating it makes the private choice
-        look like a penalty.
-      */}
-      <p className="text-[10px] leading-relaxed text-developer-gray">
-        Your CV is read by a model on our own server instead, so it never leaves
-        our machines. It is a smaller model, so on an unusual layout you may
-        have a little more to correct. You can change your mind on the next
-        upload.
-      </p>
-
-      <a
-        href="/privacy"
-        className="stencil text-[9px] text-safelight/70 underline underline-offset-4 hover:text-safelight"
-      >
-        What we do with your data
-      </a>
+      <div className="flex flex-col items-center gap-2 text-center">
+        <p className="text-meta text-ink-soft">
+          Your phone number and street address are removed before either model
+          sees the text. You can change your mind on the next upload.
+        </p>
+        <a
+          href="/privacy"
+          className="text-meta font-medium text-signal underline decoration-signal/30 underline-offset-4 hover:decoration-signal"
+        >
+          What we do with your data
+        </a>
+      </div>
     </div>
   )
 }

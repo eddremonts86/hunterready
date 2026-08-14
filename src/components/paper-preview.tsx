@@ -56,10 +56,7 @@ export function PaperPreview({
   const { page } = theme.spacing
 
   return (
-    <div
-      ref={containerRef}
-      className="flex-1 overflow-auto bg-developer-gray/25 p-4"
-    >
+    <div ref={containerRef} className="flex-1 overflow-auto bg-band p-4">
       <div
         // The scaled sheet still needs to reserve its real height, or the scroll area lies.
         style={{
@@ -79,9 +76,12 @@ export function PaperPreview({
             paddingRight: page.marginRight,
             paddingBottom: page.marginBottom,
             paddingLeft: page.marginLeft,
-            // A printed sheet has an edge. This is the only shadow in the app, and it is
-            // depicting paper rather than lifting a UI surface (DESIGN.md's Falloff Rule).
-            boxShadow: '0 0 0 1px rgba(0,0,0,0.35)',
+            // A printed sheet has an edge and it sits on something. On the previous dark ground a
+            // 1px hairline was enough; on a light band the sheet disappears into it without a real
+            // contact shadow, so this now matches the `.lift` recipe — hairline plus a wide, low
+            // falloff, tinted with the ink rather than black.
+            boxShadow:
+              '0 0 0 1px rgb(16 26 51 / 10%), 0 18px 40px -20px rgb(16 26 51 / 28%)',
           }}
         >
           <Template resume={resume} theme={theme} />

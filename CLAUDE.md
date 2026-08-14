@@ -31,17 +31,24 @@ Active Spec: [specs/current_spec.md](specs/current_spec.md).
 - **No fabrication in AI features.** Numbers, employers, dates, technologies and
   outcomes may never be invented. See [docs/06-ai-optimization.md](docs/06-ai-optimization.md).
 - **No CV content in logs, errors, analytics or telemetry.** Ever. See [docs/07-privacy.md](docs/07-privacy.md).
-- **Amber never touches the print.** DESIGN.md's hardest rule: Safelight Amber
-  (`#FFB100`) and Amber Shadow (`#B36A00`) belong to the app chrome and appear nowhere
-  in a CV preview or an exported PDF. Documents are Print Black / Silver Gray /
-  Developer Gray on Tray Enamel or white. A CV carrying our accent carries our brand
-  into someone else's job application.
+- **The print is not ours.** DESIGN.md's hardest rule: Signal Blue (`#1B3BD8`), every
+  other chrome colour, and the chrome typeface (Figtree) appear nowhere in a CV preview
+  or an exported PDF. Documents use the renderer's own neutral themes and its own faces
+  (Source Sans 3 / Source Serif 4). A CV carrying our accent carries our brand into
+  someone else's job application.
+  _This rule outlived the v0.6 world change unaltered — it was never about amber._
 - **Nothing is irreversible, and nothing warns that it is.** The darkroom world says
   "there is no undo"; this product says the opposite. Variants are test strips.
 - **PDF colors are hex.** The renderer rejects `oklch`. Themes are a hand-maintained
   hex mirror of the app tokens (ADR-003).
 - **Flexbox only** in PDF templates. No CSS grid — Satori-lineage subset.
-- **No `box-shadow` for elevation** anywhere. Depth is amber falloff (DESIGN.md).
+- **Elevation is the two-layer shadow recipe** in DESIGN.md, Ink-tinted, and used only to
+  say "this surface is above that one" — never to make something look important. The old
+  Falloff Rule (no `box-shadow` anywhere, depth as amber falloff) was repealed with the
+  darkroom world in v0.6; it described a dark room lit by one lamp.
+- **Don't revive the darkroom.** Amber, safelight, test strips, stencilled caps,
+  seven-segment numerals and the 4px stamped radius are retired. Reaching for one piece of
+  a replaced world produces a screen belonging to neither.
 - **Never assume a tech career** in copy, fixtures, skill taxonomies or sample content.
 - Secrets come from `dev-env/env-config/.env`. Never hardcode, never echo, never commit.
 
