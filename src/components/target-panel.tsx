@@ -361,6 +361,7 @@ export function TargetPanel({
   onAcceptSummary,
   onSaveApplication,
   onDraftLetter,
+  letterStages,
   onDownloadLetter,
 }: {
   resume: Resume
@@ -388,6 +389,8 @@ export function TargetPanel({
    * a requirement the candidate removed should not shape the letter either.
    */
   onDraftLetter?: (requirements: JobRequirements) => Promise<CoverLetterOffer>
+  /** The narrated wait while the letter drafts — the server's own stages, polled by the page. */
+  letterStages?: Array<{ label: string; detail?: string; done: boolean }>
   /**
    * Download the letter on screen, including any edits, as `.docx`.
    *
@@ -794,7 +797,49 @@ export function TargetPanel({
                 working="Writing…"
               />
             </button>
-          ) : letter.outcome === 'drafted' ? (
+          ) : null}
+          {letter === undefined &&
+            letterBusy &&
+            letterStages !== undefined &&
+            letterStages.length > 0 && (
+              <ol className="flex flex-col gap-1.5">
+                {letterStages.map((stage, index) => (
+                  <li
+                    key={index}
+                    className="flex items-center gap-2 text-[13px]"
+                  >
+                    {stage.done ? (
+                      <svg
+                        aria-hidden
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.4"
+                        strokeLinecap="round"
+                        className="h-3.5 w-3.5 shrink-0 text-affirm"
+                      >
+                        <path d="m5 12.5 4.5 4.5L19 7" />
+                      </svg>
+                    ) : (
+                      <span
+                        aria-hidden
+                        data-motion="essential"
+                        className="h-3 w-3 shrink-0 animate-spin rounded-full border-[1.5px] border-signal border-t-transparent"
+                      />
+                    )}
+                    <span
+                      className={
+                        stage.done ? 'text-ink-faint' : 'text-ink-soft'
+                      }
+                    >
+                      {stage.label}
+                      {stage.detail === undefined ? '' : ` — ${stage.detail}`}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          {letter === undefined ? null : letter.outcome === 'drafted' ? (
             <>
               {/*
                 Editable, and the edit is what downloads. A letter is the one artifact here written in

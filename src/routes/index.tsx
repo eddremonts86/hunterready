@@ -551,6 +551,8 @@ function HunterReady() {
   const [targeting, setTargeting] = useState(false)
   const [reading, setReading] = useState<AdvertReadingResult | undefined>()
   const [targetBusy, setTargetBusy] = useState(false)
+  /** True while a cover letter drafts, so the stage polling runs for it too. */
+  const [letterDrafting, setLetterDrafting] = useState(false)
   const [targetError, setTargetError] = useState<string | undefined>()
   /**
    * The advert text, kept after the request so an application row can store what it was aimed at.
@@ -736,7 +738,7 @@ function HunterReady() {
    * polling — unlike a second streaming response — survives every proxy between a phone and the server.
    */
   useEffect(() => {
-    if (!busy && !targetBusy) return
+    if (!busy && !targetBusy && !letterDrafting) return
     const timer = setInterval(() => {
       const id = progressIdRef.current
       if (id === undefined) return
@@ -761,7 +763,7 @@ function HunterReady() {
         })
     }, 700)
     return () => clearInterval(timer)
-  }, [busy, targetBusy])
+  }, [busy, targetBusy, letterDrafting])
 
   const upload = useCallback(
     async (file: File) => {
@@ -1540,6 +1542,10 @@ function HunterReady() {
                       removed should not shape the letter either.
                     */
                     onDraftLetter={async (requirements) => {
+                      // The narrated wait, same channel as everything else that makes a person wait.
+                      progressIdRef.current = crypto.randomUUID()
+                      setStages([])
+                      setLetterDrafting(true)
                       try {
                         const response = await fetch('/api/cover-letter', {
                           method: 'POST',
@@ -1550,6 +1556,7 @@ function HunterReady() {
                             requirements,
                             roleTitle: reading.roleTitle,
                             company: reading.company,
+                            progress: progressIdRef.current,
                             processing:
                               consent.choice === 'granted'
                                 ? 'provider'
@@ -1578,8 +1585,11 @@ function HunterReady() {
                           message:
                             'We could not reach the server. Your CV is untouched.',
                         }
+                      } finally {
+                        setLetterDrafting(false)
                       }
                     }}
+                    letterStages={stages}
                     /*
                       The *edited* text is what is sent — re-drafting here would quietly throw away
                       their wording.

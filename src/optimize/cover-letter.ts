@@ -166,6 +166,8 @@ function toolSchema(): Record<string, unknown> {
 }
 
 export interface CoverLetterRequest {
+  /** Live narration for the waiting screen — stage labels only, never letter content. */
+  onProgress?: (label: string, detail?: string) => void
   resume: Resume
   requirements: JobRequirements
   /** The advert itself. Part of the grounding set — see guard 3. */
@@ -274,7 +276,17 @@ submit_letter.`,
   /** The cleanest guard-passing draft so far. Shipped if no attempt comes back tell-free. */
   let best: { body: string; rationale: string } | undefined
 
+  const onProgress = request.onProgress ?? (() => {})
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    /*
+      The honest label per attempt: the second one only happens when the voice check caught the first
+      draft using machine tells, and saying so beats a spinner that pretends nothing happened.
+    */
+    onProgress(
+      attempt === 0
+        ? 'Writing the letter from your CV and the advert'
+        : 'Rewriting it — the first draft sounded like a machine',
+    )
     let response: Anthropic.Message
     try {
       response = await provider.client.messages.create(
