@@ -391,14 +391,16 @@ erasure.
   concrete shapes rather than an open field. The architecture already draws the line for one of them: the
   free stateless path stores nothing (ADR-004), and everything that costs money — model calls, storage —
   needs an account.
-- ⬜ **Non-Latin script coverage.** Split by measurement, not estimate — see **ADR-022**. Cyrillic and
-  Greek were assessed as cheap and that was wrong: adding the fontsource subsets changes nothing, because
-  takumi-pdf 0.6.4 cannot reach the glyphs in range-subset `woff2` files. A full TTF renders all three
-  scripts fine, so the path is vendoring ~2.4 MB of upstream TTFs — a decision about the deployed image,
-  not a line in a subset list. CJK stays a separate question at 10–16 MB per weight.
-
-  Worth knowing meanwhile: the renderer **fails loudly** with `MissingGlyphs` and the exact codepoints. A
-  Cyrillic CV today errors rather than producing a PDF full of boxes.
+- ✅ **Cyrillic and Greek** (`scripts/make-fonts.mjs`, ADR-022). Not the subset list it looked like:
+  takumi-pdf 0.6.4 cannot reach the glyphs in fontsource's range-subset `woff2` files, so adding
+  `cyrillic` to the bundler copies twelve files and changes nothing. The fix is a format change —
+  Adobe's TTFs, subsetted to the ranges these markets need: **1.24 MB for six faces**, against 2.4 MB
+  for the full fonts. Proved to render through takumi _before_ anything was vendored, because the first
+  attempt bundled fonts the renderer could not use. A Bulgarian, Greek, Ukrainian or Serbian name now
+  renders in both PDF and `.docx`, in every template.
+- ⬜ **CJK.** A separate question, and still a real one: no Source face has it and Noto Sans CJK is
+  10–16 MB per weight. That is a decision about the deployed image and about which market it is for.
+  Right-to-left needs more than a font — the renderer's bidi behaviour is unverified.
 
 ## Deliberately parked
 
