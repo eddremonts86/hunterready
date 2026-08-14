@@ -42,7 +42,24 @@ import { useProcessingConsent } from '@/components/consent-gate'
 import { AccountControls } from '@/components/account-controls'
 import { RETENTION_DAYS } from '@/db/retention-policy'
 
-export const Route = createFileRoute('/privacy')({ component: Privacy })
+export const Route = createFileRoute('/privacy')({
+  component: Privacy,
+  /**
+   * Its own title. It inherited the root's — *"HunterReady — a CV automated screening can actually
+   * read"* — which is a marketing line on the page somebody opens to decide whether to trust us with
+   * their employment history, and it makes the tab unfindable among a dozen others.
+   */
+  head: () => ({
+    meta: [
+      { title: 'What we do with your CV — HunterReady' },
+      {
+        name: 'description',
+        content:
+          'What HunterReady processes, who sees it, how long it is kept, and how to delete it.',
+      },
+    ],
+  }),
+})
 
 function Section({
   title,
