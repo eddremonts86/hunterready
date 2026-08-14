@@ -575,3 +575,50 @@ export function docxFilename(resume: Resume): string {
     .replace(/^-+|-+$/g, '')
   return `${base === '' ? 'CV' : `${base}-CV`}.docx`
 }
+
+/**
+ * A cover letter as `.docx` — v0.7.
+ *
+ * Reuses every part except the body: same styles, same page setup, same absence of headers, tables and
+ * text boxes. A letter has no sections to parse, so the ATS ruleset barely applies to it — but the
+ * reasons for the *rest* of the file (a document that opens everywhere, no clock, ASCII filename) apply
+ * unchanged, and having two ways to write a `.docx` in one codebase would be one too many.
+ *
+ * Blank lines in the text become empty paragraphs rather than being collapsed: they are the paragraph
+ * breaks the writer intended, and a letter run together as one block does not get read.
+ */
+export function renderLetterDocx(text: string, resume: Resume): Uint8Array {
+  const body =
+    text
+      .split(/\r?\n/)
+      .map((line) =>
+        line.trim() === '' ? paragraph('') : paragraph(run(line)),
+      )
+      .join('') +
+    '<w:sectPr>' +
+    '<w:pgSz w:w="11906" w:h="16838"/>' +
+    '<w:pgMar w:top="1418" w:right="1418" w:bottom="1418" w:left="1418" w:header="0" w:footer="0" w:gutter="0"/>' +
+    '</w:sectPr>'
+
+  const document = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}</w:body></w:document>`
+
+  return zipSync([
+    { path: '[Content_Types].xml', data: CONTENT_TYPES },
+    { path: '_rels/.rels', data: ROOT_RELS },
+    { path: 'word/document.xml', data: document },
+    { path: 'word/_rels/document.xml.rels', data: DOCUMENT_RELS },
+    { path: 'word/styles.xml', data: STYLES },
+    { path: 'word/numbering.xml', data: NUMBERING },
+    { path: 'docProps/core.xml', data: coreProperties(resume) },
+    { path: 'docProps/app.xml', data: APP_PROPERTIES },
+  ])
+}
+
+/** `Marta Sørensen` → `Marta-Sorensen-cover-letter.docx`. */
+export function letterFilename(resume: Resume): string {
+  return docxFilename(resume).replace(
+    /-CV\.docx$|\.docx$/,
+    '-cover-letter.docx',
+  )
+}

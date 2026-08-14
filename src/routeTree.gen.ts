@@ -12,11 +12,13 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ApiApplicationRouteImport } from './routes/api/application'
+import { Route as ApiCoverLetterRouteImport } from './routes/api/cover-letter'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiIngestRouteImport } from './routes/api/ingest'
 import { Route as ApiLibraryRouteImport } from './routes/api/library'
 import { Route as ApiProcessingRouteImport } from './routes/api/processing'
 import { Route as ApiRenderRouteImport } from './routes/api/render'
+import { Route as ApiRenderLetterRouteImport } from './routes/api/render-letter'
 import { Route as ApiResumeRouteImport } from './routes/api/resume'
 import { Route as ApiRewriteRouteImport } from './routes/api/rewrite'
 import { Route as ApiTargetRouteImport } from './routes/api/target'
@@ -37,6 +39,11 @@ const PrivacyRoute = PrivacyRouteImport.update({
 const ApiApplicationRoute = ApiApplicationRouteImport.update({
   id: '/api/application',
   path: '/api/application',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCoverLetterRoute = ApiCoverLetterRouteImport.update({
+  id: '/api/cover-letter',
+  path: '/api/cover-letter',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiHealthRoute = ApiHealthRouteImport.update({
@@ -62,6 +69,11 @@ const ApiProcessingRoute = ApiProcessingRouteImport.update({
 const ApiRenderRoute = ApiRenderRouteImport.update({
   id: '/api/render',
   path: '/api/render',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRenderLetterRoute = ApiRenderLetterRouteImport.update({
+  id: '/api/render-letter',
+  path: '/api/render-letter',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiResumeRoute = ApiResumeRouteImport.update({
@@ -99,11 +111,13 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/privacy': typeof PrivacyRoute
   '/api/application': typeof ApiApplicationRoute
+  '/api/cover-letter': typeof ApiCoverLetterRoute
   '/api/health': typeof ApiHealthRoute
   '/api/ingest': typeof ApiIngestRoute
   '/api/library': typeof ApiLibraryRoute
   '/api/processing': typeof ApiProcessingRoute
   '/api/render': typeof ApiRenderRoute
+  '/api/render-letter': typeof ApiRenderLetterRoute
   '/api/resume': typeof ApiResumeRoute
   '/api/rewrite': typeof ApiRewriteRoute
   '/api/target': typeof ApiTargetRoute
@@ -115,11 +129,13 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/privacy': typeof PrivacyRoute
   '/api/application': typeof ApiApplicationRoute
+  '/api/cover-letter': typeof ApiCoverLetterRoute
   '/api/health': typeof ApiHealthRoute
   '/api/ingest': typeof ApiIngestRoute
   '/api/library': typeof ApiLibraryRoute
   '/api/processing': typeof ApiProcessingRoute
   '/api/render': typeof ApiRenderRoute
+  '/api/render-letter': typeof ApiRenderLetterRoute
   '/api/resume': typeof ApiResumeRoute
   '/api/rewrite': typeof ApiRewriteRoute
   '/api/target': typeof ApiTargetRoute
@@ -132,11 +148,13 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/privacy': typeof PrivacyRoute
   '/api/application': typeof ApiApplicationRoute
+  '/api/cover-letter': typeof ApiCoverLetterRoute
   '/api/health': typeof ApiHealthRoute
   '/api/ingest': typeof ApiIngestRoute
   '/api/library': typeof ApiLibraryRoute
   '/api/processing': typeof ApiProcessingRoute
   '/api/render': typeof ApiRenderRoute
+  '/api/render-letter': typeof ApiRenderLetterRoute
   '/api/resume': typeof ApiResumeRoute
   '/api/rewrite': typeof ApiRewriteRoute
   '/api/target': typeof ApiTargetRoute
@@ -150,11 +168,13 @@ export interface FileRouteTypes {
     | '/'
     | '/privacy'
     | '/api/application'
+    | '/api/cover-letter'
     | '/api/health'
     | '/api/ingest'
     | '/api/library'
     | '/api/processing'
     | '/api/render'
+    | '/api/render-letter'
     | '/api/resume'
     | '/api/rewrite'
     | '/api/target'
@@ -166,11 +186,13 @@ export interface FileRouteTypes {
     | '/'
     | '/privacy'
     | '/api/application'
+    | '/api/cover-letter'
     | '/api/health'
     | '/api/ingest'
     | '/api/library'
     | '/api/processing'
     | '/api/render'
+    | '/api/render-letter'
     | '/api/resume'
     | '/api/rewrite'
     | '/api/target'
@@ -182,11 +204,13 @@ export interface FileRouteTypes {
     | '/'
     | '/privacy'
     | '/api/application'
+    | '/api/cover-letter'
     | '/api/health'
     | '/api/ingest'
     | '/api/library'
     | '/api/processing'
     | '/api/render'
+    | '/api/render-letter'
     | '/api/resume'
     | '/api/rewrite'
     | '/api/target'
@@ -199,11 +223,13 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   PrivacyRoute: typeof PrivacyRoute
   ApiApplicationRoute: typeof ApiApplicationRoute
+  ApiCoverLetterRoute: typeof ApiCoverLetterRoute
   ApiHealthRoute: typeof ApiHealthRoute
   ApiIngestRoute: typeof ApiIngestRoute
   ApiLibraryRoute: typeof ApiLibraryRoute
   ApiProcessingRoute: typeof ApiProcessingRoute
   ApiRenderRoute: typeof ApiRenderRoute
+  ApiRenderLetterRoute: typeof ApiRenderLetterRoute
   ApiResumeRoute: typeof ApiResumeRoute
   ApiRewriteRoute: typeof ApiRewriteRoute
   ApiTargetRoute: typeof ApiTargetRoute
@@ -233,6 +259,13 @@ declare module '@tanstack/react-router' {
       path: '/api/application'
       fullPath: '/api/application'
       preLoaderRoute: typeof ApiApplicationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/cover-letter': {
+      id: '/api/cover-letter'
+      path: '/api/cover-letter'
+      fullPath: '/api/cover-letter'
+      preLoaderRoute: typeof ApiCoverLetterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/health': {
@@ -268,6 +301,13 @@ declare module '@tanstack/react-router' {
       path: '/api/render'
       fullPath: '/api/render'
       preLoaderRoute: typeof ApiRenderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/render-letter': {
+      id: '/api/render-letter'
+      path: '/api/render-letter'
+      fullPath: '/api/render-letter'
+      preLoaderRoute: typeof ApiRenderLetterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/resume': {
@@ -319,11 +359,13 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   PrivacyRoute: PrivacyRoute,
   ApiApplicationRoute: ApiApplicationRoute,
+  ApiCoverLetterRoute: ApiCoverLetterRoute,
   ApiHealthRoute: ApiHealthRoute,
   ApiIngestRoute: ApiIngestRoute,
   ApiLibraryRoute: ApiLibraryRoute,
   ApiProcessingRoute: ApiProcessingRoute,
   ApiRenderRoute: ApiRenderRoute,
+  ApiRenderLetterRoute: ApiRenderLetterRoute,
   ApiResumeRoute: ApiResumeRoute,
   ApiRewriteRoute: ApiRewriteRoute,
   ApiTargetRoute: ApiTargetRoute,
