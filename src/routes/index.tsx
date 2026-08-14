@@ -1449,6 +1449,13 @@ function HunterReady() {
                       ...(provenance === undefined ? {} : { provenance }),
                     })
                   }
+                  /*
+                    Read off the registry rather than compared against a template id, so a third
+                    convention would be one entry in one file — that check does not want to live in the
+                    form, which has no business knowing which templates exist.
+                  */
+                  photoShown={template.convention === 'eu'}
+                  onUseEuropeanLayout={() => setTemplateId('modern-eu')}
                 />
               )}
 

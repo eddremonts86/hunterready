@@ -10,8 +10,13 @@ CV optimizer: ingest `.pdf`/`.docx`/`.doc`/`.txt`/`.md` → canonical `Resume` s
 Status: **v0.1–v0.9 shipped** — ingestion, review, PDF and DOCX export, bullet rewriting, job
 targeting, accounts with GDPR controls, cover letters, EN/ES/DA output and expiring share links.
 See [docs/08-roadmap.md](docs/08-roadmap.md) for what each release contains and what it cost.
-Open: encryption at rest (blocked on a key-management decision, ADR-018), pricing and payments,
-non-Latin script coverage. Active Spec: [specs/current_spec.md](specs/current_spec.md).
+Open: pricing and payments, non-Latin script coverage (CJK and RTL). Active Spec:
+[specs/current_spec.md](specs/current_spec.md).
+
+**Four features shipped as schema plus documentation and nothing else**, found one after another in a
+single session: `variant-diff`, all of v0.4's targeting, all of v0.5's persistence, and `basics.photoUrl`
+— which had a field, a paragraph in docs/05 describing its slot on `modern-eu`, and no code on either
+end. The check below is one command and it is not optional.
 
 **Before calling a version done, check the feature is reachable.** Three releases in a row shipped a
 complete, tested layer that no screen imported — v0.3's `variant-diff`, all of v0.4's targeting, all of

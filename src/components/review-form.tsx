@@ -11,6 +11,7 @@
  */
 import { useMemo, useState } from 'react'
 import { DateField } from '@/components/date-field'
+import { PhotoField } from '@/components/photo-field'
 import {
   CONFIDENCE_REVIEW_THRESHOLD,
   needsReview,
@@ -242,6 +243,8 @@ export function ReviewForm({
   provenance,
   onChange,
   ocr = false,
+  photoShown = false,
+  onUseEuropeanLayout,
 }: {
   resume: Resume
   provenance: Array<FieldProvenance>
@@ -255,6 +258,16 @@ export function ReviewForm({
   onChange: (next: Resume, provenance?: Array<FieldProvenance>) => void
   /** The text was read off an image, which changes the honest answer to "how much of this?" */
   ocr?: boolean
+  /**
+   * Whether the chosen template draws a photo — the European one does, the international one does not.
+   *
+   * Passed in rather than read here, because the template is the parent's state and this form has no
+   * business knowing the registry. What it does with the answer is tell the truth about where the photo
+   * will end up (docs/05, ADR-010).
+   */
+  photoShown?: boolean
+  /** Offered beside the photo when the current layout would not show it. Never called automatically. */
+  onUseEuropeanLayout?: () => void
 }) {
   const index = useProvenanceIndex(provenance)
   /**
@@ -526,6 +539,18 @@ export function ReviewForm({
           value={resume.basics.summary ?? ''}
           onChange={(summary) => setBasics({ summary: summary || undefined })}
           provenance={index.get('basics.summary')}
+        />
+        {/*
+          Last in "You", because it is the least load-bearing thing on the screen and the only optional
+          one. A photo above the name would suggest the picture matters more than what the CV says.
+        */}
+        <PhotoField
+          value={resume.basics.photoUrl}
+          onChange={(photoUrl) => setBasics({ photoUrl })}
+          shown={photoShown}
+          {...(onUseEuropeanLayout === undefined
+            ? {}
+            : { onUseEuropeanLayout })}
         />
       </Section>
 

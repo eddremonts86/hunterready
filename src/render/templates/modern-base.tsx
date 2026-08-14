@@ -15,7 +15,7 @@
  * DESIGN.md's Amber Never Touches The Print Rule holds structurally rather than by review.
  */
 import { Fragment } from 'react'
-import { Document, Page } from '@/lib/pdf-primitives'
+import { Document, Image, Page } from '@/lib/pdf-primitives'
 import { PdfcnThemeProvider } from '@/components/pdf/theme-provider'
 import type { PdfcnTheme } from '@/components/pdf/theme-types'
 import type { Resume, WorkItem } from '@/schema/resume'
@@ -146,6 +146,15 @@ function Body({ resume, theme, convention }: BodyProps) {
   const { basics } = resume
   const showPersonalDetails =
     convention === 'eu' && basics.personalDetails.length > 0
+  /**
+   * The photo, and the only image this system will ever draw (docs/05).
+   *
+   * European convention only. `modern-intl` ignores it even when one is set, which is the entire reason
+   * two templates exist: US and UK guidance is to leave a photo off, and several screeners drop a
+   * document with an image in the header region. Somebody who has uploaded a photo and then chooses the
+   * international layout has not made a mistake to be corrected — they have chosen a convention.
+   */
+  const showPhoto = convention === 'eu' && basics.photoUrl !== undefined
 
   /**
    * The document's language, from the CV's own `locale` — v0.8.
@@ -175,62 +184,111 @@ function Body({ resume, theme, convention }: BodyProps) {
         color: theme.colors.foreground,
       }}
     >
-      {/* Name and contact are text, never an image — an ATS drops image headers whole. */}
+      {/*
+        The masthead becomes a row when there is a photo, and the photo is the **last** child.
+
+        Reading order is the reason, not aesthetics. docs/05 clause: one reading order, and a parser walks
+        the document in DOM order — so the name, the contact line and the links must all be extracted
+        before anything image-shaped is reached. Putting the photo first would place an unparseable object
+        at the very top of the region every screener looks at for a name.
+
+        `flexDirection: row` with the text column growing: flexbox only, no grid (Satori lineage).
+      */}
       <div
         style={{
-          fontFamily: theme.typography.heading.fontFamily,
-          fontSize: theme.typography.heading.fontSize.h1,
-          fontWeight: theme.typography.heading.fontWeight,
-          lineHeight: theme.typography.heading.lineHeight,
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'flex-start',
+          gap: showPhoto ? 14 : 0,
         }}
       >
-        {basics.fullName}
-      </div>
-
-      {basics.headline === undefined ? null : (
-        <div style={{ marginTop: 3, color: theme.colors.mutedForeground }}>
-          {basics.headline}
-        </div>
-      )}
-
-      {contact === '' ? null : (
         <div
           style={{
-            marginTop: 5,
-            fontSize: theme.typography.body.fontSize - 1,
-            color: theme.colors.mutedForeground,
+            display: 'flex',
+            flexDirection: 'column',
+            flexGrow: 1,
+            // `minWidth: 0` so a long headline wraps instead of pushing the photo off the page.
+            minWidth: 0,
           }}
         >
-          {contact}
-        </div>
-      )}
+          {/* Name and contact are text, never an image — an ATS drops image headers whole. */}
+          <div
+            style={{
+              fontFamily: theme.typography.heading.fontFamily,
+              fontSize: theme.typography.heading.fontSize.h1,
+              fontWeight: theme.typography.heading.fontWeight,
+              lineHeight: theme.typography.heading.lineHeight,
+            }}
+          >
+            {basics.fullName}
+          </div>
 
-      {basics.links.length === 0 ? null : (
-        <div
-          style={{
-            marginTop: 2,
-            fontSize: theme.typography.body.fontSize - 1,
-            color: theme.colors.mutedForeground,
-          }}
-        >
-          {/* The URL is spelled out: a bare "LinkedIn" label extracts as nothing useful. */}
-          {joinParts(basics.links.map((l) => `${l.label}: ${l.url}`))}
-        </div>
-      )}
-
-      {showPersonalDetails ? (
-        <div
-          style={{
-            marginTop: 5,
-            fontSize: theme.typography.body.fontSize - 1,
-            color: theme.colors.mutedForeground,
-          }}
-        >
-          {joinParts(
-            basics.personalDetails.map((d) => `${d.label}: ${d.value}`),
+          {basics.headline === undefined ? null : (
+            <div style={{ marginTop: 3, color: theme.colors.mutedForeground }}>
+              {basics.headline}
+            </div>
           )}
+
+          {contact === '' ? null : (
+            <div
+              style={{
+                marginTop: 5,
+                fontSize: theme.typography.body.fontSize - 1,
+                color: theme.colors.mutedForeground,
+              }}
+            >
+              {contact}
+            </div>
+          )}
+
+          {basics.links.length === 0 ? null : (
+            <div
+              style={{
+                marginTop: 2,
+                fontSize: theme.typography.body.fontSize - 1,
+                color: theme.colors.mutedForeground,
+              }}
+            >
+              {/* The URL is spelled out: a bare "LinkedIn" label extracts as nothing useful. */}
+              {joinParts(basics.links.map((l) => `${l.label}: ${l.url}`))}
+            </div>
+          )}
+
+          {showPersonalDetails ? (
+            <div
+              style={{
+                marginTop: 5,
+                fontSize: theme.typography.body.fontSize - 1,
+                color: theme.colors.mutedForeground,
+              }}
+            >
+              {joinParts(
+                basics.personalDetails.map((d) => `${d.label}: ${d.value}`),
+              )}
+            </div>
+          ) : null}
         </div>
-      ) : null}
+
+        {showPhoto ? (
+          <Image
+            src={basics.photoUrl as string}
+            style={{
+              /*
+                A fixed square, in points. 78pt is about 27mm — the size a European CV photo is expected
+                to be, and small enough that it cannot push the name's column narrow enough to wrap badly.
+
+                No border radius: a circular crop is a design flourish on a document that must survive a
+                parser, and the renderer's clipping is one more thing that can differ between the preview
+                and the PDF. The crop itself already happened in the browser, so this is a plain square.
+              */
+              width: 78,
+              height: 78,
+              // Preserves the subject when the source was not perfectly square after all.
+              objectFit: 'cover',
+            }}
+          />
+        ) : null}
+      </div>
 
       {basics.summary === undefined ? null : (
         <div style={{ marginTop: theme.spacing.paragraphGap + 4 }}>
