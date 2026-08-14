@@ -34,6 +34,7 @@ import {
   joinParts,
 } from '../format'
 import { strings } from '../locale'
+import { styleOf } from '../themes/style'
 
 /**
  * The gutter that carries the section name.
@@ -94,7 +95,14 @@ function Section({
             fontFamily: theme.typography.heading.fontFamily,
             fontSize: theme.typography.heading.fontSize.h2,
             fontWeight: theme.typography.heading.fontWeight,
-            color: theme.colors.foreground,
+            /*
+              The gutter name is this template's signature, so it is where the theme's ink shows.
+              Color only — the treatment axis (bands, boxes) belongs to modern-base's stacked headings;
+              painting a band across a 104pt gutter would just draw a brick.
+            */
+            color: styleOf(theme).headingInAccent
+              ? styleOf(theme).accent
+              : theme.colors.foreground,
           }}
         >
           {title}
@@ -130,7 +138,14 @@ function Bullets({
         >
           {/* A real character, not a rendered shape: a bare glyph an extractor drops is fine, a
               meaning-carrying icon is not (rule 5). */}
-          <div style={{ display: 'flex', color: theme.colors.mutedForeground }}>
+          <div
+            style={{
+              display: 'flex',
+              color: styleOf(theme).bulletsInAccent
+                ? styleOf(theme).accent
+                : theme.colors.mutedForeground,
+            }}
+          >
             •
           </div>
           <div style={{ display: 'flex', flexGrow: 1 }}>{item}</div>
@@ -204,6 +219,14 @@ function Body({ resume, theme }: { resume: Resume; theme: PdfcnTheme }) {
             {contact}
           </div>
         )}
+        {/* One heavy stroke in the theme's ink under the masthead — the loudest thing on the page. */}
+        <div
+          style={{
+            marginTop: 10,
+            height: 3,
+            backgroundColor: styleOf(theme).accent,
+          }}
+        />
       </div>
 
       {basics.summary === undefined ? null : (

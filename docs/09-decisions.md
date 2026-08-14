@@ -756,6 +756,38 @@ line.
 
 ---
 
+## ADR-024 — Documents own an accent palette; the ban is on chrome colors, not on color
+
+**2026-08-14 · Accepted · Edd's decision**
+
+The first design catalogue shipped thirty pairings that were one grey document in thirty spacing
+configurations, and Edd's verdict was the correct one: nobody pays for that. The cause was an
+over-reading of DESIGN.md's hardest rule. "The print is not ours" bans **our brand** from the
+document — Signal Blue, the chrome greys, Figtree — because a CV carrying our accent carries our
+brand into someone else's job application. It was implemented as "documents are monochrome",
+which bans something the rule never mentioned: color that belongs to the document itself.
+
+### The rule, restated precisely
+
+- Documents draw from their own print palette: seven accent inks (teal, navy, graphite, rust,
+  forest, maroon, slate) plus their washes, all in `ALLOWED_PRINT_COLORS`, all enforced by test.
+- The chrome's colors are banned **by value** in `ROOM_COLORS` — now including Signal Blue
+  `#1B3BD8` alongside the retired darkroom ambers — and the themes test walks both `colors` and
+  the style block against the allowed list.
+- Identity is drawing, never typesetting tricks: bands, bars, rules, frames and washes are shapes
+  with no glyphs in them. `letterSpacing` stays banned on text (rule 13; the round-trip once read
+  a tracked heading back as "E x p e r i e n c e").
+
+### Why themes carry a `style` block instead of thirty template files
+
+`PdfcnTheme` is vendored and cannot gain fields, so each theme exports `DocTheme = PdfcnTheme &
+{ style }` — masthead construction (`plain`/`centered`/`band`/`sideline`), section-heading
+treatment (`hairline`/`underline`/`shortline`/`bar`/`band`/`tint`/`flanked`/`framed`/`plain`),
+and where the accent lands (name, headings, bullets, role line). One template factory executes
+the vocabulary; eight themes speak it differently; the round-trip suite proves all 184
+combinations still parse. A test now asserts no two themes share an accent or a heading look —
+the test Edd's complaint wrote.
+
 ## ADR-023 — The third-party model is the paid capability; our own hardware is the default
 
 **2026-08-14 · Accepted · Edd's decision**

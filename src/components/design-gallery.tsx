@@ -27,6 +27,7 @@
 import { DESIGNS } from '@/render/designs'
 import type { Design } from '@/render/designs'
 import { getTheme } from '@/render/themes'
+import { styleOf } from '@/render/themes/style'
 import { templates } from '@/render/templates/registry'
 import type { TemplateId } from '@/render/templates/registry'
 import type { ThemeId } from '@/render/themes'
@@ -40,35 +41,137 @@ const ORDER_WORDS: Record<string, Array<string>> = {
 
 function Specimen({ design }: { design: Design }) {
   const theme = getTheme(design.theme)
+  const style = styleOf(theme)
   const { heading, body } = theme.typography
+
+  /*
+    The heading drawn with its real treatment — the accent bar, the navy underline, the solid band, the
+    tinted band, the flanking hairlines, the slate box — because that treatment is now what a person is
+    choosing between. A specimen that flattens every theme back to grey words re-creates the exact
+    failure this catalogue was rebuilt to fix.
+  */
+  const words = (
+    <span
+      style={{
+        fontFamily: heading.fontFamily,
+        fontWeight: heading.fontWeight,
+        fontSize: 10,
+        textTransform: 'uppercase',
+        color:
+          style.heading === 'band'
+            ? style.onAccent
+            : style.headingInAccent
+              ? style.accent
+              : theme.colors.foreground,
+      }}
+    >
+      Experience
+    </span>
+  )
+
+  const treated = (() => {
+    switch (style.heading) {
+      case 'band':
+        return (
+          <span
+            style={{
+              display: 'flex',
+              backgroundColor: style.accent,
+              padding: '2px 6px',
+            }}
+          >
+            {words}
+          </span>
+        )
+      case 'tint':
+        return (
+          <span
+            style={{
+              display: 'flex',
+              backgroundColor: style.accentWash,
+              padding: '2px 6px',
+            }}
+          >
+            {words}
+          </span>
+        )
+      case 'bar':
+        return (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span
+              style={{ width: 3, height: 10, backgroundColor: style.accent }}
+            />
+            {words}
+          </span>
+        )
+      case 'underline':
+        return (
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {words}
+            <span style={{ height: 2, backgroundColor: style.accent }} />
+          </span>
+        )
+      case 'shortline':
+        return (
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {words}
+            <span
+              style={{ width: 26, height: 2.5, backgroundColor: style.accent }}
+            />
+          </span>
+        )
+      case 'flanked':
+        return (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <span
+              style={{
+                flexGrow: 1,
+                height: 1,
+                backgroundColor: theme.colors.border,
+              }}
+            />
+            {words}
+            <span
+              style={{
+                flexGrow: 1,
+                height: 1,
+                backgroundColor: theme.colors.border,
+              }}
+            />
+          </span>
+        )
+      case 'framed':
+        return (
+          <span
+            style={{
+              display: 'flex',
+              alignSelf: 'flex-start',
+              border: `1px solid ${style.accent}`,
+              padding: '1.5px 6px',
+            }}
+          >
+            {words}
+          </span>
+        )
+      case 'plain':
+        return words
+      default:
+        return (
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {words}
+            <span style={{ height: 1, backgroundColor: theme.colors.border }} />
+          </span>
+        )
+    }
+  })()
 
   return (
     <div
-      className="flex flex-col gap-1 rounded-field border border-hairline bg-ground px-3 py-2.5"
+      className="flex flex-col gap-1.5 rounded-field border border-hairline px-3 py-2.5"
       // The document's own colours, so a card cannot flatter a theme the PDF will not match.
       style={{ backgroundColor: theme.colors.background }}
     >
-      {/*
-        A real section heading, in the theme's heading face at its real weight and its real transform. This
-        is the single most recognisable thing about a CV's look, and it is what the eye uses to tell these
-        thirty apart.
-      */}
-      <span
-        style={{
-          fontFamily: heading.fontFamily,
-          fontWeight: heading.fontWeight,
-          fontSize: 11,
-          letterSpacing: '0.04em',
-          textTransform: 'uppercase',
-          color: theme.colors.foreground,
-        }}
-      >
-        Experience
-      </span>
-      <span
-        style={{ height: 1, backgroundColor: theme.colors.border }}
-        aria-hidden
-      />
+      {treated}
       <span
         style={{
           fontFamily: body.fontFamily,

@@ -1,31 +1,26 @@
 /**
- * "Technical" — monospace headings over a tight sans body.
+ * "Technical" — monospace headings in framed boxes, slate accents, dense and exact.
  *
- * pdfcn calls this direction Blueprint and gives it a dark slate-cyan palette. The palette is exactly the
- * part that cannot come along: a CV carrying a colour scheme carries somebody's branding into another
- * company's hiring process, and DESIGN.md forbids it outright. What survives the translation is the
- * *typographic* idea — a machine-set heading over dense body copy — and that turns out to be the whole
- * effect anyway.
- *
- * Named for the register rather than for an industry. "Never assume a tech career" is a hard rule here
- * (CLAUDE.md), and this theme suits a lab technician, an aircraft engineer and a CNC machinist as much as
- * anybody who writes software — which is precisely why it is not called "Developer".
+ * Reads like good documentation: every section heading in a 1px box, the role line in slate. The one
+ * theme where looking like a machine wrote it is the compliment.
  */
 import { defaultPrimitives } from '@/components/pdf/primitives'
-import type { PdfcnTheme } from '@/components/pdf/theme-types'
+import type { DocTheme } from './style'
 import {
   DEVELOPER_GRAY,
   FONT_SANS,
-  NEUTRALIZED_SEMANTICS,
+  NEUTRALIZED_ALERTS,
   PAPER_MUTED,
   PAPER_WHITE,
   PRINT_BLACK,
   SILVER_GRAY,
+  SLATE_INK,
+  SLATE_WASH,
 } from './tokens'
 
 const FONT_MONO = '"Courier Prime"'
 
-export const technicalTheme: PdfcnTheme = {
+export const technicalTheme: DocTheme = {
   name: 'technical',
   primitives: defaultPrimitives,
   colors: {
@@ -33,10 +28,11 @@ export const technicalTheme: PdfcnTheme = {
     background: PAPER_WHITE,
     muted: PAPER_MUTED,
     mutedForeground: DEVELOPER_GRAY,
-    primary: PRINT_BLACK,
+    primary: SLATE_INK,
     primaryForeground: PAPER_WHITE,
     border: SILVER_GRAY,
-    ...NEUTRALIZED_SEMANTICS,
+    accent: SLATE_INK,
+    ...NEUTRALIZED_ALERTS,
   },
   typography: {
     body: {
@@ -62,4 +58,15 @@ export const technicalTheme: PdfcnTheme = {
     componentGap: 8,
   },
   page: { size: 'A4', orientation: 'portrait' },
+  style: {
+    accent: SLATE_INK,
+    accentWash: SLATE_WASH,
+    onAccent: PAPER_WHITE,
+    masthead: 'plain',
+    heading: 'framed',
+    nameInAccent: false,
+    headingInAccent: true,
+    bulletsInAccent: false,
+    roleInAccent: true,
+  },
 }

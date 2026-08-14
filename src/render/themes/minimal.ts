@@ -1,30 +1,24 @@
 /**
- * "Minimal" — typewriter headings, and more white space than anything else here.
+ * "Minimal" — typewriter headings, wide margins, and not one line of decoration.
  *
- * pdfcn ships a preset by this name (Courier headings, maximum whitespace) and this is that idea inside
- * this project's constraints: the palette is the same print-side monochrome as every other theme, because
- * DESIGN.md's hardest rule is that no accent of ours touches somebody's document.
- *
- * Courier Prime is used for the *section headings only*, never the body. A whole CV set in a monospace
- * face reads slowly and costs about 15% more lines for the same words, which on a two-page history is a
- * third page. As a heading face it does what the preset intends — it marks the sections without shouting.
+ * The identity is restraint, kept honest now that every other theme has color: this is the one that
+ * chooses none. Generous leading and absence — for people whose work should speak unadorned.
  */
 import { defaultPrimitives } from '@/components/pdf/primitives'
-import type { PdfcnTheme } from '@/components/pdf/theme-types'
+import type { DocTheme } from './style'
 import {
   DEVELOPER_GRAY,
   FONT_SANS,
-  NEUTRALIZED_SEMANTICS,
+  NEUTRALIZED_ALERTS,
   PAPER_MUTED,
   PAPER_WHITE,
   PRINT_BLACK,
   SILVER_GRAY,
 } from './tokens'
 
-/** Bundled, and registered in `fonts/index.ts`. A family the renderer lacks draws nothing at all. */
 const FONT_MONO = '"Courier Prime"'
 
-export const minimalTheme: PdfcnTheme = {
+export const minimalTheme: DocTheme = {
   name: 'minimal',
   primitives: defaultPrimitives,
   colors: {
@@ -35,7 +29,8 @@ export const minimalTheme: PdfcnTheme = {
     primary: PRINT_BLACK,
     primaryForeground: PAPER_WHITE,
     border: SILVER_GRAY,
-    ...NEUTRALIZED_SEMANTICS,
+    accent: PRINT_BLACK,
+    ...NEUTRALIZED_ALERTS,
   },
   typography: {
     body: {
@@ -63,4 +58,15 @@ export const minimalTheme: PdfcnTheme = {
     componentGap: 12,
   },
   page: { size: 'A4', orientation: 'portrait' },
+  style: {
+    accent: PRINT_BLACK,
+    accentWash: PAPER_MUTED,
+    onAccent: PAPER_WHITE,
+    masthead: 'plain',
+    heading: 'plain',
+    nameInAccent: false,
+    headingInAccent: false,
+    bulletsInAccent: false,
+    roleInAccent: false,
+  },
 }

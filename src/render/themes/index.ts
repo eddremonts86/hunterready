@@ -55,35 +55,35 @@ export const themes: Record<ThemeId, PdfcnTheme> = {
 export const themeLabels: Record<ThemeId, { label: string; hint: string }> = {
   modern: {
     label: 'Modern',
-    hint: 'Clean and current. A good default for most fields.',
+    hint: 'Clean and current, with a teal accent. A good default for most fields.',
   },
   professional: {
     label: 'Professional',
-    hint: 'Formal headings. Suits health, education, law and public sector.',
+    hint: 'Navy headings over a heavy rule. Suits health, education, law and public sector.',
   },
   executive: {
     label: 'Executive',
-    hint: 'Larger and more spacious. Best for senior roles; uses more pages.',
+    hint: 'Your name in white on a dark masthead. Best for senior roles; uses more pages.',
   },
   compact: {
     label: 'Compact',
-    hint: 'Fits more on each page. Use it when a long history would otherwise spill over.',
+    hint: 'Fits more on each page, with rust-tinted section bands to keep it readable.',
   },
   minimal: {
     label: 'Minimal',
-    hint: 'Wide margins and plenty of air. Reads calmly; uses more pages.',
+    hint: 'Typewriter headings, wide margins, no decoration at all. Quietly confident.',
   },
   narrow: {
     label: 'Narrow',
-    hint: 'A condensed typeface, so more fits per line without shrinking the text.',
+    hint: 'Condensed type with solid green section bands. Packs a long history in.',
   },
   academic: {
     label: 'Academic',
-    hint: 'Serif text, the convention in research, law and medicine. Suits a long list of qualifications.',
+    hint: 'Centred and classical, in maroon. For CVs where the institutions carry weight.',
   },
   technical: {
     label: 'Technical',
-    hint: 'Typewriter headings over dense text. Suits trades, labs and engineering.',
+    hint: 'Monospace headings in boxes, like good documentation. At home in IT and engineering.',
   },
 }
 

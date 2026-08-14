@@ -1,23 +1,25 @@
 /**
- * "Professional" document theme — serif headings over a sans body.
+ * "Professional" — serif headings, navy name, a heavy navy rule under each section.
  *
- * The register of a formal letter. Suits regulated and institutional fields (health,
- * education, law, public sector) where a contemporary sans reads as too casual.
+ * The navy every printed CV used before ATS existed. Suits health, education, law and the public
+ * sector: fields where a document is expected to look like it has been formatted this way for decades.
  */
 import { defaultPrimitives } from '@/components/pdf/primitives'
-import type { PdfcnTheme } from '@/components/pdf/theme-types'
+import type { DocTheme } from './style'
 import {
   DEVELOPER_GRAY,
   FONT_SANS,
   FONT_SERIF,
-  NEUTRALIZED_SEMANTICS,
+  NAVY_INK,
+  NAVY_WASH,
+  NEUTRALIZED_ALERTS,
   PAPER_MUTED,
   PAPER_WHITE,
   PRINT_BLACK,
   SILVER_GRAY,
 } from './tokens'
 
-export const professionalTheme: PdfcnTheme = {
+export const professionalTheme: DocTheme = {
   name: 'professional',
   primitives: defaultPrimitives,
   colors: {
@@ -25,10 +27,11 @@ export const professionalTheme: PdfcnTheme = {
     background: PAPER_WHITE,
     muted: PAPER_MUTED,
     mutedForeground: DEVELOPER_GRAY,
-    primary: PRINT_BLACK,
+    primary: NAVY_INK,
     primaryForeground: PAPER_WHITE,
     border: SILVER_GRAY,
-    ...NEUTRALIZED_SEMANTICS,
+    accent: NAVY_INK,
+    ...NEUTRALIZED_ALERTS,
   },
   typography: {
     body: {
@@ -64,5 +67,16 @@ export const professionalTheme: PdfcnTheme = {
   page: {
     size: 'A4',
     orientation: 'portrait',
+  },
+  style: {
+    accent: NAVY_INK,
+    accentWash: NAVY_WASH,
+    onAccent: PAPER_WHITE,
+    masthead: 'plain',
+    heading: 'underline',
+    nameInAccent: true,
+    headingInAccent: true,
+    bulletsInAccent: false,
+    roleInAccent: false,
   },
 }

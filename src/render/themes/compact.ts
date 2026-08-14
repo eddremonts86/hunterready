@@ -1,23 +1,24 @@
 /**
- * "Compact" document theme — tighter everything, for a long career on two pages.
+ * "Compact" — dense sans, rust accents, section headings in a pale tinted band.
  *
- * Exists because of a real constraint the fit estimator surfaces: a fifteen-year history under
- * `executive` spills onto a third page, and the honest options are cut content or set it tighter.
- * This is the second option, and it stays inside the print-side palette like every other theme.
+ * Fits the most on each page. The rust tint bands earn their ink at this density — they separate
+ * sections that tight spacing would otherwise run together, doing structure work, not decoration.
  */
 import { defaultPrimitives } from '@/components/pdf/primitives'
-import type { PdfcnTheme } from '@/components/pdf/theme-types'
+import type { DocTheme } from './style'
 import {
   DEVELOPER_GRAY,
   FONT_SANS,
-  NEUTRALIZED_SEMANTICS,
+  NEUTRALIZED_ALERTS,
   PAPER_MUTED,
   PAPER_WHITE,
   PRINT_BLACK,
+  RUST_INK,
+  RUST_WASH,
   SILVER_GRAY,
 } from './tokens'
 
-export const compactTheme: PdfcnTheme = {
+export const compactTheme: DocTheme = {
   name: 'compact',
   primitives: defaultPrimitives,
   colors: {
@@ -25,10 +26,11 @@ export const compactTheme: PdfcnTheme = {
     background: PAPER_WHITE,
     muted: PAPER_MUTED,
     mutedForeground: DEVELOPER_GRAY,
-    primary: PRINT_BLACK,
+    primary: RUST_INK,
     primaryForeground: PAPER_WHITE,
     border: SILVER_GRAY,
-    ...NEUTRALIZED_SEMANTICS,
+    accent: RUST_INK,
+    ...NEUTRALIZED_ALERTS,
   },
   typography: {
     body: {
@@ -51,4 +53,15 @@ export const compactTheme: PdfcnTheme = {
     componentGap: 7,
   },
   page: { size: 'A4', orientation: 'portrait' },
+  style: {
+    accent: RUST_INK,
+    accentWash: RUST_WASH,
+    onAccent: PAPER_WHITE,
+    masthead: 'sideline',
+    heading: 'tint',
+    nameInAccent: false,
+    headingInAccent: true,
+    bulletsInAccent: true,
+    roleInAccent: false,
+  },
 }

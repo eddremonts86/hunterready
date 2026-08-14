@@ -28,6 +28,7 @@ import {
 } from '../format'
 import { strings } from '../locale'
 import type { OutputLocale } from '../locale'
+import { styleOf } from '../themes/style'
 
 export type Convention = 'intl' | 'eu'
 
@@ -72,7 +73,17 @@ interface BodyProps {
   order: SectionOrder
 }
 
-/** Section heading + hairline. Standard wording; creative headings lose ATS parsers. */
+/**
+ * Section heading, drawn the way this theme draws them. Standard wording always — creative heading
+ * *text* loses ATS parsers (docs/05) — but everything around the words belongs to the theme: a teal
+ * bar, a navy underline, a solid green band, a maroon title between hairlines, a slate box.
+ *
+ * NO letter-spacing anywhere in here, and it is not a style preference. The Block 5 round-trip test
+ * caught `letterSpacing: 1.2` making the renderer position every glyph individually — the extractor
+ * read "E x p e r i e n c e" and an ATS searching for the Experience section would find nothing. That
+ * is why the style system offers bands and bars in the first place: they are the identity tools that
+ * cannot touch the text layer. See rule 13 in docs/05-pdf-rendering.md.
+ */
 function SectionHeading({
   title,
   theme,
@@ -80,7 +91,27 @@ function SectionHeading({
   title: string
   theme: PdfcnTheme
 }) {
-  return (
+  const style = styleOf(theme)
+  const words = (
+    <div
+      style={{
+        fontFamily: theme.typography.heading.fontFamily,
+        fontSize: theme.typography.heading.fontSize.h2,
+        fontWeight: theme.typography.heading.fontWeight,
+        color:
+          style.heading === 'band'
+            ? style.onAccent
+            : style.headingInAccent
+              ? style.accent
+              : theme.colors.foreground,
+        textTransform: 'uppercase',
+      }}
+    >
+      {title}
+    </div>
+  )
+
+  const wrap = (children: React.ReactNode) => (
     <div
       style={{
         display: 'flex',
@@ -89,38 +120,148 @@ function SectionHeading({
         marginTop: theme.spacing.sectionGap,
       }}
     >
-      {/**
-       * NO letter-spacing here, and it is not a style preference.
-       *
-       * The Block 5 round-trip test caught this on its first run: `letterSpacing: 1.2` made
-       * the renderer position every glyph individually, and the text extractor read the
-       * heading back as "E x p e r i e n c e". The heading looks perfect on screen while an
-       * ATS searching for the Experience section finds nothing — a CV-killing defect that is
-       * invisible to the eye. Tracked headings are a nice-to-have; being parseable is the
-       * product. See rule 13 in docs/05-pdf-rendering.md.
-       */}
-      <div
-        style={{
-          fontFamily: theme.typography.heading.fontFamily,
-          fontSize: theme.typography.heading.fontSize.h2,
-          fontWeight: theme.typography.heading.fontWeight,
-          color: theme.colors.foreground,
-          textTransform: 'uppercase',
-        }}
-      >
-        {title}
-      </div>
-      <div style={{ height: 1, backgroundColor: theme.colors.border }} />
+      {children}
     </div>
   )
+
+  switch (style.heading) {
+    case 'band':
+      // Solid accent, heading in onAccent. The band is a painted box; the words inside extract as text.
+      return wrap(
+        <div
+          style={{
+            display: 'flex',
+            backgroundColor: style.accent,
+            paddingTop: 3,
+            paddingBottom: 3,
+            paddingLeft: 8,
+            paddingRight: 8,
+          }}
+        >
+          {words}
+        </div>,
+      )
+    case 'tint':
+      return wrap(
+        <div
+          style={{
+            display: 'flex',
+            backgroundColor: style.accentWash,
+            paddingTop: 2.5,
+            paddingBottom: 2.5,
+            paddingLeft: 7,
+            paddingRight: 7,
+          }}
+        >
+          {words}
+        </div>,
+      )
+    case 'bar':
+      return wrap(
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 7,
+          }}
+        >
+          <div
+            style={{ width: 4, height: 11, backgroundColor: style.accent }}
+          />
+          {words}
+        </div>,
+      )
+    case 'underline':
+      return wrap(
+        <>
+          {words}
+          <div style={{ height: 2, backgroundColor: style.accent }} />
+        </>,
+      )
+    case 'shortline':
+      return wrap(
+        <>
+          {words}
+          <div
+            style={{ width: 34, height: 3, backgroundColor: style.accent }}
+          />
+        </>,
+      )
+    case 'flanked':
+      // Centered title with a hairline on each side. The flanking lines are empty flex children.
+      return wrap(
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+          }}
+        >
+          <div
+            style={{
+              flexGrow: 1,
+              height: 1,
+              backgroundColor: theme.colors.border,
+            }}
+          />
+          {words}
+          <div
+            style={{
+              flexGrow: 1,
+              height: 1,
+              backgroundColor: theme.colors.border,
+            }}
+          />
+        </div>,
+      )
+    case 'framed':
+      return wrap(
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignSelf: 'flex-start',
+            border: `1px solid ${style.accent}`,
+            paddingTop: 2,
+            paddingBottom: 2,
+            paddingLeft: 7,
+            paddingRight: 7,
+          }}
+        >
+          {words}
+        </div>,
+      )
+    case 'plain':
+      return wrap(words)
+    case 'hairline':
+    default:
+      return wrap(
+        <>
+          {words}
+          <div style={{ height: 1, backgroundColor: theme.colors.border }} />
+        </>,
+      )
+  }
 }
 
 function Bullet({ text, theme }: { text: string; theme: PdfcnTheme }) {
+  const style = styleOf(theme)
   return (
     <div
       style={{ display: 'flex', flexDirection: 'row', gap: 5, marginTop: 2 }}
     >
-      <div style={{ color: theme.colors.mutedForeground }}>•</div>
+      {/* Always the `•` glyph — parsers key on it. Only its ink is the theme's to choose. */}
+      <div
+        style={{
+          color: style.bulletsInAccent
+            ? style.accent
+            : theme.colors.mutedForeground,
+        }}
+      >
+        •
+      </div>
       <div style={{ flexGrow: 1 }}>{text}</div>
     </div>
   )
@@ -152,7 +293,14 @@ function Job({
         breakInside: 'avoid',
       }}
     >
-      <div style={{ fontWeight: 700 }}>
+      <div
+        style={{
+          fontWeight: 700,
+          color: styleOf(theme).roleInAccent
+            ? styleOf(theme).accent
+            : theme.colors.foreground,
+        }}
+      >
         {item.role} — {item.company}
       </div>
       {meta === '' ? null : (
@@ -202,6 +350,15 @@ function Body({ resume, theme, convention, order }: BodyProps) {
   const locale = resolveLocale(resume.locale)
   const local = strings(locale)
 
+  const style = styleOf(theme)
+  const mastheadStyle = style.masthead
+  /**
+   * Secondary text inside the masthead. On paper it is the muted grey; inside a dark accent band that
+   * grey would sit at 2:1 and disappear, so the band swaps it for the band's own foreground.
+   */
+  const mastheadMuted =
+    mastheadStyle === 'band' ? style.onAccent : theme.colors.mutedForeground
+
   const contact = joinParts([
     basics.email,
     basics.phone,
@@ -229,12 +386,36 @@ function Body({ resume, theme, convention, order }: BodyProps) {
 
         `flexDirection: row` with the text column growing: flexbox only, no grid (Satori lineage).
       */}
+      {/*
+        The masthead's construction is the theme's single loudest choice, so it is the theme's to make:
+
+          plain     — the classic left-set name.
+          centered  — the formal page; contact centered under the name.
+          band      — the whole masthead painted in the accent, text in onAccent. Executive's signature.
+          sideline  — a thick accent bar down the masthead's left edge.
+
+        Whatever the paint, the DOM order never moves: name, headline, contact, links, details, then the
+        photo LAST — a parser walks this in DOM order and must meet the name before anything image-shaped
+        (docs/05). The band and sideline are painted boxes around the same text in the same order.
+      */}
       <div
         style={{
           display: 'flex',
           flexDirection: 'row',
-          alignItems: 'flex-start',
+          alignItems: mastheadStyle === 'band' ? 'center' : 'flex-start',
           gap: showPhoto ? 14 : 0,
+          ...(mastheadStyle === 'band'
+            ? {
+                backgroundColor: style.accent,
+                paddingTop: 14,
+                paddingBottom: 14,
+                paddingLeft: 16,
+                paddingRight: 16,
+              }
+            : {}),
+          ...(mastheadStyle === 'sideline'
+            ? { borderLeft: `4px solid ${style.accent}`, paddingLeft: 12 }
+            : {}),
         }}
       >
         <div
@@ -244,6 +425,9 @@ function Body({ resume, theme, convention, order }: BodyProps) {
             flexGrow: 1,
             // `minWidth: 0` so a long headline wraps instead of pushing the photo off the page.
             minWidth: 0,
+            ...(mastheadStyle === 'centered' && !showPhoto
+              ? { alignItems: 'center', textAlign: 'center' }
+              : {}),
           }}
         >
           {/* Name and contact are text, never an image — an ATS drops image headers whole. */}
@@ -253,13 +437,19 @@ function Body({ resume, theme, convention, order }: BodyProps) {
               fontSize: theme.typography.heading.fontSize.h1,
               fontWeight: theme.typography.heading.fontWeight,
               lineHeight: theme.typography.heading.lineHeight,
+              color:
+                mastheadStyle === 'band'
+                  ? style.onAccent
+                  : style.nameInAccent
+                    ? style.accent
+                    : theme.colors.foreground,
             }}
           >
             {basics.fullName}
           </div>
 
           {basics.headline === undefined ? null : (
-            <div style={{ marginTop: 3, color: theme.colors.mutedForeground }}>
+            <div style={{ marginTop: 3, color: mastheadMuted }}>
               {basics.headline}
             </div>
           )}
@@ -269,7 +459,7 @@ function Body({ resume, theme, convention, order }: BodyProps) {
               style={{
                 marginTop: 5,
                 fontSize: theme.typography.body.fontSize - 1,
-                color: theme.colors.mutedForeground,
+                color: mastheadMuted,
               }}
             >
               {contact}
@@ -281,7 +471,7 @@ function Body({ resume, theme, convention, order }: BodyProps) {
               style={{
                 marginTop: 2,
                 fontSize: theme.typography.body.fontSize - 1,
-                color: theme.colors.mutedForeground,
+                color: mastheadMuted,
               }}
             >
               {/* The URL is spelled out: a bare "LinkedIn" label extracts as nothing useful. */}
@@ -294,7 +484,7 @@ function Body({ resume, theme, convention, order }: BodyProps) {
               style={{
                 marginTop: 5,
                 fontSize: theme.typography.body.fontSize - 1,
-                color: theme.colors.mutedForeground,
+                color: mastheadMuted,
               }}
             >
               {joinParts(
