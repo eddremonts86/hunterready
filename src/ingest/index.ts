@@ -35,11 +35,18 @@ export type IngestResult =
 export async function ingest(
   bytes: Uint8Array,
   filename = '',
+  /**
+   * Live narration (src/lib/progress.ts). Stage labels and counts only — this callback is the one
+   * channel to the waiting user's screen, and it must never carry document content.
+   */
+  onProgress: (label: string, detail?: string) => void = () => {},
 ): Promise<IngestResult> {
   const detection = detect(bytes, filename)
   if (!detection.ok) {
     return { ok: false, code: detection.code, message: detection.message }
   }
+
+  onProgress('Opening the file')
 
   let raw: RawDocument
   try {
@@ -60,7 +67,7 @@ export async function ingest(
       case 'image': {
         // A photo of a CV. Nothing to parse, only pixels to read — so this is the one format with
         // no adapter of its own; OCR is the whole path.
-        const read = await extractByOcr(detection.bytes, 1, 'image')
+        const read = await extractByOcr(detection.bytes, 1, 'image', onProgress)
         if (read === undefined) {
           return {
             ok: false,
@@ -110,7 +117,12 @@ export async function ingest(
    * refusal into a result, never the other way round.
    */
   if (raw.unreadable && detection.format === 'pdf') {
-    const scanned = await extractByOcr(detection.bytes, raw.pageCount, 'pdf')
+    const scanned = await extractByOcr(
+      detection.bytes,
+      raw.pageCount,
+      'pdf',
+      onProgress,
+    )
     if (scanned !== undefined) raw = scanned
   }
 

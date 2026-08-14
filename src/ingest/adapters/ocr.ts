@@ -237,6 +237,8 @@ export async function extractByOcr(
   bytes: Uint8Array,
   pageCount: number,
   source: 'pdf' | 'image' = 'pdf',
+  /** Live narration for the person waiting: OCR at 300dpi is the slowest honest path in ingestion. */
+  onProgress: (label: string, detail?: string) => void = () => {},
 ): Promise<RawDocument | undefined> {
   if (!(await ocrAvailable())) return undefined
 
@@ -281,6 +283,10 @@ export async function extractByOcr(
 
     const items: Array<TextItem> = []
     for (const [index, image] of images.entries()) {
+      onProgress(
+        'Reading the scanned pages',
+        `page ${index + 1} of ${images.length}`,
+      )
       const result = await run(
         tesseractBin(),
         [join(workDir, image), 'stdout', '-l', LANGUAGES, 'tsv'],

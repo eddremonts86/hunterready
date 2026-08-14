@@ -41,6 +41,8 @@ const ExtractionPayload = z.object({
 
 export interface ExtractOptions {
   signal?: AbortSignal
+  /** Live narration for the waiting screen. Stage labels and counts only — never document content. */
+  onProgress?: (label: string, detail?: string) => void
   /**
    * Set false when the user declined to have their CV sent to a third-party model provider.
    *
@@ -115,8 +117,11 @@ export async function extractResume(
    *
    * So the local model corrects the rules instead of replacing them. See `local-refine.ts`.
    */
+  const onProgress = options.onProgress ?? (() => {})
+
   if (options.useProvider === false) {
     const local = resolveLocalProvider()
+    onProgress('Structuring with rules')
     const { resume, provenance } = extractByRules(normalizedText)
     if (local === undefined) {
       return {
@@ -129,6 +134,14 @@ export async function extractResume(
       }
     }
     const { refineLocally } = await import('./local-refine')
+    /*
+      The long one. A small model on our own CPU re-reads the document and files corrections; on a busy
+      box this is minutes, and it is exactly the wait Edd described as "no tener puta idea de lo que está
+      pasando". The label says whose hardware, because that is the promise being kept while it is slow.
+    */
+    onProgress(
+      'The model on our own server is double-checking names, dates and employers',
+    )
     const refined = await refineLocally({
       normalizedText,
       draft: resume,
@@ -177,6 +190,7 @@ export async function extractResume(
   while (repairs <= MAX_REPAIRS) {
     let response: Anthropic.Message
     try {
+      onProgress('The model is reading your CV and structuring it')
       response = await client.messages.create(
         {
           model,

@@ -17,7 +17,7 @@
  * Flow: docs/11-flow.md. Upload → Check → Download, all client-side state: the resume never goes
  * anywhere except to /api/render to be typeset (ADR-004).
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
   ConsentGate,
@@ -509,10 +509,23 @@ function HunterReady() {
 
   const [loaded, setLoaded] = useState<Loaded | undefined>()
   const [busy, setBusy] = useState(false)
+  /**
+   * The live stage list while a file is being read — polled from /api/progress against an id this
+   * client minted. What turns a five-minute spinner into a narrated wait (task: Edd's complaint that
+   * the user "no tiene puta idea de lo que está pasando").
+   */
+  const [stages, setStages] = useState<
+    Array<{ label: string; detail?: string; done: boolean; at: number }>
+  >([])
+  const progressIdRef = useRef<string | undefined>(undefined)
   const [error, setError] = useState<string | undefined>()
   const consent = useProcessingConsent()
   const [rewrites, setRewrites] = useState<Array<BulletRewrite> | undefined>()
   const [rewriting, setRewriting] = useState(false)
+  /** Live progress of a rewrite pass: which job the model is on, and how many bullets are done. */
+  const [rewriteProgress, setRewriteProgress] = useState<
+    { done: number; total: number; company: string } | undefined
+  >()
   const [rewriteNote, setRewriteNote] = useState<string | undefined>()
   const [accepted, setAccepted] = useState<Set<string>>(new Set())
   const [templateId, setTemplateId] = useState<TemplateId>('modern-intl')
@@ -707,13 +720,48 @@ function HunterReady() {
     [navigate],
   )
 
+  /**
+   * Poll the stage list while an upload is in flight. 700ms against an in-memory map is nothing, and
+   * polling — unlike a second streaming response — survives every proxy between a phone and the server.
+   */
+  useEffect(() => {
+    if (!busy) return
+    const timer = setInterval(() => {
+      const id = progressIdRef.current
+      if (id === undefined) return
+      void fetch(`/api/progress?id=${id}`)
+        .then(async (response) =>
+          response.ok ? ((await response.json()) as { steps?: unknown }) : {},
+        )
+        .then((payload) => {
+          if (Array.isArray(payload.steps)) {
+            setStages(
+              payload.steps as Array<{
+                label: string
+                detail?: string
+                done: boolean
+                at: number
+              }>,
+            )
+          }
+        })
+        .catch(() => {
+          // A failed poll changes nothing: the upload itself is the source of truth.
+        })
+    }, 700)
+    return () => clearInterval(timer)
+  }, [busy])
+
   const upload = useCallback(
     async (file: File) => {
       setBusy(true)
       setError(undefined)
+      setStages([])
+      progressIdRef.current = crypto.randomUUID()
       try {
         const body = new FormData()
         body.append('file', file)
+        body.append('progress', progressIdRef.current)
         /**
          * The consent decision travels with the file, and the server defaults to *not* sending when
          * the field is absent. Declining has to change what happens, not what is displayed — otherwise
@@ -783,33 +831,99 @@ function HunterReady() {
       if (loaded === undefined) return
       setRewriting(true)
       setRewriteNote(undefined)
+      setRewriteProgress(undefined)
+
+      /**
+       * One request per job, not one per pass, and the reason is the person watching.
+       *
+       * A whole-CV pass on the local model is minutes of silence — Edd's words: "es difícil esperar
+       * cinco minutos sin saber qué está pasando". Split per job, the pass reports which employer the
+       * model is reading right now, the counter moves with every finished chunk, and the suggestions
+       * appear in the list as they land instead of all at once at the end. The model does exactly the
+       * same work in the same order; only the silence is gone. Cancellation comes free too — leaving
+       * the workspace stops the loop at the next chunk boundary instead of wasting the rest of a pass.
+       */
+      const jobs = loaded.resume.work
+        .map((job, workIndex) => ({
+          workIndex,
+          company: job.company,
+          targets: job.highlights.map((_, highlightIndex) => ({
+            workIndex,
+            highlightIndex,
+          })),
+        }))
+        .filter((job) => job.targets.length > 0)
+      const total = jobs.reduce((sum, job) => sum + job.targets.length, 0)
+
+      const collected: Array<BulletRewrite> = []
+      let failures = 0
+      // Reset the acceptances, but leave `rewrites` alone until the first chunk lands: the button
+      // panel with its live counter is the right screen while nothing has arrived yet.
+      setAccepted(new Set())
+
       try {
-        const response = await fetch('/api/rewrite', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            resume: loaded.resume,
-            processing: consent.choice === 'granted' ? 'provider' : 'local',
-            answers,
-          }),
-        })
-        const payload = (await response.json()) as Record<string, unknown>
-        if (!response.ok) {
-          setRewriteNote(
-            typeof payload.message === 'string'
-              ? payload.message
-              : 'We could not look at your wording just now.',
-          )
-          return
+        for (const job of jobs) {
+          setRewriteProgress({
+            done: collected.length,
+            total,
+            company: job.company,
+          })
+          const response = await fetch('/api/rewrite', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              resume: loaded.resume,
+              processing: consent.choice === 'granted' ? 'provider' : 'local',
+              answers,
+              only: job.targets,
+            }),
+          })
+          const payload = (await response.json()) as Record<string, unknown>
+
+          if (response.status === 429) {
+            // The limiter is telling us to stop, so stop — keep what already arrived.
+            setRewriteNote(
+              typeof payload.message === 'string'
+                ? payload.message
+                : 'We have to pause the rewrites for a while. What arrived so far is below.',
+            )
+            break
+          }
+          if (!response.ok) {
+            /*
+              One failed job does not throw away four good ones. Count it, keep going, and say at the
+              end how much was skipped — the pre-split behaviour lost the entire pass to one hiccup.
+            */
+            failures += job.targets.length
+            continue
+          }
+          const chunk =
+            (payload.rewrites as Array<BulletRewrite> | undefined) ?? []
+          collected.push(...chunk)
+          setRewrites([...collected])
+          setRewriteProgress({
+            done: collected.length,
+            total,
+            company: job.company,
+          })
         }
-        setRewrites(
-          (payload.rewrites as Array<BulletRewrite> | undefined) ?? [],
-        )
-        setAccepted(new Set())
+
+        if (failures > 0) {
+          setRewriteNote(
+            `We could not look at ${failures} of your bullets just now. The rest are below — run it again later for the missing ones.`,
+          )
+        }
       } catch {
-        setRewriteNote('We could not reach the server. Your CV is untouched.')
+        if (collected.length > 0) {
+          setRewriteNote(
+            'The connection dropped part-way. What arrived so far is below; your CV is untouched.',
+          )
+        } else {
+          setRewriteNote('We could not reach the server. Your CV is untouched.')
+        }
       } finally {
         setRewriting(false)
+        setRewriteProgress(undefined)
       }
     },
     [loaded, consent.choice],
@@ -991,6 +1105,47 @@ function HunterReady() {
                   className="indeterminate h-full w-1/3 rounded-full bg-signal"
                 />
               </div>
+
+              {/*
+                The narrated wait. Each stage the server reports appears here as it starts — a tick when
+                it finishes, a spinner and a live page/attempt counter while it runs. The labels come
+                from the pipeline itself (src/lib/progress.ts), so this list cannot drift from what the
+                code actually does the way a hardcoded "step 2 of 4" would.
+              */}
+              {stages.length > 0 && (
+                <ol className="flex w-full max-w-xs flex-col gap-1.5 text-left">
+                  {stages.map((stage, index) => (
+                    <li
+                      key={index}
+                      className="flex items-center gap-2 text-[13px]"
+                    >
+                      {stage.done ? (
+                        <svg
+                          aria-hidden
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.4"
+                          strokeLinecap="round"
+                          className="h-3.5 w-3.5 shrink-0 text-affirm"
+                        >
+                          <path d="m5 12.5 4.5 4.5L19 7" />
+                        </svg>
+                      ) : (
+                        <Spinner className="h-3 w-3 shrink-0 text-signal" />
+                      )}
+                      <span
+                        className={
+                          stage.done ? 'text-ink-faint' : 'text-ink-soft'
+                        }
+                      >
+                        {stage.label}
+                        {stage.detail === undefined ? '' : ` — ${stage.detail}`}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
 
               <p className="text-meta text-ink-soft">
                 Your phone number and street address were removed before the
@@ -1712,21 +1867,43 @@ function HunterReady() {
                         />
                       </button>
                       {rewriting && (
-                        <span className="text-meta leading-relaxed text-ink-soft">
-                          One pass over every bullet — the longer your history,
-                          the longer this takes.
+                        <span
+                          role="status"
+                          className="text-meta leading-relaxed text-ink-soft"
+                        >
+                          {rewriteProgress === undefined
+                            ? 'One pass over every bullet — the longer your history, the longer this takes.'
+                            : `${rewriteProgress.done} of ${rewriteProgress.total} bullets · now reading ${rewriteProgress.company}`}
                         </span>
                       )}
                     </div>
                   ) : (
-                    <RewriteReview
-                      rewrites={rewrites}
-                      accepted={accepted}
-                      onAccept={acceptRewrite}
-                      onDismiss={dismissRewrite}
-                      onAnswer={(answers) => void askForRewrites(answers)}
-                      busy={rewriting}
-                    />
+                    <div className="flex flex-col gap-2">
+                      {rewriting && rewriteProgress !== undefined && (
+                        <div
+                          role="status"
+                          className="flex items-center gap-2 rounded-field border border-hairline bg-ground px-3 py-2"
+                        >
+                          <Spinner className="h-3.5 w-3.5 shrink-0 text-signal" />
+                          {/*
+                            The suggestions below appear as each job finishes — the person can start
+                            reading and accepting while the model is still working on the next one.
+                          */}
+                          <span className="text-[13px] text-ink-soft">
+                            {rewriteProgress.done} of {rewriteProgress.total}{' '}
+                            bullets · now reading {rewriteProgress.company}
+                          </span>
+                        </div>
+                      )}
+                      <RewriteReview
+                        rewrites={rewrites}
+                        accepted={accepted}
+                        onAccept={acceptRewrite}
+                        onDismiss={dismissRewrite}
+                        onAnswer={(answers) => void askForRewrites(answers)}
+                        busy={rewriting}
+                      />
+                    </div>
                   )}
 
                   {rewriteNote !== undefined && (

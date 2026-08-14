@@ -25,8 +25,13 @@ export const Route = createFileRoute('/api/rewrite')({
         const id = requestId()
         const started = Date.now()
 
-        // A rewrite pass is ~25 model calls. Rate limiting this is not optional.
-        const limit = checkRateLimit(clientKey(request))
+        /**
+         * Its own bucket, wider than ingest's, because the client now sends one request per job rather
+         * than one per pass (that is how the progress counter works — see index.tsx). The thing worth
+         * limiting is model calls, and the per-job split does not change their total; sharing ingest's
+         * 12-per-10-minutes would make a six-job CV spend half the family budget on one pass.
+         */
+        const limit = checkRateLimit(`rewrite:${clientKey(request)}`, 60)
         if (!limit.allowed) {
           event('rewrite.rate_limited', { requestId: id })
           return Response.json(
@@ -58,6 +63,7 @@ export const Route = createFileRoute('/api/rewrite')({
           resume?: unknown
           processing?: unknown
           answers?: unknown
+          only?: unknown
         }
 
         /**
@@ -93,8 +99,38 @@ export const Route = createFileRoute('/api/rewrite')({
           )
         }
 
+        /**
+         * `only`: rewrite a subset — the client sends one request per job so the person watches real
+         * progress instead of a five-minute spinner. Validated to shape, clamped to sane bounds; a pair
+         * pointing at nothing is skipped harmlessly by the engine.
+         */
+        const only = Array.isArray(payload.only)
+          ? payload.only.flatMap((entry: unknown) => {
+              const pair = entry as {
+                workIndex?: unknown
+                highlightIndex?: unknown
+              }
+              return typeof pair.workIndex === 'number' &&
+                Number.isInteger(pair.workIndex) &&
+                pair.workIndex >= 0 &&
+                pair.workIndex < 200 &&
+                typeof pair.highlightIndex === 'number' &&
+                Number.isInteger(pair.highlightIndex) &&
+                pair.highlightIndex >= 0 &&
+                pair.highlightIndex < 200
+                ? [
+                    {
+                      workIndex: pair.workIndex,
+                      highlightIndex: pair.highlightIndex,
+                    },
+                  ]
+                : []
+            })
+          : undefined
+
         const result = await rewriteBullets({
           resume: parsed.data,
+          only,
           useProvider: mayUseProvider,
           // What the candidate told us when we asked. Source material, so the guard will permit a
           // figure they supplied — which is the entire point of asking rather than inventing.

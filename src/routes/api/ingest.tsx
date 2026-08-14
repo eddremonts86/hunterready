@@ -13,6 +13,7 @@ import { extractResume } from '@/structure/extract'
 import { resolveLocalProvider, resolveProvider } from '@/structure/provider'
 import { sanityWarnings } from '@/structure/sanity'
 import { checkRateLimit, clientKey } from '@/lib/rate-limit'
+import { progressEnd, progressReporter } from '@/lib/progress'
 import { errorEvent, event, requestId } from '@/lib/log'
 import { mayUseThirdParty } from '@/lib/entitlements'
 
@@ -62,8 +63,16 @@ export const Route = createFileRoute('/api/ingest')({
          * to (docs/07-privacy.md).
          */
         let mayUseProvider = false
+        /**
+         * The live-progress channel (src/lib/progress.ts). The id is minted by the client and travels
+         * with the upload; everything reported against it is stage labels and counts, never content.
+         */
+        let progressId: string | undefined
         try {
           const form = await request.formData()
+          const claimed = form.get('progress')
+          if (typeof claimed === 'string' && claimed !== '')
+            progressId = claimed
           /**
            * Consent **and** a paid plan (ADR-023). Local otherwise, for everybody.
            *
@@ -98,8 +107,11 @@ export const Route = createFileRoute('/api/ingest')({
           )
         }
 
-        const ingested = await ingest(bytes, filename)
+        const onProgress = progressReporter(progressId)
+        onProgress('Receiving the file')
+        const ingested = await ingest(bytes, filename, onProgress)
         if (!ingested.ok) {
+          if (progressId !== undefined) progressEnd(progressId)
           // The code is a metric; the message is for the person. Neither contains file content.
           event('ingest.rejected', {
             requestId: id,
@@ -125,8 +137,10 @@ export const Route = createFileRoute('/api/ingest')({
 
         const extracted = await extractResume(ingested.normalized.text, {
           useProvider: mayUseProvider,
+          onProgress,
         })
         if (!extracted.ok) {
+          if (progressId !== undefined) progressEnd(progressId)
           errorEvent('ingest.extract_failed', {
             requestId: id,
             code: extracted.code,
@@ -194,7 +208,9 @@ export const Route = createFileRoute('/api/ingest')({
 
         // Cross-field checks: individually plausible values that are jointly impossible, e.g. two
         // roles both open-ended, which would print as two "Present" jobs.
+        onProgress('Checking nothing was invented')
         const sanity = sanityWarnings(extracted.resume)
+        if (progressId !== undefined) progressEnd(progressId)
 
         event('ingest.extracted', {
           requestId: id,
