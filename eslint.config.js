@@ -35,6 +35,16 @@ export default [
     // ability to diff against upstream, which is the whole point of keeping them pristine.
     files: [
       'src/components/pdf/**/*.{ts,tsx}',
+      /**
+       * `src/components/ui/**` joins them, and for the identical reason.
+       *
+       * These are shadcn components fetched by `pnpm dlx shadcn add`, and the registry writes inline
+       * `import { type X }` specifiers where this project's style wants a top-level `import type`. That
+       * is a style disagreement with upstream, not a defect, and CLAUDE.md is explicit: hand-editing a
+       * vendored file destroys the ability to diff it against upstream, which is the only thing that
+       * makes re-running the generator safe. `tsc --noEmit` still covers every line.
+       */
+      'src/components/ui/**/*.{ts,tsx}',
       'src/lib/pdf-primitives.tsx',
       'src/lib/pdf-svg.tsx',
       'src/lib/resolve-color.ts',
@@ -43,6 +53,8 @@ export default [
     rules: {
       '@typescript-eslint/no-unnecessary-type-assertion': 'off',
       '@typescript-eslint/no-unnecessary-condition': 'off',
+      'import/consistent-type-specifier-style': 'off',
+      'no-shadow': 'off',
     },
   },
   {

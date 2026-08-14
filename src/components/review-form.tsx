@@ -10,6 +10,7 @@
  * underneath it: sections collapsed by default, uncertain ones open.
  */
 import { useMemo, useState } from 'react'
+import { DateField } from '@/components/date-field'
 import {
   CONFIDENCE_REVIEW_THRESHOLD,
   needsReview,
@@ -560,19 +561,24 @@ export function ReviewForm({
               />
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field
-                label="Started (YYYY-MM)"
+              {/*
+                Picked, not typed as a format. The label no longer teaches ISO-8601 — "Started" is the
+                question, and `DateField` handles the shape.
+              */}
+              <DateField
+                label="Started"
                 value={item.startDate ?? ''}
                 onChange={(startDate) =>
                   setWork(i, { startDate: startDate || undefined })
                 }
                 provenance={index.get(`work.${i}.startDate`)}
               />
-              <Field
-                label="Ended (blank = still there)"
+              <DateField
+                label="Ended"
                 value={item.endDate ?? ''}
                 onChange={(endDate) => setWork(i, { endDate: endDate || null })}
                 provenance={index.get(`work.${i}.endDate`)}
+                openEndedLabel="Still here"
               />
             </div>
             <p className="text-meta text-ink-soft">
@@ -704,21 +710,22 @@ export function ReviewForm({
               />
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field
-                label="Started (YYYY-MM)"
+              <DateField
+                label="Started"
                 value={item.startDate ?? ''}
                 onChange={(startDate) =>
                   setEducation(i, { startDate: startDate || undefined })
                 }
                 provenance={index.get(`education.${i}.startDate`)}
               />
-              <Field
-                label="Finished (blank = still studying)"
+              <DateField
+                label="Finished"
                 value={item.endDate ?? ''}
                 onChange={(endDate) =>
                   setEducation(i, { endDate: endDate || null })
                 }
                 provenance={index.get(`education.${i}.endDate`)}
+                openEndedLabel="Still studying"
               />
             </div>
             <p className="text-meta text-ink-soft">
