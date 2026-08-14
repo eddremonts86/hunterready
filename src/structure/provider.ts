@@ -24,6 +24,45 @@ export interface Provider {
   model: string
   /** For logs and metrics. Never a credential — a host name at most. */
   label: string
+  /**
+   * Where this model runs.
+   *
+   * `local` means our own hardware, inside the compose network — the CV never leaves the machine it
+   * was uploaded to, so no consent is required and none is asked for. `third-party` means a transfer
+   * to another company, which is exactly what the consent gate exists to obtain.
+   */
+  locality: 'local' | 'third-party'
+}
+
+/**
+ * The local model — Ollama, in this stack's `llm` service.
+ *
+ * This exists because "the user declined" used to mean "fall back to regular expressions", and that
+ * is not a satisfactory product. Declining a transfer to MiniMax should cost accuracy, not the
+ * feature: a 3B instruct model on our own box reads a CV far better than a rule engine, and the
+ * document still never leaves our infrastructure.
+ *
+ * Reached through the Anthropic SDK because Ollama ships an Anthropic-compatible surface at
+ * `/v1/messages` alongside its native API. Same client, same tool-call plumbing, no second code path
+ * to keep in step with the first — which is worth more than the small chance of a shape difference,
+ * and `extract.ts` already guards the shapes it depends on because MiniMax taught it to.
+ */
+export function resolveLocalProvider(): Provider | undefined {
+  const base = value('OLLAMA_BASE_URL')
+  if (base === undefined) return undefined
+  return {
+    client: new Anthropic({
+      // Ollama needs no credential. The SDK insists on one, so it gets a placeholder that never
+      // leaves this process.
+      apiKey: 'ollama-local',
+      // No `/v1` suffix: the SDK appends `/v1/messages` itself, so adding it here produced
+      // `/v1/v1/messages` and a 404 that surfaced as a silent fall back to the rule engine.
+      baseURL: base.replace(/\/+$/, ''),
+    }),
+    model: value('OLLAMA_MODEL') ?? 'qwen2.5:3b-instruct',
+    label: 'local',
+    locality: 'local',
+  }
 }
 
 function value(name: string): string | undefined {
@@ -46,6 +85,7 @@ export function resolveProvider(): Provider | undefined {
       }),
       model: ownModel ?? 'claude-haiku-4-5-20251001',
       label: ownBase ?? 'anthropic',
+      locality: 'third-party',
     }
   }
 
@@ -60,6 +100,7 @@ export function resolveProvider(): Provider | undefined {
       }),
       model: value('ANTHROPIC_MODEL') ?? 'claude-haiku-4-5-20251001',
       label: gatewayBase ?? 'anthropic',
+      locality: 'third-party',
     }
   }
 
@@ -73,6 +114,7 @@ export function resolveProvider(): Provider | undefined {
       }),
       model: value('ANTHROPIC_MODEL') ?? 'claude-haiku-4-5-20251001',
       label: 'anthropic',
+      locality: 'third-party',
     }
   }
 
@@ -87,6 +129,7 @@ export function resolveProvider(): Provider | undefined {
       }),
       model: value('MINIMAX_MODEL') ?? 'MiniMax-M3',
       label: MINIMAX_ANTHROPIC_BASE,
+      locality: 'third-party',
     }
   }
 

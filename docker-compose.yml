@@ -1,0 +1,116 @@
+# One group, every service — matching `builderhunt`, which runs its app, db, redis, embeddings,
+# storage and antivirus as a single compose stack rather than a pile of unrelated Coolify resources.
+#
+# Why it matters beyond tidiness: services in one stack share a network and resolve each other by
+# name, so the app reaches the database and the local model without either being published to the
+# internet. As separate resources they would need public ports to talk, which is the opposite of what
+# this product should do with a CV.
+#
+# Bring it up locally with:  docker compose up -d
+# Coolify deploys the same file (build pack: Docker Compose).
+
+services:
+  app:
+    build:
+      context: .
+      # Never the `test` stage: that one carries node_modules and dev dependencies.
+      target: runtime
+    container_name: hunterready-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      # Not `service_healthy`: the first boot pulls a model and that takes minutes. The app is fully
+      # usable while it downloads — extraction falls back to the deterministic path — so waiting would
+      # trade a working site for a tidier dependency graph.
+      llm:
+        condition: service_started
+    environment:
+      PORT: 3000
+      # Service names, not localhost: the compose network resolves them, and neither the database nor
+      # the model is reachable from outside this stack.
+      DATABASE_URL: postgres://hunterready_app:${DATABASE_APP_PASSWORD}@db:5432/hunterready
+      DATABASE_MIGRATION_URL: postgres://hunterready_owner:${POSTGRES_PASSWORD}@db:5432/hunterready
+      DATABASE_APP_PASSWORD: ${DATABASE_APP_PASSWORD}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      # The local model. This is what a user gets when they decline the third-party provider — see
+      # `src/structure/provider.ts` for why that is a model on our own hardware and not a regex.
+      OLLAMA_BASE_URL: http://llm:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b-instruct}
+      # The third-party provider, used only with explicit consent (docs/07).
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
+      MINIMAX_BASE_URL: ${MINIMAX_BASE_URL:-}
+      MINIMAX_MODEL: ${MINIMAX_MODEL:-}
+    ports:
+      - '${APP_PORT:-3100}:3000'
+
+  db:
+    image: postgres:18-alpine
+    container_name: hunterready-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hunterready_owner
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: hunterready
+    volumes:
+      # `/var/lib/postgresql`, not `/var/lib/postgresql/data`. Postgres 18's image changed the
+      # recommended mount point: it now places the cluster in a subdirectory of a single mount so
+      # `pg_upgrade --link` does not cross a mount boundary. Mounting the old path makes the container
+      # refuse to start — and it is easy to miss, because a `docker run` with no volume at all works
+      # fine, which is how this passed an earlier check.
+      - hunterready_postgres_data:/var/lib/postgresql
+    # Deliberately no `ports`. Nothing outside this stack needs the database, and publishing it is how
+    # a CV store ends up on Shodan. Migrations run inside the network as the post-deployment command.
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U hunterready_owner -d hunterready']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # The local model — the whole point of this change.
+  #
+  # When somebody declines sending their CV to MiniMax, the honest answer is not "we will do our best
+  # with regular expressions". It is a model, running on our own hardware, where the document never
+  # leaves the machine it was uploaded to. `qwen2.5:3b-instruct` is chosen for size: this box already
+  # hosts a dozen applications including builderhunt's own Ollama, and a 3B instruct model is about
+  # 2 GB — enough to follow a schema-constrained extraction prompt without evicting the neighbours.
+  #
+  # No published port, unlike builderhunt's embeddings service: 11434 is already taken on this host by
+  # that container, and nothing outside the stack has any business talking to this one.
+  llm:
+    image: ollama/ollama:latest
+    container_name: hunterready-llm
+    restart: unless-stopped
+    environment:
+      # Ollama defaults to a 4096-token context. Measured: the extraction prompt plus the generated
+      # JSON Schema for `Resume` overruns that, the model returns something that cannot validate, all
+      # three repair rounds are spent, and extraction silently falls back to the rule engine after
+      # eight minutes. 16k fits the prompt with room for the answer.
+      OLLAMA_CONTEXT_LENGTH: '16384'
+      # One request at a time. This box hosts a dozen apps and this model runs on CPU; letting two
+      # extractions load the weights concurrently is how the whole server becomes unresponsive.
+      OLLAMA_NUM_PARALLEL: '1'
+      OLLAMA_MAX_LOADED_MODELS: '1'
+    # Pull in the background so `ollama serve` answers immediately; the app copes with a model that is
+    # not ready yet by falling back, and it stops falling back the moment the pull finishes.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - 'ollama serve & pid=$$!; sleep 3; ollama pull ${OLLAMA_MODEL:-qwen2.5:3b-instruct}; wait $$pid'
+    volumes:
+      - hunterready_ollama_data:/root/.ollama
+    healthcheck:
+      # First boot downloads ~2 GB. A generous start_period so compose does not call it unhealthy
+      # while the pull is still running — the same reason builderhunt allows 120s for a 270 MB model.
+      test:
+        - CMD-SHELL
+        - 'ollama list | grep -q "$(echo ${OLLAMA_MODEL:-qwen2.5:3b-instruct} | cut -d: -f1)" || exit 1'
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 600s
+
+volumes:
+  hunterready_postgres_data:
+  hunterready_ollama_data:

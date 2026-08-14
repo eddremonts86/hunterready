@@ -125,17 +125,32 @@ export const Route = createFileRoute('/api/ingest')({
           )
         }
 
-        // `method: 'rules'` while a provider is configured and allowed means the call failed. That is
-        // the metric that catches a silent outage — the user still got a CV, so nothing else would.
-        //
-        // `mayUseProvider` has to be in the condition: a user who declined the transfer is the system
-        // working exactly as designed, and counting that as degradation would poison the one signal
-        // that catches a real failure.
+        /**
+         * `method: 'rules'` while a provider was configured *and* allowed usually means the call
+         * failed — the metric that catches a silent outage, since the user still got a CV and nothing
+         * else would show it.
+         *
+         * Two exclusions, both of which are the system working rather than breaking, and both found by
+         * watching this fire in production on the first real deploy:
+         *
+         *  • The user **declined** the transfer (`mayUseProvider`).
+         *  • The model answered and the deterministic path simply **recovered more** of the document,
+         *    so `extractResume` shipped the better result (`+rules-outperformed`). That is the
+         *    comparison working exactly as designed, and counting it as an outage would train whoever
+         *    reads this metric to ignore it.
+         *
+         * A metric that cries wolf is worse than no metric, because it gets muted and then the real
+         * outage arrives unannounced.
+         */
         const providerConfigured = resolveProvider() !== undefined
+        const chosenOverModel = extracted.promptVersion.endsWith(
+          '+rules-outperformed',
+        )
         if (
           providerConfigured &&
           mayUseProvider &&
-          extracted.method === 'rules'
+          extracted.method === 'rules' &&
+          !chosenOverModel
         ) {
           errorEvent('ingest.provider_degraded', {
             requestId: id,

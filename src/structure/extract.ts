@@ -15,9 +15,11 @@ import type { FieldProvenance } from '@/schema/provenance'
 import { applyHeuristics } from './heuristics'
 import { buildUserPrompt, PROMPT_VERSION, SYSTEM_PROMPT } from './prompt'
 import { extractByRules } from './fallback'
-import { resolveProvider } from './provider'
+import { resolveLocalProvider, resolveProvider } from './provider'
 import { recoverMissingHighlights } from './recover'
+import { errorEvent } from '@/lib/log'
 import { findPhone, redactForLlm, reinstateDeep } from './redact'
+import { unwrapToolInput } from './tool-input'
 
 const MAX_TOKENS = 8192
 const MAX_REPAIRS = 2
@@ -40,11 +42,12 @@ const ExtractionPayload = z.object({
 export interface ExtractOptions {
   signal?: AbortSignal
   /**
-   * Set false when the user declined to have their CV sent to a model provider.
+   * Set false when the user declined to have their CV sent to a third-party model provider.
    *
    * This is what makes the consent gate's second button true rather than decorative: declining has to
-   * change what the server *does*, not just what the interface says. With it false, no request leaves
-   * this process and extraction runs entirely on the deterministic rules path.
+   * change what the server *does*, not just what the interface says. With it false, the request goes to
+   * the model on our own hardware — nothing leaves this infrastructure — and only if that is absent too
+   * does extraction fall back to rules.
    */
   useProvider?: boolean
 }
@@ -62,7 +65,7 @@ export interface ExtractSuccess {
    * Which path produced this. Surfaced to the user as how carefully to review, and tracked as a
    * metric — a rising share of `rules` means the model path is failing quietly.
    */
-  method: 'llm' | 'rules'
+  method: 'llm' | 'local' | 'rules'
 }
 
 export interface ExtractFailure {
@@ -90,13 +93,65 @@ export async function extractResume(
   normalizedText: string,
   options: ExtractOptions = {},
 ): Promise<ExtractResult> {
-  // `useProvider: false` means the user declined the transfer. Treated exactly like an absent
-  // provider, because from this function's point of view it is the same fact: there is no provider it
-  // is allowed to call.
-  const provider = options.useProvider === false ? undefined : resolveProvider()
+  /**
+   * Which model may read this CV.
+   *
+   * Declining the third-party transfer does **not** mean falling back to regular expressions. It means
+   * the model on our own hardware — the `llm` service in this stack — where the document never leaves
+   * the machine it was uploaded to. A rule engine is a worse product, and offering it as the privacy
+   * option would make the private choice the bad choice, which is how a privacy option becomes
+   * decorative.
+   *
+   * Order: consent given → the configured provider. Consent withheld → local. Neither available →
+   * rules, which remains the floor that keeps "you can still build your CV" true.
+   */
+  /**
+   * The private path takes a different route entirely, and that is a measured decision.
+   *
+   * Pointing the local model at this function's contract — one forced tool call producing a whole
+   * `Resume` — failed consistently: 447 seconds, three repair rounds, then a silent fall back. The
+   * schema is thousands of characters and a 3B model on CPU cannot satisfy it, while the *same model*
+   * answers a small schema correctly and immediately.
+   *
+   * So the local model corrects the rules instead of replacing them. See `local-refine.ts`.
+   */
+  if (options.useProvider === false) {
+    const local = resolveLocalProvider()
+    const { resume, provenance } = extractByRules(normalizedText)
+    if (local === undefined) {
+      return {
+        ok: true,
+        resume,
+        provenance,
+        promptVersion: `${PROMPT_VERSION}+rules-only`,
+        repairs: 0,
+        method: 'rules',
+      }
+    }
+    const { refineLocally } = await import('./local-refine')
+    const refined = await refineLocally({
+      normalizedText,
+      draft: resume,
+      provenance,
+      provider: local,
+      signal: options.signal,
+    })
+    return {
+      ok: true,
+      resume: refined.resume,
+      provenance: refined.provenance,
+      promptVersion: `${PROMPT_VERSION}+local-refine(${refined.corrections})`,
+      repairs: 0,
+      // `local`, not `llm` and not `rules`: it is neither, and collapsing it into either would make
+      // the one metric that matters — how often the model path is failing — unreadable.
+      method: 'local',
+    }
+  }
 
-  // No provider configured, or consent withheld: fall back to rules rather than failing. The promise
-  // in every error message here is "you can still build your CV", and that promise has to be true.
+  const provider = resolveProvider()
+
+  // Nothing available at all: rules rather than failing. The promise in every error message here is
+  // "you can still build your CV", and that promise has to be true.
   if (provider === undefined) {
     const { resume, provenance } = extractByRules(normalizedText)
     return {
@@ -141,9 +196,23 @@ export async function extractResume(
         },
         { signal: options.signal },
       )
-    } catch {
-      // The provider is down or the request was rejected. Rules keep the user moving; the cause
-      // is deliberately not surfaced because an SDK error can quote request content.
+    } catch (error) {
+      /**
+       * The provider is down or the request was rejected. Rules keep the user moving.
+       *
+       * The error's **class and status** are logged; its message never is, because an SDK error can
+       * quote the request body and that body is somebody's CV. Swallowing it entirely was the previous
+       * behaviour and it cost a debugging session: a local model that answered perfectly by hand
+       * produced `method: rules` through the app, with nothing anywhere saying why.
+       */
+      errorEvent('extract.provider_error', {
+        provider: provider.label,
+        kind: error instanceof Error ? error.constructor.name : typeof error,
+        status:
+          typeof (error as { status?: unknown })?.status === 'number'
+            ? (error as { status: number }).status
+            : undefined,
+      })
       const { resume, provenance } = extractByRules(normalizedText)
       return {
         ok: true,
@@ -178,7 +247,7 @@ export async function extractResume(
       continue
     }
 
-    const payload = ExtractionPayload.safeParse(toolUse.input)
+    const payload = ExtractionPayload.safeParse(unwrapToolInput(toolUse.input))
 
     if (!payload.success) {
       repairs++
