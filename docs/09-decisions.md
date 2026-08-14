@@ -756,6 +756,79 @@ line.
 
 ---
 
+## ADR-023 — The third-party model is the paid capability; our own hardware is the default
+
+**2026-08-14 · Accepted · Edd's decision**
+
+Until now `resolveProvider()` returned MiniMax whenever it was configured, so **any** visitor who
+accepted the consent gate had their CV sent to another company. The local model — the thing that makes
+declining cost accuracy instead of the whole feature (ADR-019) — was the exception rather than the rule.
+That is inverted.
+
+### The rule
+
+Reading a CV, rewriting a bullet, tailoring a summary, writing a letter: all of it runs on the `llm`
+service in our own stack **unless both** of these hold:
+
+1. the person is signed in on a paid plan, and
+2. they have consented to the transfer
+
+Two independent conditions, and the `&&` is the whole point of `src/lib/entitlements.ts`. Consent
+without entitlement is somebody agreeing to something that will not happen. Entitlement without consent
+is us deciding on their behalf because they paid. Neither is acceptable alone.
+
+### Why this is the line the tiers are drawn on
+
+The outside API is the only thing in the product with a **per-CV marginal cost**. Storage is cheap and
+bounded by the retention policy; a model on our own box is a fixed cost paid whether anybody uploads or
+not. So it is the natural boundary — and it lands with the free tier being the _more_ private one, which
+is the opposite of how this normally goes. That is worth keeping rather than apologising for.
+
+### Anonymous means local, always
+
+No account, so no plan, so no entitlement, so nothing leaves the server. The statelessness promise
+(ADR-004) and the transfer promise become the **same promise** for the commonest kind of visitor.
+
+`/api/processing` therefore reports `provider: null` to anonymous and free callers, which switches the
+consent gate off by itself — `needsConsent` requires a named provider. That falls out of the existing
+rule rather than needing a new one, and it is the right behaviour: asking permission for a transfer that
+cannot happen trains people to click through consent screens.
+
+The page copy changed with it. `/privacy` used to explain the no-transfer case as _"this installation has
+no AI provider configured"_, which stops being the reason the moment a paid tier exists — a false
+explanation of a true fact. It now describes what happens instead of how the server is configured.
+
+### The alarm this made necessary
+
+`ingest.provider_degraded` existed to catch a silent third-party outage. The local path was the
+exception then, and its failure meant one person got a worse read. **It is now everybody's default**, so
+a broken or unpulled model would drop the entire product to regular expressions with every user still
+receiving a plausible CV and nothing anywhere saying why it got worse. `ingest.local_degraded` is the
+mirror, and it is worth strictly more than the original.
+
+### `plan` is a column, and there is no endpoint that sets it
+
+`auth_users.plan`, `text` not an enum — an enum needs a migration to add a value and the one certainty
+about tiers is that they change. `setPlan` is a repository function and audited. Granting yourself the
+paid tier over HTTP is not a feature, and there is no payment provider yet (open question 7).
+
+`entitlementFor` fails closed on every uncertainty: no persistence, no session, an unrecognised plan
+name, or a thrown query all resolve to no entitlement. A bug here would spend money on somebody who is
+not paying _and_ break a privacy promise in the same breath, so the safe direction is the cheap one.
+
+### Verified
+
+Against the compose container, with a real account:
+
+| caller          | consent  | model used  |
+| --------------- | -------- | ----------- |
+| paid, signed in | given    | **MiniMax** |
+| paid, signed in | declined | local       |
+| free, signed in | given    | local       |
+| anonymous       | given    | local       |
+
+---
+
 # Open questions — need Edd's answer
 
 These do **not** block starting v0.1. They are listed at the point where each one
@@ -811,8 +884,10 @@ Still open:
    - **Credits** — a bundle of model-backed actions. Cleanest mapping to cost, and the one
      users understand least.
 
-   The second is the only one the current architecture already draws a line for. _Needed by:
-   v1.0._
+   The second is the shape chosen (2026-08-14), and **ADR-023 has already built the line it needs**:
+   the third-party model is entitlement-gated, the free path runs on our own hardware and stores
+   nothing, and `auth_users.plan` decides. What is still open is only the numbers and the payment
+   provider. _Needed by: v1.0._
 
 8. **Name and domain.** "HunterReady" — `.dev`/`.app`/`.com` availability and
    trademark not checked. _Needed by: v1.0._

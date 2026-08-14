@@ -138,9 +138,17 @@ function Privacy() {
 
         <Section title="Where it goes">
           {provider === undefined ? (
+            /*
+              True for almost everybody since ADR-023, and worded about what *happens* rather than about
+              how the server is configured. The old copy said "this installation has no AI provider
+              configured", which stops being the reason the moment a paid tier exists and would have
+              been a false explanation of a true fact.
+            */
             <p>
-              Nowhere. This installation has no AI provider configured, so your
-              CV is read entirely on our own server and no third party sees it.
+              Nowhere. Your CV is read by a model running on our own server, so
+              it never leaves our machines and no other company sees it. That is
+              the default, and for most people it is the only thing that ever
+              happens.
             </p>
           ) : (
             <>
