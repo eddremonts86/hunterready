@@ -335,4 +335,108 @@ describe.skipIf(URL_ENV === '')('persistence, against a real Postgres', () => {
       expect(dump?.shareLinks).toHaveLength(1)
     })
   })
+  describe('what lands in the table is unreadable (ADR-021)', () => {
+    /**
+     * The codec has its own tests; this is the one that proves it is wired into the write path. It reads
+     * the raw column with SQL, deliberately bypassing the repository — the whole claim is about what
+     * somebody with database access but not the application's environment can see.
+     */
+    it('stores a CV as an envelope, with none of its content in the row', async () => {
+      const userId = await seedUser('crypto-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+
+      const [row] =
+        await sql`SELECT document::text AS raw FROM resumes WHERE id = ${resumeId}`
+
+      // `hunterready_readonly` and a leaked `pg_dump` see this and nothing else.
+      expect(row.raw).not.toContain('Whitfield')
+      expect(row.raw).not.toContain('Northgate')
+      // Parsed rather than substring-matched: `jsonb::text` normalizes to `{"v": 1, …}` with a space,
+      // so asserting on the serialized shape tests Postgres's formatter instead of our envelope.
+      expect(JSON.parse(row.raw)).toMatchObject({ v: 1 })
+      expect(Object.keys(JSON.parse(row.raw)).sort()).toEqual([
+        'ct',
+        'iv',
+        'tag',
+        'v',
+      ])
+
+      // And it still reads back through the repository, which is the other half of the claim.
+      const [saved] = (await repo.listResumes(userId)).filter(
+        (item) => item.id === resumeId,
+      )
+      expect(saved.resume.basics.fullName).toBe('Tom Whitfield')
+    })
+
+    it('encrypts a gap report too, because it quotes the CV back', async () => {
+      // `found` arrays are the candidate's own bullets. A gap report is CV content under another name.
+      const userId = await seedUser('crypto-gap-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      const variantId = await repo.saveVariant({
+        userId,
+        resumeId,
+        resume: RESUME,
+        gapReport: {
+          matches: [
+            { requirement: 'SAP', found: ['Grew a book of 40 accounts.'] },
+          ],
+        },
+      })
+
+      const [row] =
+        await sql`SELECT gap_report::text AS raw FROM variants WHERE id = ${variantId}`
+      expect(row.raw).not.toContain('40 accounts')
+      expect(JSON.parse(row.raw)).toMatchObject({ v: 1 })
+    })
+
+    it('leaves the advert readable, because it is public text somebody pasted', async () => {
+      const userId = await seedUser('crypto-advert-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      const variantId = await repo.saveVariant({
+        userId,
+        resumeId,
+        resume: RESUME,
+        jobDescription: 'Requirements\n- SAP EWM',
+      })
+
+      const [row] =
+        await sql`SELECT job_description AS raw FROM variants WHERE id = ${variantId}`
+      expect(row.raw).toContain('SAP EWM')
+    })
+
+    it('hands the Article 15 export plain JSON, not ciphertext', async () => {
+      /**
+       * A right to your data is not a right to a base64 envelope you cannot open. Without the decrypt in
+       * `exportEverything` this download would be technically complete and useless.
+       */
+      const userId = await seedUser('crypto-export-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      await repo.saveVariant({
+        userId,
+        resumeId,
+        resume: RESUME,
+        gapReport: { note: 'a gap report' },
+      })
+
+      const dump = await repo.exportEverything(userId)
+      expect(JSON.stringify(dump)).toContain('Tom Whitfield')
+      // No envelope anywhere in the download.
+      expect(JSON.stringify(dump)).not.toMatch(/"iv":/)
+      expect(JSON.stringify(dump)).not.toMatch(/"tag":/)
+      expect(dump?.variants[0].gapReport).toEqual({ note: 'a gap report' })
+    })
+
+    it('reads a row that was written before the key existed', async () => {
+      // The assertion that makes turning the key on safe rather than an outage.
+      const userId = await seedUser('crypto-legacy-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      // Put the row back to plaintext, exactly as it would have been last week.
+      await sql`UPDATE resumes SET document = ${sql.json(RESUME)} WHERE id = ${resumeId}`
+
+      const [saved] = (await repo.listResumes(userId)).filter(
+        (item) => item.id === resumeId,
+      )
+      expect(saved.resume.basics.fullName).toBe('Tom Whitfield')
+    })
+  })
 })

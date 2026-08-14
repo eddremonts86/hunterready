@@ -40,6 +40,14 @@ interface StoredConsent {
 export interface ConsentState {
   /** Undefined while we are still asking the server who processes CVs. */
   provider?: string | null
+  /**
+   * Whether this installation encrypts stored CVs (ADR-021). Undefined until the server has answered.
+   *
+   * It rides along with the provider question because it is the same kind of fact — something only the
+   * deployment knows about what happens to a CV — and `/privacy` must read it rather than assert it, so
+   * the page cannot claim encryption on an installation with no key.
+   */
+  encryptsAtRest?: boolean
   choice?: ConsentChoice
   decide: (choice: ConsentChoice) => void
   reset: () => void
@@ -67,17 +75,26 @@ function read(): StoredConsent | undefined {
 
 export function useProcessingConsent(): ConsentState {
   const [provider, setProvider] = useState<string | null | undefined>(undefined)
+  /** Whether this installation encrypts stored CVs. `undefined` until asked — see `/api/processing`. */
+  const [encryptsAtRest, setEncryptsAtRest] = useState<boolean | undefined>(
+    undefined,
+  )
   const [choice, setChoice] = useState<ConsentChoice | undefined>(undefined)
 
   useEffect(() => {
     let cancelled = false
     void fetch('/api/processing')
       .then(
-        (response) => response.json() as Promise<{ provider: string | null }>,
+        (response) =>
+          response.json() as Promise<{
+            provider: string | null
+            encryptsAtRest?: boolean
+          }>,
       )
       .then((data) => {
         if (cancelled) return
         setProvider(data.provider)
+        setEncryptsAtRest(data.encryptsAtRest === true)
         const stored = read()
         /**
          * A stored answer only counts for the provider it was given about. If the deployment moves
@@ -123,7 +140,7 @@ export function useProcessingConsent(): ConsentState {
     }
   }
 
-  return { provider, choice, decide, reset }
+  return { provider, encryptsAtRest, choice, decide, reset }
 }
 
 /** True when a decision is genuinely required: a provider exists and nobody has answered yet. */
