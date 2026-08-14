@@ -8,7 +8,10 @@
  * So it is short, it names the company, and it uses the second person.
  *
  * Every claim here is a claim about the code, and each one has something enforcing it:
- *   • "We do not store your CV"      — ADR-004, the pipeline is stateless; nothing writes to disk.
+ *   • "Without an account we keep nothing" — ADR-004; the stateless path still writes nothing at all.
+ *   • "90 days, then deleted"        — `RETENTION_DAYS`, the `delete_after` column, and the sweep in
+ *                                      `scripts/db/retention.mjs`. One definition, three users.
+ *   • "You can delete it yourself"   — `/api/account/delete`, a single cascading statement.
  *   • "Your phone number and address are removed" — `src/structure/redact.ts`.
  *   • "You can say no"               — the consent gate, and `useProvider: false` in extraction.
  *   • "We never log what your CV says" — `src/lib/log.ts` emits counts and codes only.
@@ -18,6 +21,8 @@
  */
 import { createFileRoute } from '@tanstack/react-router'
 import { useProcessingConsent } from '@/components/consent-gate'
+import { AccountControls } from '@/components/account-controls'
+import { RETENTION_DAYS } from '@/db/retention-policy'
 
 export const Route = createFileRoute('/privacy')({ component: Privacy })
 
@@ -60,8 +65,10 @@ function Privacy() {
             What we do with your CV
           </h1>
           <p className="text-[12px] leading-relaxed text-developer-gray">
-            The short version: we read it, we show you what we read, and we
-            forget it. There is no account and no database.
+            The short version: we read it, we show you what we read, and if you
+            have not signed in, we forget it. If you have, we keep it for{' '}
+            {RETENTION_DAYS} days after your last visit and then delete it — and
+            you can delete it yourself at any moment.
           </p>
         </div>
 
@@ -103,10 +110,25 @@ function Privacy() {
 
         <Section title="How long we keep it">
           <p>
-            We do not. Your CV is processed in memory to answer your request and
-            is gone when the request ends — it is never written to a disk or a
-            database. Closing the tab loses your work, which is the honest cost
-            of not storing anything.
+            <strong className="text-safelight">
+              If you do not have an account, we do not keep it at all.
+            </strong>{' '}
+            Your CV is processed in memory to answer your request and is gone
+            when the request ends. Closing the tab loses your work, which is the
+            honest cost of not storing anything.
+          </p>
+          <p>
+            If you sign in so we can remember your CV between visits, then we do
+            store it — that is the point of the account, and it would be
+            dishonest to describe it any other way. We keep it for{' '}
+            <strong className="text-safelight">{RETENTION_DAYS} days</strong>{' '}
+            after the last time you sign in, and then we delete it: your CV, any
+            tailored versions, and the account itself. Signing in resets that
+            clock, so nothing disappears while you are still using it.
+          </p>
+          <p className="text-developer-gray">
+            The deletion is real, not a flag on a row. It happens whether or not
+            you ask, and you can also ask at any moment with the button below.
           </p>
         </Section>
 
@@ -121,17 +143,20 @@ function Privacy() {
         <Section title="The legal basis">
           <p>
             Your consent, asked for before the first transfer and withdrawable
-            by declining on your next upload. Since nothing is stored, there is
-            nothing to request a copy of or ask us to delete — the deletion
-            happens by itself, every time.
+            by declining on your next upload. If you create an account, storing
+            your CV rests on the same basis: you asked us to remember it, and
+            you can withdraw that by deleting it.
           </p>
         </Section>
 
         <Section title="Your rights">
           <p>
             Under the GDPR you have the right of access, correction, erasure,
-            restriction, portability and objection. Most of them are answered by
-            the design: we hold nothing about you. For anything else, write to{' '}
+            restriction, portability and objection. Without an account they are
+            answered by the design, because we hold nothing about you. With one,
+            they are answered by two buttons rather than a support email —
+            download everything we hold, or delete all of it, both below. For
+            anything else, write to{' '}
             <a
               href="mailto:eddremonts86@gmail.com"
               className="text-safelight underline underline-offset-4"
@@ -160,6 +185,13 @@ function Privacy() {
             </button>
           )}
         </div>
+
+        {/*
+          The Article 15 and 17 controls sit on this page rather than behind a settings menu, because
+          this is the page somebody reads when they are deciding whether to trust us. A rights
+          section that describes a right without offering it is an advertisement.
+        */}
+        <AccountControls />
 
         <a
           href="/"

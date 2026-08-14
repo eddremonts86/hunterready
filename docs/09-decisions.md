@@ -479,6 +479,69 @@ none, and an in-memory imitation of one would be a lie told to ourselves.
 
 ---
 
+## ADR-019 — Persistence lands on Postgres, and the privacy promise changes with it
+
+**2026-08-14 · Accepted · supersedes the "blocked" half of ADR-018**
+
+Edd authorised both open questions on 2026-08-14: store CVs, and delete them after 90 days of
+inactivity. What follows from that is recorded here because two parts of it are irreversible.
+
+### Postgres, not Convex
+
+docs/08 said "Accounts (Convex, matching the existing house stack)". That was wrong about this
+workspace. The house stack — `builderhunt`, the reference app and the closest thing Edd has to
+production — is **Drizzle + Postgres on Coolify**, and there are no Convex credentials anywhere.
+
+Copying the reference app is now the standing instruction, and it buys more than consistency: the
+migration workflow, the role model, the deploy orchestrator and the runbooks all already exist and are
+already understood. Choosing Convex would have meant a second architecture _and_ a second external
+processor to name in the consent gate, immediately after building that gate around minimising them.
+
+### The promise changed, and the copy changed in the same commit
+
+`/privacy` said a CV is _never written to a disk or a database_. docs/07 calls that "a claim
+competitors cannot make" and requires the copy to change in the same PR if statelessness ends. It did,
+so it has — including the lead sentence, which still read "There is no account and no database" after
+the rest of the page was rewritten. That sentence is the first thing a person reads while deciding
+whether to trust us, and catching it took loading the page rather than reading the diff.
+
+The promise is now conditional and stated as such: **no account, nothing stored; an account, 90 days
+from the last sign-in, then real deletion.** The stateless path is untouched and remains the default —
+most people will use this product without ever signing in.
+
+### What enforces each claim
+
+A privacy notice is only worth the mechanism behind it:
+
+| The claim                         | What makes it true                                                                                                                                                                                                                                      |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "90 days, then deleted"           | `RETENTION_DAYS` in one module, the `delete_after` column default, and `scripts/db/retention.mjs`. One definition, three consumers.                                                                                                                     |
+| "Using it resets the clock"       | every repository read and write moves `lastSeenAt` and `delete_after` together                                                                                                                                                                          |
+| "Deleting removes everything"     | one `DELETE FROM users`; every foreign key carries `onDelete: 'cascade'`, so the database enforces it rather than a service remembering the order                                                                                                       |
+| "You can delete it yourself"      | `POST /api/account/delete`, and a `GET` on the same URL answers **405** — without a handler that route falls through to the SPA shell and answers 200 with HTML, which on a destructive URL is a 200 somebody will eventually mistake for a working one |
+| "We can show a deletion happened" | the audit row is written first and survives with its subject nulled                                                                                                                                                                                     |
+
+### The credential decision, answered by copying
+
+The encryption-key question from ADR-018 is answered by builderhunt's pattern rather than a new one:
+runtime roles are created **without passwords** in `drizzle/0001_roles.sql`, and deployment automation
+provisions them out of band. No migration file in git contains a credential, and the web service never
+holds an identity that can alter the schema.
+
+The consequence has to be respected or the whole thing fails silently: **`drizzle-kit migrate` alone
+leaves the app unable to authenticate.** `scripts/deploy/orchestrate.mjs` is the post-deployment
+command, and its step 4 exists solely to catch that — builderhunt's runbook records four failed
+deploys learning it. Both failure paths were verified to exit 1, not just written.
+
+### Still not done
+
+Sign-in itself. `src/lib/session.ts` issues and verifies a signed cookie, and every endpoint reads
+identity from it, but nothing yet _creates_ a session — there is no email link, no OAuth. Persistence
+is therefore complete and unreachable from the interface, which is the honest state to leave it in:
+the storage, the retention and the erasure are built and tested, and the door is not yet cut.
+
+---
+
 # Open questions — need Edd's answer
 
 These do **not** block starting v0.1. They are listed at the point where each one

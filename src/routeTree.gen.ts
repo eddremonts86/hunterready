@@ -17,6 +17,8 @@ import { Route as ApiProcessingRouteImport } from './routes/api/processing'
 import { Route as ApiRenderRouteImport } from './routes/api/render'
 import { Route as ApiResumeRouteImport } from './routes/api/resume'
 import { Route as ApiRewriteRouteImport } from './routes/api/rewrite'
+import { Route as ApiAccountDeleteRouteImport } from './routes/api/account/delete'
+import { Route as ApiAccountExportRouteImport } from './routes/api/account/export'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -58,6 +60,16 @@ const ApiRewriteRoute = ApiRewriteRouteImport.update({
   path: '/api/rewrite',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAccountDeleteRoute = ApiAccountDeleteRouteImport.update({
+  id: '/api/account/delete',
+  path: '/api/account/delete',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAccountExportRoute = ApiAccountExportRouteImport.update({
+  id: '/api/account/export',
+  path: '/api/account/export',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -68,6 +80,8 @@ export interface FileRoutesByFullPath {
   '/api/render': typeof ApiRenderRoute
   '/api/resume': typeof ApiResumeRoute
   '/api/rewrite': typeof ApiRewriteRoute
+  '/api/account/delete': typeof ApiAccountDeleteRoute
+  '/api/account/export': typeof ApiAccountExportRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -78,6 +92,8 @@ export interface FileRoutesByTo {
   '/api/render': typeof ApiRenderRoute
   '/api/resume': typeof ApiResumeRoute
   '/api/rewrite': typeof ApiRewriteRoute
+  '/api/account/delete': typeof ApiAccountDeleteRoute
+  '/api/account/export': typeof ApiAccountExportRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -89,6 +105,8 @@ export interface FileRoutesById {
   '/api/render': typeof ApiRenderRoute
   '/api/resume': typeof ApiResumeRoute
   '/api/rewrite': typeof ApiRewriteRoute
+  '/api/account/delete': typeof ApiAccountDeleteRoute
+  '/api/account/export': typeof ApiAccountExportRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -101,6 +119,8 @@ export interface FileRouteTypes {
     | '/api/render'
     | '/api/resume'
     | '/api/rewrite'
+    | '/api/account/delete'
+    | '/api/account/export'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -111,6 +131,8 @@ export interface FileRouteTypes {
     | '/api/render'
     | '/api/resume'
     | '/api/rewrite'
+    | '/api/account/delete'
+    | '/api/account/export'
   id:
     | '__root__'
     | '/'
@@ -121,6 +143,8 @@ export interface FileRouteTypes {
     | '/api/render'
     | '/api/resume'
     | '/api/rewrite'
+    | '/api/account/delete'
+    | '/api/account/export'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -132,6 +156,8 @@ export interface RootRouteChildren {
   ApiRenderRoute: typeof ApiRenderRoute
   ApiResumeRoute: typeof ApiResumeRoute
   ApiRewriteRoute: typeof ApiRewriteRoute
+  ApiAccountDeleteRoute: typeof ApiAccountDeleteRoute
+  ApiAccountExportRoute: typeof ApiAccountExportRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -192,6 +218,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRewriteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/account/delete': {
+      id: '/api/account/delete'
+      path: '/api/account/delete'
+      fullPath: '/api/account/delete'
+      preLoaderRoute: typeof ApiAccountDeleteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/account/export': {
+      id: '/api/account/export'
+      path: '/api/account/export'
+      fullPath: '/api/account/export'
+      preLoaderRoute: typeof ApiAccountExportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -204,6 +244,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiRenderRoute: ApiRenderRoute,
   ApiResumeRoute: ApiResumeRoute,
   ApiRewriteRoute: ApiRewriteRoute,
+  ApiAccountDeleteRoute: ApiAccountDeleteRoute,
+  ApiAccountExportRoute: ApiAccountExportRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
