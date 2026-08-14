@@ -13,7 +13,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Resume } from '@/schema/resume'
 import { rewriteBullets } from '@/optimize/rewrite'
-import { resolveProvider } from '@/structure/provider'
+import { resolveLocalProvider, resolveProvider } from '@/structure/provider'
 import { checkRateLimit, clientKey } from '@/lib/rate-limit'
 import { event, requestId } from '@/lib/log'
 
@@ -59,24 +59,19 @@ export const Route = createFileRoute('/api/rewrite')({
           answers?: unknown
         }
 
-        // Same fail-closed default as ingestion: absent is not consent.
-        if (payload.processing !== 'provider') {
-          return Response.json(
-            {
-              error: 'consent_required',
-              message:
-                'Improving your wording needs the AI model, so your CV would have to be sent to the provider. You chose to keep it here, which is why this is switched off.',
-            },
-            { status: 403 },
-          )
-        }
+        // Fail-closed: absent is not consent. But "not consented" now routes to the local model
+        // rather than refusing — declining a transfer should cost accuracy, not the feature.
+        const mayUseProvider = payload.processing === 'provider'
 
-        if (resolveProvider() === undefined) {
+        if (
+          (mayUseProvider ? resolveProvider() : resolveLocalProvider()) ===
+          undefined
+        ) {
           return Response.json(
             {
               error: 'not_configured',
               message:
-                'Rewriting is not available on this installation. Everything else still works.',
+                'Improving wording is not available on this installation. Everything else still works.',
             },
             { status: 503 },
           )
@@ -92,6 +87,7 @@ export const Route = createFileRoute('/api/rewrite')({
 
         const result = await rewriteBullets({
           resume: parsed.data,
+          useProvider: mayUseProvider,
           // What the candidate told us when we asked. Source material, so the guard will permit a
           // figure they supplied — which is the entire point of asking rather than inventing.
           answers: Array.isArray(payload.answers)

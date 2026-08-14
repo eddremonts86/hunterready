@@ -101,8 +101,10 @@ function Privacy() {
               </p>
               <p className="text-developer-gray">
                 You can decline. We ask before your first upload, and if you say
-                no, your CV is read here instead and nothing is transmitted
-                anywhere. That option stays available every time.
+                no, your CV is read by a model running on our own server instead
+                — it never leaves our machines, and no other company sees it. It
+                is a smaller model, so you may have a little more to correct.
+                That option stays available every time.
               </p>
             </>
           )}
