@@ -43,7 +43,9 @@ import {
   formatRange,
   formatYearMonth,
   joinParts,
+  resolveLocale,
 } from '../format'
+import { strings } from '../locale'
 import { zipSync } from './zip'
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -215,24 +217,13 @@ const APP_PROPERTIES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
    ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
 /**
- * Standard section headings, from the ATS ruleset.
+ * Standard section headings come from the CV's own locale — v0.8.
  *
- * Not configurable here. A template may override a heading in the PDF with a warning shown in the UI;
- * a `.docx` is the format uploaded to the portals that parse most crudely, so this is the one place the
- * override is simply not offered.
+ * Not configurable beyond that. A PDF template may override a heading with a warning shown in the UI; a
+ * `.docx` goes to the portals that parse most crudely, so this is the one place the override is not
+ * offered. Localizing them is not an exception to ATS ruleset 6 but the correct reading of it: a Danish
+ * screener keys on `Erfaring`, and an English heading on a Danish CV was the violation.
  */
-const HEADINGS = {
-  summary: 'Summary',
-  work: 'Experience',
-  education: 'Education',
-  skills: 'Skills',
-  projects: 'Projects',
-  certifications: 'Certifications',
-  languages: 'Languages',
-  awards: 'Awards',
-  volunteer: 'Volunteer',
-  publications: 'Publications',
-} as const
 
 function section(title: string, body: Array<string>): Array<string> {
   if (body.length === 0) return []
@@ -247,6 +238,8 @@ function bullets(items: Array<string>): Array<string> {
 
 function buildBody(resume: Resume): string {
   const { basics } = resume
+  const locale = resolveLocale(resume.locale)
+  const local = strings(locale)
   const paragraphs: Array<string> = []
 
   // ── Identity. Contact details as text, never an image (ATS ruleset 4). ──
@@ -291,7 +284,7 @@ function buildBody(resume: Resume): string {
 
   if (basics.summary !== undefined && basics.summary !== '') {
     paragraphs.push(
-      ...section(HEADINGS.summary, [paragraph(run(basics.summary))]),
+      ...section(local.headings.summary, [paragraph(run(basics.summary))]),
     )
   }
 
@@ -312,7 +305,7 @@ function buildBody(resume: Resume): string {
       ),
     )
     const meta = joinParts(
-      [formatRange(job.startDate, job.endDate), job.location],
+      [formatRange(job.startDate, job.endDate, locale), job.location],
       '  ·  ',
     )
     if (meta !== '') out.push(paragraph(run(meta), { style: 'Meta' }))
@@ -329,7 +322,7 @@ function buildBody(resume: Resume): string {
     }
     return out
   })
-  paragraphs.push(...section(HEADINGS.work, work))
+  paragraphs.push(...section(local.headings.work, work))
 
   // ── Education ──
   const education = resume.education.flatMap((study) => {
@@ -355,7 +348,7 @@ function buildBody(resume: Resume): string {
     )
     const meta = joinParts(
       [
-        formatRange(study.startDate, study.endDate),
+        formatRange(study.startDate, study.endDate, locale),
         study.location,
         study.grade,
       ],
@@ -365,7 +358,7 @@ function buildBody(resume: Resume): string {
     out.push(...bullets(study.highlights))
     return out
   })
-  paragraphs.push(...section(HEADINGS.education, education))
+  paragraphs.push(...section(local.headings.education, education))
 
   /**
    * Skills as `Category: a, b, c` — one paragraph per group.
@@ -383,7 +376,7 @@ function buildBody(resume: Resume): string {
         ].join(''),
       ),
     )
-  paragraphs.push(...section(HEADINGS.skills, skills))
+  paragraphs.push(...section(local.headings.skills, skills))
 
   // ── Projects ──
   const projects = resume.projects.flatMap((project) => {
@@ -401,7 +394,7 @@ function buildBody(resume: Resume): string {
     out.push(...bullets(project.highlights))
     return out
   })
-  paragraphs.push(...section(HEADINGS.projects, projects))
+  paragraphs.push(...section(local.headings.projects, projects))
 
   // ── Certifications. Named in full: an abbreviation alone loses the keyword. ──
   const certifications = resume.certifications.map((cert) =>
@@ -419,7 +412,7 @@ function buildBody(resume: Resume): string {
              * exactly that mixture, and for a reason: a parser that has locked onto one date shape
              * stops recognising the other, so the certification loses its date entirely.
              */
-            formatYearMonth(cert.date),
+            formatYearMonth(cert.date, locale),
             cert.identifier,
           ],
           '  ·  ',
@@ -427,7 +420,7 @@ function buildBody(resume: Resume): string {
       ),
     ),
   )
-  paragraphs.push(...section(HEADINGS.certifications, certifications))
+  paragraphs.push(...section(local.headings.certifications, certifications))
 
   // ── Languages ──
   const languages =
@@ -447,7 +440,7 @@ function buildBody(resume: Resume): string {
             ),
           ),
         ]
-  paragraphs.push(...section(HEADINGS.languages, languages))
+  paragraphs.push(...section(local.headings.languages, languages))
 
   /**
    * The remaining schema sections, so nothing on the CV is silently dropped.
@@ -463,10 +456,10 @@ function buildBody(resume: Resume): string {
       ...bullets(entry.items),
     ])
 
-  paragraphs.push(...section(HEADINGS.awards, grouped(resume.awards)))
+  paragraphs.push(...section(local.headings.awards, grouped(resume.awards)))
   paragraphs.push(
     ...section(
-      HEADINGS.volunteer,
+      local.headings.volunteer,
       resume.volunteer.flatMap((entry) => {
         const out: Array<string> = [
           paragraph(
@@ -474,7 +467,7 @@ function buildBody(resume: Resume): string {
             { style: 'Heading2' },
           ),
         ]
-        const meta = formatRange(entry.startDate, entry.endDate)
+        const meta = formatRange(entry.startDate, entry.endDate, locale)
         if (meta !== '') out.push(paragraph(run(meta), { style: 'Meta' }))
         out.push(...bullets(entry.highlights))
         return out
@@ -482,7 +475,7 @@ function buildBody(resume: Resume): string {
     ),
   )
   paragraphs.push(
-    ...section(HEADINGS.publications, grouped(resume.publications)),
+    ...section(local.headings.publications, grouped(resume.publications)),
   )
 
   /**

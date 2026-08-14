@@ -43,6 +43,7 @@ import { needsReview } from '@/schema/provenance'
 import { estimateFit } from '@/render/fit'
 import { getTheme, THEME_IDS, themeLabels } from '@/render/themes'
 import type { ThemeId } from '@/render/themes'
+import { localeOptions, resolveLocale } from '@/render/locale'
 import { TEMPLATE_IDS, templates } from '@/render/templates/registry'
 import type { TemplateId } from '@/render/templates/registry'
 
@@ -1347,6 +1348,33 @@ function HunterReady() {
                 }))}
                 value={templateId}
                 onChange={setTemplateId}
+              />
+              {/*
+                The document's language — v0.8. It changes the *furniture* only: section headings, month
+                names, the word for a current role. The candidate's own words are never translated, which
+                the hint says outright, because a user offered "Language" would reasonably expect us to
+                translate their bullets and would be right to be alarmed if we silently did.
+
+                Detected from the CV and overridable, because detection is a guess and the person
+                applying knows which country they are applying in.
+              */}
+              <ChoiceGroup
+                label="Language of the document"
+                options={localeOptions().map((option) => ({
+                  id: option.id,
+                  label: option.label,
+                  hint:
+                    option.id === resolveLocale(loaded.resume.locale)
+                      ? 'Headings and dates. Your own words stay exactly as written.'
+                      : undefined,
+                }))}
+                value={resolveLocale(loaded.resume.locale)}
+                onChange={(locale) =>
+                  setLoaded({
+                    ...loaded,
+                    resume: { ...loaded.resume, locale },
+                  })
+                }
               />
               <ChoiceGroup
                 label="Type and spacing"

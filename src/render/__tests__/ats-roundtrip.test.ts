@@ -20,7 +20,8 @@ import { renderResume } from '../render'
 import { TEMPLATE_IDS, templates } from '../templates/registry'
 import { THEME_IDS } from '../themes'
 import type { ThemeId } from '../themes'
-import { formatRange } from '../format'
+import { formatRange, resolveLocale } from '../format'
+import { strings } from '../locale'
 
 const EXPECTED_DIR = join(process.cwd(), 'fixtures/expected')
 
@@ -94,9 +95,15 @@ describe.each(combos)(
       }
     })
 
-    it('keeps every date range in MMM YYYY form', () => {
+    it('keeps every date range in MMM YYYY form, in the document’s language', () => {
+      /**
+       * `locale` since v0.8. The shape is what clause 7 mandates; the *words* are the document's own.
+       * A Spanish CV prints `mar 2015 – may 2021`, and asserting the English months here would have
+       * demanded that a Spanish document be dated in English — which is what it used to do.
+       */
+      const locale = resolveLocale(resume.locale)
       for (const job of resume.work) {
-        const range = formatRange(job.startDate, job.endDate)
+        const range = formatRange(job.startDate, job.endDate, locale)
         if (range === '') continue
         expect(text, `missing date range: ${range}`).toContain(range)
       }
@@ -143,9 +150,18 @@ describe.each(combos)(
       // perfect on screen and is invisible to a parser. Block 5 caught exactly that on its
       // first run — see rule 13 in docs/05-pdf-rendering.md.
       const haystack = text.toLowerCase()
-      if (resume.work.length > 0) expect(haystack).toContain('experience')
-      if (resume.education.length > 0) expect(haystack).toContain('education')
-      if (resume.skills.length > 0) expect(haystack).toContain('skills')
+      /**
+       * The *local* standard heading since v0.8 — `Erfaring` on a Danish CV, `Experiencia` on a Spanish
+       * one. Clause 6 asks for the heading the screener has seen a thousand times, and a Danish screener
+       * has never seen `Experience`. Asserting English here was demanding the violation.
+       */
+      const local = strings(resolveLocale(resume.locale))
+      if (resume.work.length > 0)
+        expect(haystack).toContain(local.headings.work.toLowerCase())
+      if (resume.education.length > 0)
+        expect(haystack).toContain(local.headings.education.toLowerCase())
+      if (resume.skills.length > 0)
+        expect(haystack).toContain(local.headings.skills.toLowerCase())
     })
   },
 )

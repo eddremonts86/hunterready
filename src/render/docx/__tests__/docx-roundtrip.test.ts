@@ -22,7 +22,7 @@ import { describe, expect, it } from 'vitest'
 import mammoth from 'mammoth'
 import { Resume } from '@/schema/resume'
 import { docxFilename, renderDocx } from '../docx'
-import { formatRange, formatYearMonth } from '../../format'
+import { formatRange, formatYearMonth, resolveLocale } from '../../format'
 
 const EXPECTED_DIR = join(process.cwd(), 'fixtures/expected')
 
@@ -119,7 +119,11 @@ describe('every fixture survives a round trip through .docx', () => {
         for (const job of resume.work) {
           expect(text).toContain(job.company)
           expect(text).toContain(job.role)
-          const range = formatRange(job.startDate, job.endDate)
+          const range = formatRange(
+            job.startDate,
+            job.endDate,
+            resolveLocale(resume.locale),
+          )
           if (range !== '') {
             // Whitespace-normalized on both sides, because the separator is an en dash with spaces.
             expect(text).toContain(range.replace(/\s+/g, ' '))
@@ -268,7 +272,9 @@ describe('every date in the document has one shape', () => {
       const text = await extractDocxText(renderDocx(resume))
       for (const cert of resume.certifications) {
         if (cert.date === undefined) continue
-        expect(text).toContain(formatYearMonth(cert.date))
+        expect(text).toContain(
+          formatYearMonth(cert.date, resolveLocale(resume.locale)),
+        )
       }
     })
   }
