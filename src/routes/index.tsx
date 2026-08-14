@@ -338,14 +338,34 @@ function useDownloads() {
 }
 
 /**
- * A radio group as choice cards — the reference's central control, and the replacement for the
- * previous world's test strip.
+ * One document choice, as a segmented control, sitting on the document it changes.
  *
- * It keeps the test strip's actual virtue, which was never the striped visual: every option is
- * visible at once and switching is free and reversible. What it drops is the darkroom metaphor that
- * required the user to know what a test strip is.
+ * ## Why this is not the choice card any more
+ *
+ * These three choices — layout, language, type — were three stacked `ChoiceGroup`s in the sidebar, and
+ * the sidebar had grown to **2593px on a 1285px viewport**, with this block alone accounting for 991px
+ * of it. Measured, because "it feels tall" is not a diagnosis. Edd's report was that the document
+ * eventually cannot be seen at all, which is exactly what a column twice the height of the screen does
+ * to the pane beside it.
+ *
+ * The card was not the wrong control; it was in the wrong column. Layout, language and type are
+ * decisions about **the document**, not about the data — the sidebar's whole subject is "is this what
+ * your CV says". Moving them onto the document puts each control next to the thing it changes, and the
+ * sidebar loses 38% of its height without hiding anything behind a click. Nothing is collapsed, nothing
+ * is tabbed away: the review form, which is the actual work of this screen, stays fully visible.
+ *
+ * ## What the hint does now
+ *
+ * A choice card carried a hint per option — "No photo, no personal details" — and three cards meant nine
+ * lines of hint on screen at once. A segmented control has no room for any of them, and dropping them
+ * would lose the one thing that tells somebody why International differs from European.
+ *
+ * So the hint for the **selected** option is shown once, below the row. That is fewer words and better
+ * reading: you get told what you have chosen, rather than scanning three descriptions to compare.
+ * `Band` is documented as "the segmented track" in DESIGN.md's own colour notes, so this control was
+ * anticipated by the system rather than smuggled into it.
  */
-function ChoiceGroup<T extends string>({
+function Segmented<T extends string>({
   label,
   options,
   value,
@@ -356,35 +376,43 @@ function ChoiceGroup<T extends string>({
   value: T
   onChange: (id: T) => void
 }) {
+  const chosen = options.find((option) => option.id === value)
   return (
-    <fieldset className="flex flex-col gap-2">
-      <legend className="pb-1 text-[13px] font-semibold text-ink">
+    <fieldset className="flex min-w-0 flex-col gap-1">
+      <legend className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-soft">
         {label}
       </legend>
-      {options.map((option) => {
-        const on = option.id === value
-        return (
-          <button
-            key={option.id}
-            type="button"
-            aria-pressed={on}
-            onClick={() => onChange(option.id)}
-            className="choice !px-3.5 !py-2.5"
-          >
-            <span className="flex min-w-0 flex-col">
-              <span className="text-[14px] font-semibold">{option.label}</span>
-              {option.hint !== undefined && (
-                <span
-                  className={`text-meta ${on ? 'text-signal/75' : 'text-ink-soft'}`}
-                >
-                  {option.hint}
-                </span>
-              )}
-            </span>
-            {on && <Icon name="check" className="h-4 w-4 shrink-0" />}
-          </button>
-        )
-      })}
+      <div className="flex flex-wrap gap-0.5 rounded-full bg-band p-0.5">
+        {options.map((option) => {
+          const on = option.id === value
+          return (
+            <button
+              key={option.id}
+              type="button"
+              aria-pressed={on}
+              /*
+                Four signals on the chosen segment, as DESIGN.md requires: surface, border, text colour
+                and weight. No check mark — in a control this tight the glyph costs more width than it
+                adds certainty, and the other three already carry it.
+              */
+              className={[
+                'rounded-full px-3 py-1.5 text-[13px] transition-colors',
+                on
+                  ? 'border border-signal-edge bg-ground font-semibold text-signal'
+                  : 'border border-transparent font-medium text-ink-soft hover:text-ink',
+              ].join(' ')}
+              onClick={() => onChange(option.id)}
+            >
+              {option.label}
+            </button>
+          )
+        })}
+      </div>
+      {chosen?.hint !== undefined && (
+        <span className="text-meta leading-snug text-ink-soft">
+          {chosen.hint}
+        </span>
+      )}
     </fieldset>
   )
 }
@@ -1008,7 +1036,8 @@ function HunterReady() {
           backLabel="Back to your CV"
         />
 
-        <div className="mx-auto flex w-full max-w-[1560px] flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:h-[calc(100vh-3.5rem)] lg:min-h-0 lg:px-8">
+        {/* Same `lg:flex-none` as the check step, for the same reason — see the note there. */}
+        <div className="mx-auto flex w-full max-w-[1560px] flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:h-[calc(100vh-3.5rem)] lg:min-h-0 lg:flex-none lg:px-8">
           <div className="flex flex-col gap-1">
             <h1 className="text-display text-ink">
               {reading === undefined
@@ -1225,7 +1254,21 @@ function HunterReady() {
         }}
       />
 
-      <div className="mx-auto flex w-full max-w-[1560px] flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:h-[calc(100vh-3.5rem-2px)] lg:min-h-0 lg:px-8">
+      {/*
+        `lg:flex-none` is load-bearing, and its absence was the bug behind "the document eventually
+        cannot be seen".
+
+        The intent of `lg:h-[calc(100vh-3.5rem-2px)]` is a row exactly one viewport tall, so the sidebar
+        scrolls inside its own column and the document stays put. It never worked. `flex-1` expands to
+        `flex: 1 1 0%`, and a `flex-basis` on the main axis **overrides** `height` — so the explicit
+        height was ignored, `flex-grow` then sized this to its tallest child, and the whole page scrolled
+        instead. Measured before the fix: 1665px where `100vh - 58px` is 1227px.
+
+        The visible consequence was the sidebar's `lg:overflow-y-auto` never engaging, because a box that
+        is already as tall as its content has nothing to scroll. Every pixel the sidebar grew pushed the
+        document further down the page.
+      */}
+      <div className="mx-auto flex w-full max-w-[1560px] flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:h-[calc(100vh-3.5rem-2px)] lg:min-h-0 lg:flex-none lg:px-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-col gap-1">
             <h1 className="text-display text-ink">
@@ -1435,56 +1478,6 @@ function HunterReady() {
                 <Icon name="arrow-right" className="h-4 w-4" />
               </button>
             </div>
-
-            <div className="card flex flex-col gap-5 p-4">
-              <ChoiceGroup
-                label="Layout"
-                options={TEMPLATE_IDS.map((id) => ({
-                  id,
-                  label: templates[id].label.replace('Modern — ', ''),
-                  hint: templates[id].hint,
-                }))}
-                value={templateId}
-                onChange={setTemplateId}
-              />
-              {/*
-                The document's language — v0.8. It changes the *furniture* only: section headings, month
-                names, the word for a current role. The candidate's own words are never translated, which
-                the hint says outright, because a user offered "Language" would reasonably expect us to
-                translate their bullets and would be right to be alarmed if we silently did.
-
-                Detected from the CV and overridable, because detection is a guess and the person
-                applying knows which country they are applying in.
-              */}
-              <ChoiceGroup
-                label="Language of the document"
-                options={localeOptions().map((option) => ({
-                  id: option.id,
-                  label: option.label,
-                  hint:
-                    option.id === resolveLocale(loaded.resume.locale)
-                      ? 'Headings and dates. Your own words stay exactly as written.'
-                      : undefined,
-                }))}
-                value={resolveLocale(loaded.resume.locale)}
-                onChange={(locale) =>
-                  setLoaded({
-                    ...loaded,
-                    resume: { ...loaded.resume, locale },
-                  })
-                }
-              />
-              <ChoiceGroup
-                label="Type and spacing"
-                options={THEME_IDS.map((id) => ({
-                  id,
-                  label: themeLabels[id].label,
-                  hint: themeLabels[id].hint,
-                }))}
-                value={themeId}
-                onChange={setThemeId}
-              />
-            </div>
           </aside>
 
           {/*
@@ -1511,6 +1504,61 @@ function HunterReady() {
                 {readFields > 0 &&
                   ` · ${readFields - toCheck}/${readFields} read cleanly`}
               </span>
+            </div>
+            {/*
+              The document's own controls, on the document.
+
+              Three segmented rows rather than nine choice cards in the sidebar — see `Segmented` for the
+              measurement that prompted it. They wrap rather than scroll: a horizontally scrolling strip
+              of controls hides options behind a gesture nobody performs on a desktop.
+            */}
+            <div className="flex flex-wrap items-start gap-x-6 gap-y-3 border-b border-hairline px-4 py-3">
+              <Segmented
+                label="Layout"
+                options={TEMPLATE_IDS.map((id) => ({
+                  id,
+                  label: templates[id].label.replace('Modern — ', ''),
+                  hint: templates[id].hint,
+                }))}
+                value={templateId}
+                onChange={setTemplateId}
+              />
+              {/*
+                The document's language — v0.8. It changes the *furniture* only: section headings, month
+                names, the word for a current role. The candidate's own words are never translated, which
+                the hint says outright, because a user offered "Language" would reasonably expect us to
+                translate their bullets and would be right to be alarmed if we silently did.
+
+                Detected from the CV and overridable, because detection is a guess and the person
+                applying knows which country they are applying in. The hint is now unconditional: it used
+                to appear only on the detected option, which meant that choosing another language removed
+                the sentence promising we would not translate their words — the moment it matters most.
+              */}
+              <Segmented
+                label="Language"
+                options={localeOptions().map((option) => ({
+                  id: option.id,
+                  label: option.label,
+                  hint: 'Headings and dates. Your own words stay exactly as written.',
+                }))}
+                value={resolveLocale(loaded.resume.locale)}
+                onChange={(locale) =>
+                  setLoaded({
+                    ...loaded,
+                    resume: { ...loaded.resume, locale },
+                  })
+                }
+              />
+              <Segmented
+                label="Type and spacing"
+                options={THEME_IDS.map((id) => ({
+                  id,
+                  label: themeLabels[id].label,
+                  hint: themeLabels[id].hint,
+                }))}
+                value={themeId}
+                onChange={setThemeId}
+              />
             </div>
             {fit.advice !== undefined && (
               <p className="border-b border-hairline bg-band px-4 py-2 text-[13px] leading-relaxed text-ink-soft">
