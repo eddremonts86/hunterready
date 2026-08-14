@@ -7,8 +7,20 @@ Read `~/Projects/ai-os/CLAUDE.md` first. This file adds project-specific rules.
 CV optimizer: ingest `.pdf`/`.docx`/`.doc`/`.txt`/`.md` → canonical `Resume` schema
 → user review → verifiably ATS-safe designed PDF via pdfcn + takumi-pdf.
 
-Status: planning. Start at [docs/10-plan-v0.1.md](docs/10-plan-v0.1.md), Block 0.
-Active Spec: [specs/current_spec.md](specs/current_spec.md).
+Status: **v0.1–v0.9 shipped** — ingestion, review, PDF and DOCX export, bullet rewriting, job
+targeting, accounts with GDPR controls, cover letters, EN/ES/DA output and expiring share links.
+See [docs/08-roadmap.md](docs/08-roadmap.md) for what each release contains and what it cost.
+Open: encryption at rest (blocked on a key-management decision, ADR-018), pricing and payments,
+non-Latin script coverage. Active Spec: [specs/current_spec.md](specs/current_spec.md).
+
+**Before calling a version done, check the feature is reachable.** Three releases in a row shipped a
+complete, tested layer that no screen imported — v0.3's `variant-diff`, all of v0.4's targeting, all of
+v0.5's persistence. A passing unit test argues convincingly that a feature works while nobody can get to
+it. The check costs one command:
+
+```bash
+grep -rn "optimize/thing" src --include='*.ts' --include='*.tsx' | grep -v __tests__
+```
 
 ## Before touching code
 

@@ -21,7 +21,10 @@ import { Route as ApiRenderRouteImport } from './routes/api/render'
 import { Route as ApiRenderLetterRouteImport } from './routes/api/render-letter'
 import { Route as ApiResumeRouteImport } from './routes/api/resume'
 import { Route as ApiRewriteRouteImport } from './routes/api/rewrite'
+import { Route as ApiShareRouteImport } from './routes/api/share'
+import { Route as ApiSharedRouteImport } from './routes/api/shared'
 import { Route as ApiTargetRouteImport } from './routes/api/target'
+import { Route as STokenRouteImport } from './routes/s.$token'
 import { Route as ApiAccountDeleteRouteImport } from './routes/api/account/delete'
 import { Route as ApiAccountExportRouteImport } from './routes/api/account/export'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -86,9 +89,24 @@ const ApiRewriteRoute = ApiRewriteRouteImport.update({
   path: '/api/rewrite',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiShareRoute = ApiShareRouteImport.update({
+  id: '/api/share',
+  path: '/api/share',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSharedRoute = ApiSharedRouteImport.update({
+  id: '/api/shared',
+  path: '/api/shared',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiTargetRoute = ApiTargetRouteImport.update({
   id: '/api/target',
   path: '/api/target',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const STokenRoute = STokenRouteImport.update({
+  id: '/s/$token',
+  path: '/s/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAccountDeleteRoute = ApiAccountDeleteRouteImport.update({
@@ -120,7 +138,10 @@ export interface FileRoutesByFullPath {
   '/api/render-letter': typeof ApiRenderLetterRoute
   '/api/resume': typeof ApiResumeRoute
   '/api/rewrite': typeof ApiRewriteRoute
+  '/api/share': typeof ApiShareRoute
+  '/api/shared': typeof ApiSharedRoute
   '/api/target': typeof ApiTargetRoute
+  '/s/$token': typeof STokenRoute
   '/api/account/delete': typeof ApiAccountDeleteRoute
   '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -138,7 +159,10 @@ export interface FileRoutesByTo {
   '/api/render-letter': typeof ApiRenderLetterRoute
   '/api/resume': typeof ApiResumeRoute
   '/api/rewrite': typeof ApiRewriteRoute
+  '/api/share': typeof ApiShareRoute
+  '/api/shared': typeof ApiSharedRoute
   '/api/target': typeof ApiTargetRoute
+  '/s/$token': typeof STokenRoute
   '/api/account/delete': typeof ApiAccountDeleteRoute
   '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -157,7 +181,10 @@ export interface FileRoutesById {
   '/api/render-letter': typeof ApiRenderLetterRoute
   '/api/resume': typeof ApiResumeRoute
   '/api/rewrite': typeof ApiRewriteRoute
+  '/api/share': typeof ApiShareRoute
+  '/api/shared': typeof ApiSharedRoute
   '/api/target': typeof ApiTargetRoute
+  '/s/$token': typeof STokenRoute
   '/api/account/delete': typeof ApiAccountDeleteRoute
   '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -177,7 +204,10 @@ export interface FileRouteTypes {
     | '/api/render-letter'
     | '/api/resume'
     | '/api/rewrite'
+    | '/api/share'
+    | '/api/shared'
     | '/api/target'
+    | '/s/$token'
     | '/api/account/delete'
     | '/api/account/export'
     | '/api/auth/$'
@@ -195,7 +225,10 @@ export interface FileRouteTypes {
     | '/api/render-letter'
     | '/api/resume'
     | '/api/rewrite'
+    | '/api/share'
+    | '/api/shared'
     | '/api/target'
+    | '/s/$token'
     | '/api/account/delete'
     | '/api/account/export'
     | '/api/auth/$'
@@ -213,7 +246,10 @@ export interface FileRouteTypes {
     | '/api/render-letter'
     | '/api/resume'
     | '/api/rewrite'
+    | '/api/share'
+    | '/api/shared'
     | '/api/target'
+    | '/s/$token'
     | '/api/account/delete'
     | '/api/account/export'
     | '/api/auth/$'
@@ -232,7 +268,10 @@ export interface RootRouteChildren {
   ApiRenderLetterRoute: typeof ApiRenderLetterRoute
   ApiResumeRoute: typeof ApiResumeRoute
   ApiRewriteRoute: typeof ApiRewriteRoute
+  ApiShareRoute: typeof ApiShareRoute
+  ApiSharedRoute: typeof ApiSharedRoute
   ApiTargetRoute: typeof ApiTargetRoute
+  STokenRoute: typeof STokenRoute
   ApiAccountDeleteRoute: typeof ApiAccountDeleteRoute
   ApiAccountExportRoute: typeof ApiAccountExportRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -324,11 +363,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRewriteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/share': {
+      id: '/api/share'
+      path: '/api/share'
+      fullPath: '/api/share'
+      preLoaderRoute: typeof ApiShareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/shared': {
+      id: '/api/shared'
+      path: '/api/shared'
+      fullPath: '/api/shared'
+      preLoaderRoute: typeof ApiSharedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/target': {
       id: '/api/target'
       path: '/api/target'
       fullPath: '/api/target'
       preLoaderRoute: typeof ApiTargetRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/s/$token': {
+      id: '/s/$token'
+      path: '/s/$token'
+      fullPath: '/s/$token'
+      preLoaderRoute: typeof STokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/account/delete': {
@@ -368,7 +428,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiRenderLetterRoute: ApiRenderLetterRoute,
   ApiResumeRoute: ApiResumeRoute,
   ApiRewriteRoute: ApiRewriteRoute,
+  ApiShareRoute: ApiShareRoute,
+  ApiSharedRoute: ApiSharedRoute,
   ApiTargetRoute: ApiTargetRoute,
+  STokenRoute: STokenRoute,
   ApiAccountDeleteRoute: ApiAccountDeleteRoute,
   ApiAccountExportRoute: ApiAccountExportRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
