@@ -53,6 +53,8 @@ export interface ConsentState {
    * the page cannot claim encryption on an installation with no key.
    */
   encryptsAtRest?: boolean
+  /** The account's plan — `pro`, `free`, `anonymous` — for the topbar chip. */
+  plan?: string
   /**
    * Whether this visitor may use the paid designs. Undefined until the server has answered.
    *
@@ -96,6 +98,8 @@ export function useProcessingConsent(): ConsentState {
     undefined,
   )
   const [paidDesigns, setPaidDesigns] = useState<boolean | undefined>(undefined)
+  /** The account's plan, for the topbar chip. `anonymous` when there is no session. */
+  const [plan, setPlan] = useState<string | undefined>(undefined)
   const [choice, setChoice] = useState<ConsentChoice | undefined>(undefined)
 
   useEffect(() => {
@@ -107,6 +111,7 @@ export function useProcessingConsent(): ConsentState {
             provider: string | null
             encryptsAtRest?: boolean
             paidDesigns?: boolean
+            plan?: string
           }>,
       )
       .then((data) => {
@@ -114,6 +119,7 @@ export function useProcessingConsent(): ConsentState {
         setProvider(data.provider)
         setEncryptsAtRest(data.encryptsAtRest === true)
         setPaidDesigns(data.paidDesigns === true)
+        setPlan(typeof data.plan === 'string' ? data.plan : undefined)
         const stored = read()
         /**
          * A stored answer only counts for the provider it was given about. If the deployment moves
@@ -159,7 +165,7 @@ export function useProcessingConsent(): ConsentState {
     }
   }
 
-  return { provider, encryptsAtRest, paidDesigns, choice, decide, reset }
+  return { provider, encryptsAtRest, paidDesigns, plan, choice, decide, reset }
 }
 
 /** True when a decision is genuinely required: a provider exists and nobody has answered yet. */

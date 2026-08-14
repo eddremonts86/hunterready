@@ -361,6 +361,7 @@ export function TargetPanel({
   onAcceptSummary,
   onSaveApplication,
   onDraftLetter,
+  onFitCv,
   letterStages,
   onDownloadLetter,
 }: {
@@ -389,6 +390,14 @@ export function TargetPanel({
    * a requirement the candidate removed should not shape the letter either.
    */
   onDraftLetter?: (requirements: JobRequirements) => Promise<CoverLetterOffer>
+  /**
+   * Apply the whole tailored bundle in one action: the reorderings and the aimed summary together,
+   * then show the before/after so the person sees exactly what one click did. Advising is step one;
+   * when the person asks the product to do it, it does it (Edd's direction). The original is intact,
+   * the diff is on screen, and reverting is one click — which is what keeps a bulk apply inside the
+   * spirit of enforcement layer 3.
+   */
+  onFitCv: (variant: Resume, summary?: string) => void
   /** The narrated wait while the letter drafts — the server's own stages, polled by the page. */
   letterStages?: Array<{ label: string; detail?: string; done: boolean }>
   /**
@@ -724,6 +733,36 @@ export function TargetPanel({
             is reworded — a reordering cannot make your CV say something untrue.
           </p>
         </div>
+
+        {/*
+          The do-it-for-me action. One click applies everything below — the reorderings AND the aimed
+          summary — and flips to the comparison so the person sees precisely what changed. It sits above
+          the itemised moves rather than replacing them: advising first, then doing, is the order Edd
+          set, and both remain available.
+        */}
+        {(tailored.moves.length > 0 ||
+          reading.summary.suggestion !== undefined) && (
+          <div className="flex flex-col gap-2 rounded-field border border-signal-edge bg-signal-wash px-3.5 py-3">
+            <p className="text-[13px] leading-relaxed text-ink">
+              Want us to fit your CV to this advert in one go? We apply the
+              reorderings below
+              {reading.summary.suggestion !== undefined
+                ? ' and the summary aimed at this job'
+                : ''}
+              , and show you the before and after. Nothing is invented, and one
+              click puts it back.
+            </p>
+            <button
+              type="button"
+              onClick={() =>
+                onFitCv(tailored.resume, reading.summary.suggestion)
+              }
+              className="btn btn-primary self-start px-4 py-2.5 text-[14px]"
+            >
+              Fit my CV to this job
+            </button>
+          </div>
+        )}
 
         {tailored.moves.length === 0 ? (
           <p className="text-[13px] leading-relaxed text-ink-soft">

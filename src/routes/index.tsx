@@ -229,6 +229,21 @@ function Wordmark({ className = 'text-[17px]' }: { className?: string }) {
  * There is also nothing left to count. The tabs collapsed the flow into one workspace: there is a
  * landing page and there is the CV, and a progression indicator over two screens is furniture.
  */
+/**
+ * The plan, worn in the topbar. Edd's ask verbatim: "debo poder ver en la topbar que tengo el Pro user."
+ *
+ * Only `pro` earns a chip. `free` and `anonymous` show nothing — a "Free" badge is an upsell disguised
+ * as information, and the header is not a sales surface.
+ */
+function PlanChip({ plan }: { plan?: string }) {
+  if (plan !== 'pro') return null
+  return (
+    <span className="inline-flex h-6 items-center rounded-full bg-signal px-2.5 text-[11px] font-bold uppercase tracking-[0.06em] text-white">
+      Pro
+    </span>
+  )
+}
+
 function StepBar({
   onBack,
   backLabel = 'Start over',
@@ -977,6 +992,44 @@ function HunterReady() {
     setAccepted((current) => new Set(current).add(keyOf(rewrite)))
   }, [])
 
+  /**
+   * Accept every open suggestion at once — the person asked the product to do it, so it does it.
+   *
+   * One `setLoaded` applying all of them, not a loop of single accepts: each accept maps over the whole
+   * work array, and N sequential state updates for a 25-bullet CV is both slower and harder to undo in
+   * one motion. The anti-fabrication guard already ran per suggestion; the per-bullet diffs stay on
+   * screen after the bulk accept, so nothing is hidden by the shortcut.
+   */
+  const acceptAllRewrites = useCallback(() => {
+    setLoaded((current) => {
+      if (current === undefined || rewrites === undefined) return current
+      const open = rewrites.filter(
+        (entry) =>
+          entry.suggestion !== undefined && !accepted.has(keyOf(entry)),
+      )
+      if (open.length === 0) return current
+      const work = current.resume.work.map((job, jobIndex) => {
+        const mine = open.filter((entry) => entry.workIndex === jobIndex)
+        if (mine.length === 0) return job
+        return {
+          ...job,
+          highlights: job.highlights.map((text, index) => {
+            const hit = mine.find((entry) => entry.highlightIndex === index)
+            return hit?.suggestion ?? text
+          }),
+        }
+      })
+      return { ...current, resume: { ...current.resume, work } }
+    })
+    setAccepted((current) => {
+      const next = new Set(current)
+      for (const entry of rewrites ?? []) {
+        if (entry.suggestion !== undefined) next.add(keyOf(entry))
+      }
+      return next
+    })
+  }, [rewrites, accepted])
+
   const dismissRewrite = useCallback((rewrite: BulletRewrite) => {
     setRewrites((current) =>
       current?.filter((item) => keyOf(item) !== keyOf(rewrite)),
@@ -1521,6 +1574,26 @@ function HunterReady() {
                     onUseVariant={(variant) =>
                       setLoaded({ ...loaded, resume: variant })
                     }
+                    onFitCv={(variant, summary) => {
+                      /*
+                        The one-click fit: reorderings and the aimed summary applied together, then
+                        straight to the comparison. Seeing the before/after immediately is what makes a
+                        bulk apply an informed decision rather than a leap — the original is intact and
+                        "Just the new one" is the same toggle back.
+                      */
+                      setLoaded({
+                        ...loaded,
+                        resume: {
+                          ...variant,
+                          basics: {
+                            ...variant.basics,
+                            ...(summary === undefined ? {} : { summary }),
+                          },
+                        },
+                      })
+                      setComparing(true)
+                      setPanel('check')
+                    }}
                     onAcceptSummary={(summary) =>
                       setLoaded({
                         ...loaded,
@@ -1761,6 +1834,7 @@ function HunterReady() {
           */
           void navigate({ replace: true, search: {} })
         }}
+        right={<PlanChip plan={consent.plan} />}
       />
 
       {/*
@@ -2038,6 +2112,27 @@ function HunterReady() {
                             )
                           })}
                         </div>
+                      )}
+                      {rewrites.filter(
+                        (entry) =>
+                          entry.suggestion !== undefined &&
+                          !accepted.has(keyOf(entry)),
+                      ).length >= 2 && (
+                        <button
+                          type="button"
+                          onClick={acceptAllRewrites}
+                          className="btn btn-quiet self-start px-4 py-2 text-[13px]"
+                        >
+                          Accept all{' '}
+                          {
+                            rewrites.filter(
+                              (entry) =>
+                                entry.suggestion !== undefined &&
+                                !accepted.has(keyOf(entry)),
+                            ).length
+                          }{' '}
+                          suggestions
+                        </button>
                       )}
                       <RewriteReview
                         rewrites={rewrites}
