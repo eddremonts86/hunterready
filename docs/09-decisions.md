@@ -672,6 +672,90 @@ believes it is encrypting and is not is worse than one that knows it is not.
 
 ---
 
+## ADR-022 — Cyrillic and Greek are a font-format problem, not a subset list
+
+**2026-08-14 · Accepted · shipped the same day the finding was recorded**
+
+Recorded because the obvious fix is wrong and three plausible approaches were ruled out by measurement.
+Whoever picks this up should not repeat them.
+
+### The estimate that was wrong
+
+The roadmap's "non-Latin script coverage" was assessed as two jobs: CJK (expensive, 10–16 MB per weight)
+and Cyrillic/Greek (_"cheap and already licensed — subsets of Source Sans 3, which we already bundle,
+about 100 KB, no layout change"_). The first half of that is right. **The second half was wrong**, and the
+error was assuming that bundling the files makes the renderer use them.
+
+### What was measured
+
+Adding `cyrillic`, `cyrillic-ext`, `greek`, `greek-ext` to the bundler's `SUBSETS` copies 43 files
+instead of 22 and changes nothing about the output. Every one of these failed with
+`MissingGlyphs("М (U+041C), …")`:
+
+| approach                                                          | result          |
+| ----------------------------------------------------------------- | --------------- |
+| all six subsets registered under one family name                  | `MissingGlyphs` |
+| distinct family names plus a comma fallback chain                 | `MissingGlyphs` |
+| **only** the Cyrillic subset loaded, under the family name in use | `MissingGlyphs` |
+
+The third is what rules out the family-name and fallback theories: a font file containing Cyrillic,
+loaded alone, under exactly the name the theme asks for, still cannot draw Cyrillic.
+
+Two control runs located the cause:
+
+- the Cyrillic subset file renders **Latin** text fine — so it loads and parses
+- a full system TTF (`Arial Unicode.ttf`) renders Latin, Cyrillic **and** Greek fine
+
+So the renderer is not the problem and the family plumbing is not the problem.
+**takumi-pdf 0.6.4 cannot reach the glyphs in fontsource's range-subset `woff2` files** beyond Latin. It
+loads them and consults its own coverage instead.
+
+### One good thing this surfaced
+
+The renderer **fails loudly**. A CV with a Cyrillic name today produces a clear `MissingGlyphs` error
+naming the exact codepoints, not a PDF full of tofu. The current state is unsupported, not silently
+broken, and that is the difference between a bug report and a candidate posting a boxed-out CV.
+
+### The remaining path, and why it is a decision
+
+Ship **full TTFs** for `Source Sans 3` and `Source Serif 4` instead of range subsets. Both cover Latin,
+Greek and Cyrillic upstream and are OFL, so licensing is not the question. The question is:
+
+- roughly **2.4 MB** of vendored binaries (2 families × 3 weights × ~400 KB) against today's 460 KB
+- where they come from — fontsource publishes no TTF for these faces, so it means either a new
+  dependency or committing binaries fetched from Adobe's releases
+- and `pnpm build`'s asset copy, the Dockerfile and the round-trip suite all get bigger with them
+
+That is a decision about the deployed image and about vendoring, not a line in a list. It is not blocked
+on anything technical, and the second estimate should be trusted more than the first only because this
+one was measured.
+
+### What shipped
+
+Edd chose to subset rather than vendor the full fonts, and the numbers came out better than either
+estimate: `scripts/make-fonts.mjs` fetches Adobe's pinned releases and restricts each weight to the
+ranges a CV in this product's markets needs, giving **1.24 MB for six faces** — against 2.4 MB for the
+full fonts and 460 KB for the Latin-only subsets it replaces.
+
+The loader **prefers** a `-full-*.ttf` over the per-range `woff2` for the same weight and skips the
+subsets entirely when it finds one. Skipping is not tidiness: registering both puts two fonts under one
+family and weight, and which one gets consulted is not ours to decide. Written as a preference rather
+than a replacement so the change is additive — a checkout that has not run the generator behaves exactly
+as before.
+
+The order of work is the part worth keeping: the subsetted TTF was **proved to render Cyrillic and Greek
+through takumi before a single file was vendored**. The previous attempt bundled fonts the renderer could
+not use, and only a failing render revealed it.
+
+### One more trap, caught before it shipped
+
+`scripts/copy-assets.mjs` filtered on `.woff2`. The new TTFs would have been left out of `.output`, so
+the loader would have found only the Latin subsets **in production only** — the source tree has the
+files, so every local test would have passed. That is the worst shape a font bug can take, and it was one
+line.
+
+---
+
 # Open questions — need Edd's answer
 
 These do **not** block starting v0.1. They are listed at the point where each one
@@ -706,7 +790,29 @@ Still open:
    contrast: `--color-alert` `#c02424`, `--color-caution` `#9a5b12`,
    `--color-affirm` `#0c7a52`. Kept in the list rather than deleted, because a question
    that was answered by replacing its premise is worth seeing once.
-7. **Pricing model and tiers.** Now that this is a real product, this shapes what a paid
-   tier contains. _Needed by: v1.0 — v0.5 shipped without it._
+7. **Pricing model and tiers.** The only genuinely blocking item left, and it cannot be
+   guessed: the numbers are Edd's. What the code already makes cheap to gate, so that the
+   question is concrete rather than open-ended:
+
+   | free could be          | paid could be                                          |
+   | ---------------------- | ------------------------------------------------------ |
+   | upload, check, one PDF | `.docx`, cover letters, share links                    |
+   | the rules-based reader | the model-backed reader (this is the real per-CV cost) |
+   | one saved CV           | saved variants and the application tracker             |
+
+   Three shapes that fit what exists:
+
+   - **One-off** — pay per finished CV. Fits somebody applying once; earns nothing from the
+     tailoring features, which are the ones a job hunt uses repeatedly.
+   - **Subscription with a free stateless tier** — free is the whole current stateless path,
+     paid is the account: saved CVs, variants, tracker, share links. Matches where the cost
+     actually is (storage and model calls both need an account) and matches ADR-004's
+     stance, since the free tier stays the one that stores nothing.
+   - **Credits** — a bundle of model-backed actions. Cleanest mapping to cost, and the one
+     users understand least.
+
+   The second is the only one the current architecture already draws a line for. _Needed by:
+   v1.0._
+
 8. **Name and domain.** "HunterReady" — `.dev`/`.app`/`.com` availability and
    trademark not checked. _Needed by: v1.0._

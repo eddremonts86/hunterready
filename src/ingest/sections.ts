@@ -195,13 +195,58 @@ export function normalizeHeading(text: string): string {
 }
 
 /**
+ * A heading tracked out letter by letter, joined back up — or `undefined` if it is not one.
+ *
+ * Designed CVs set section headings with heavy letter-spacing, and a PDF text layer preserves it as
+ * real spaces: `FORMACIÓN` arrives as `F O R M A C I Ó N`. That normalizes to nine "words", so the
+ * four-word guard below threw it away and **the whole section vanished** — every entry under it lost,
+ * silently, on exactly the kind of CV somebody paid a designer for. It is what cost the Spanish
+ * fixture its education section (docs/08), and it is not a Spanish problem: any tracked-out heading in
+ * any language disappears the same way.
+ *
+ * The test is that *every* token is a single character. Prose cannot satisfy that, so this cannot
+ * misfire on the sentence the guard exists to reject. Four tokens minimum, because a genuine
+ * three-word heading needs no help and should go down the normal path.
+ *
+ * Word boundaries are lost on the way in — `normalizeHeading` collapses runs of whitespace, so
+ * `F O R M A C I Ó N  A C A D É M I C A` cannot be told from one long word. That is why the caller
+ * compares against the vocabulary with its spaces removed rather than trying to put them back.
+ */
+function collapseLetterSpaced(normalized: string): string | undefined {
+  const tokens = normalized.split(' ')
+  if (tokens.length < 4) return undefined
+  if (!tokens.every((token) => token.length === 1)) return undefined
+  return tokens.join('')
+}
+
+/**
  * Returns the section kind when the line *is* a heading, not merely when it mentions one.
  * "Experience" matches; "I have 12 years of experience in intensive care" must not, or every
  * summary paragraph becomes a section break.
  */
 export function matchSection(text: string): SectionKind | undefined {
   const normalized = normalizeHeading(text)
-  if (normalized === '' || normalized.split(' ').length > 4) return undefined
+  if (normalized === '') return undefined
+
+  /**
+   * The letter-spaced path is tried first and returns on its own.
+   *
+   * It has to come before the four-word guard, which is precisely what was rejecting these lines. It
+   * does not fall through to the exact match afterwards: a line of single characters either spells a
+   * heading or is not one, and letting it continue would only ever compare `f o r m a c i o n` against
+   * a vocabulary that has no spaced entries.
+   */
+  const collapsed = collapseLetterSpaced(normalized)
+  if (collapsed !== undefined) {
+    for (const [kind, phrases] of VOCABULARY) {
+      for (const phrase of phrases) {
+        if (collapsed === phrase.replace(/ /g, '')) return kind
+      }
+    }
+    return undefined
+  }
+
+  if (normalized.split(' ').length > 4) return undefined
 
   for (const [kind, phrases] of VOCABULARY) {
     for (const phrase of phrases) {

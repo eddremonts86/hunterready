@@ -131,7 +131,20 @@ Still to do:
 - A real photographed CV — perspective skew, uneven lighting, shadow. `scanned.pdf` is a clean
   rasterization and cannot fake any of it.
 - A genuine multi-page CV, still owed to Block 4's page-break verifier.
-- No education section is found in the private Spanish CV, and MiniMax sometimes returns no provenance.
+- **Tracked-out section headings** were losing whole sections, and that is fixed
+  (`collapseLetterSpaced` in `src/ingest/sections.ts`). A designed CV sets a heading with heavy
+  letter-spacing and the PDF text layer keeps it as real spaces, so `FORMACIÓN` arrives as
+  `F O R M A C I Ó N` — nine "words" to the four-word guard that exists to stop a prose sentence
+  counting as a section break. Every entry under such a heading was dropped, silently, on exactly the
+  kind of CV somebody paid a designer for. Not a Spanish problem: any language, any tracked heading.
+- **"No education section in the private Spanish CV" is probably not a defect.** Measured rather than
+  assumed: of 103 extracted lines, **zero** contain `formacion`, `educacion`, `estudios` or `academic`
+  in any form. So nothing is being missed by the matcher — the words are not in the extracted text.
+  Either the extraction loses that region entirely, or that CV has no formal education section, and its
+  detected headings (`/ QUIÉN ESCRIBE`, `Sobre mí.`, `Experiencia profesional.`, `WORDPRESS`) look like
+  a portfolio-shaped profile that might not carry one. **Edd can answer this in a sentence**; nobody
+  should hunt it further until he does.
+- MiniMax sometimes returns no provenance.
 
 ## v0.3 — "It improves the CV" · in progress
 
@@ -366,10 +379,28 @@ refused while the link still worked, revoked from the owner's screen, and then a
 token that never existed. Eighteen repository tests cover expiry, revocation, cross-account isolation and
 erasure.
 
-## v1.0 — "It's a product"
+## v1.0 — "It's a product" · one item shipped, two open
 
-- Pricing and payments
-- Non-Latin script font coverage
+- ✅ **Encryption at rest** (`src/db/crypto.ts`, ADR-021) — AES-256-GCM in the existing `jsonb` column, so
+  no migration. Protects a stolen disk, a leaked snapshot, a copied backup, and anyone with database read
+  access but not the application's environment. Does **not** protect someone who has that environment;
+  `/privacy` states the limit in the same paragraph and reads the real state from the server so it cannot
+  claim encryption on an installation with no key. **Losing the key loses every stored CV** — the runbook
+  carries the backup obligation.
+- ⬜ **Pricing and payments.** The numbers are Edd's, and docs/09's open question 7 now lays out three
+  concrete shapes rather than an open field. The architecture already draws the line for one of them: the
+  free stateless path stores nothing (ADR-004), and everything that costs money — model calls, storage —
+  needs an account.
+- ✅ **Cyrillic and Greek** (`scripts/make-fonts.mjs`, ADR-022). Not the subset list it looked like:
+  takumi-pdf 0.6.4 cannot reach the glyphs in fontsource's range-subset `woff2` files, so adding
+  `cyrillic` to the bundler copies twelve files and changes nothing. The fix is a format change —
+  Adobe's TTFs, subsetted to the ranges these markets need: **1.24 MB for six faces**, against 2.4 MB
+  for the full fonts. Proved to render through takumi _before_ anything was vendored, because the first
+  attempt bundled fonts the renderer could not use. A Bulgarian, Greek, Ukrainian or Serbian name now
+  renders in both PDF and `.docx`, in every template.
+- ⬜ **CJK.** A separate question, and still a real one: no Source face has it and Noto Sans CJK is
+  10–16 MB per weight. That is a decision about the deployed image and about which market it is for.
+  Right-to-left needs more than a font — the renderer's bidi behaviour is unverified.
 
 ## Deliberately parked
 

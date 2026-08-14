@@ -121,6 +121,13 @@ pnpm test:parity            # builds, boots a server, requests the real routes
 pnpm lint                   # eslint
 ```
 
+**A `.test.tsx` file is silently ignored.** `vitest.config.ts` includes `src/**/*.test.ts` only, so a
+test written with JSX in it never runs and never complains. Use `createElement` in a `.test.ts` file.
+
+**A stale `.output/` shadows the source of truth for fonts.** `FONT_DIRS` prefers
+`.output/server/fonts` over `src/render/fonts/files`, so a test can pass or fail against fonts that are
+not the ones in the repo. Run `node scripts/copy-assets.mjs` after touching the font bundle.
+
 **Use `pnpm test:docker` before claiming ingestion work is done.** On a bare machine the
 LibreOffice (`.doc`) and Tesseract (OCR) suites skip themselves, because those binaries
 live in the image and deliberately not on a laptop (ADR-012) — so `pnpm test` reports
