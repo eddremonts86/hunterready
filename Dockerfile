@@ -98,6 +98,19 @@ COPY --from=build /app/.output ./.output
 # synthetic — no personal data ships in this image (docs/07-privacy.md).
 COPY --from=build /app/fixtures ./fixtures
 
+# The migration and retention scripts, plus the two packages they need.
+#
+# `.output` is self-contained, but these are standalone `.mjs` files that Nitro does not bundle — so
+# without this the post-deployment command fails with "Cannot find module 'postgres'" *after* a green
+# build, which is the failure shape this project already has one scar from (ADR-005). Two packages,
+# both plain JS, ~4 MB: the alternative is a second image or a migration step that runs somewhere the
+# database is not reachable.
+COPY --from=build /app/drizzle ./drizzle
+COPY --from=build /app/scripts/db ./scripts/db
+COPY --from=build /app/scripts/deploy ./scripts/deploy
+COPY --from=build /app/node_modules/postgres ./node_modules/postgres
+COPY --from=build /app/node_modules/drizzle-orm ./node_modules/drizzle-orm
+
 # Unprivileged: the node image ships a `node` user. Nothing here needs root at runtime, and
 # this process parses untrusted files for a living.
 USER node

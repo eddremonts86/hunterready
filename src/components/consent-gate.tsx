@@ -12,10 +12,11 @@
  *    They are agreeing to a transfer to a company; they are entitled to know which one first. The
  *    name is fetched at run time because it is a deploy-time decision (`/api/processing`).
  *
- *  • **Declining is a real option that still works.** There is a deterministic extraction path that
- *    sends nothing anywhere, and it is genuinely usable — it scores 100% on every fixture we have.
- *    So "no" is a button that continues, not a dead end, and saying so is the only way the choice is
- *    real rather than decorative.
+ *  • **Declining is a real option that still works well.** It does not mean "we will do our best with
+ *    regular expressions" — it means a model running on our own server, where the document never
+ *    leaves the machine it was uploaded to. That distinction is the whole difference between a privacy
+ *    option and a privacy penalty: if the private choice is also the bad choice, nobody takes it and
+ *    the option was decoration.
  *
  *  • **When nothing is configured, nothing is asked.** If no model provider is set, no transfer will
  *    happen, and requesting consent for it would be theatre.
@@ -184,19 +185,21 @@ export function ConsentGate({
           onClick={() => onDecide('declined')}
           className="rim flex-1 px-4 py-3 text-[11px] text-tray-enamel transition-colors hover:bg-amber-shadow/25 focus-visible:bg-amber-shadow/25"
         >
-          <span className="stencil">No — read it here instead</span>
+          <span className="stencil">No — use your own model</span>
         </button>
       </div>
 
       {/*
-        The second option is not a consolation prize and must not read like one. The deterministic
-        path recovers every field on every fixture we have; what it lacks is judgement about unusual
-        layouts. Saying that plainly is what makes the choice real.
+        Not a consolation prize, and it must not read like one. It is a real model on our own hardware —
+        smaller than the one above, so a very unusual layout may need more correcting, and that is the
+        whole of the trade. Overstating it would be dishonest; understating it makes the private choice
+        look like a penalty.
       */}
       <p className="text-[10px] leading-relaxed text-developer-gray">
-        Reading it here sends nothing anywhere. It handles an ordinary CV well
-        and an unusual layout less well, so you may have more to correct. You
-        can change your mind on the next upload.
+        Your CV is read by a model on our own server instead, so it never leaves
+        our machines. It is a smaller model, so on an unusual layout you may
+        have a little more to correct. You can change your mind on the next
+        upload.
       </p>
 
       <a

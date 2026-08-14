@@ -80,13 +80,13 @@ Two things about it are load-bearing:
 
 ## Coolify configuration
 
-| Setting                 | Value                                       | Why                                                                                      |
-| ----------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Build pack              | Dockerfile                                  | The image is the contract (ADR-012). No nixpacks.                                        |
-| Dockerfile target       | _(leave empty — the final `runtime` stage)_ | Never `test`: that stage carries node_modules and dev dependencies.                      |
-| Port                    | 3000                                        | `ENV PORT=3000`, and `CMD node .output/server/index.mjs`.                                |
-| Healthcheck             | inherited from the image                    | `HEALTHCHECK` is in the Dockerfile, using Node's own `fetch` so the image needs no curl. |
-| Post-deployment command | _(none)_                                    | No database, no migrations. This is the deliberate difference from BuilderHunt.          |
+| Setting                 | Value                                       | Why                                                                                                                                                                                                                                                                                   |
+| ----------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Build pack              | Dockerfile                                  | The image is the contract (ADR-012). No nixpacks.                                                                                                                                                                                                                                     |
+| Dockerfile target       | _(leave empty — the final `runtime` stage)_ | Never `test`: that stage carries node_modules and dev dependencies.                                                                                                                                                                                                                   |
+| Port                    | 3000                                        | `ENV PORT=3000`, and `CMD node .output/server/index.mjs`.                                                                                                                                                                                                                             |
+| Healthcheck             | inherited from the image                    | `HEALTHCHECK` is in the Dockerfile, using Node's own `fetch` so the image needs no curl.                                                                                                                                                                                              |
+| Post-deployment command | `node scripts/deploy/orchestrate.mjs`       | **Never bare `drizzle-kit migrate`.** The roles migration creates the app role without a password on purpose, so migrating alone leaves the app unable to authenticate — the container starts and every DB-backed page 500s. Step 4 of the orchestrator exists to catch exactly that. |
 
 Environment variables Coolify must set:
 
@@ -99,6 +99,27 @@ Environment variables Coolify must set:
 except `.env.example`.
 
 ## GitHub configuration
+
+### The live deployment
+
+|                 |                                                                                                |
+| --------------- | ---------------------------------------------------------------------------------------------- |
+| URL             | `https://hunterready.eduardoinerarte.dk`                                                       |
+| Coolify project | `hunterready` (its own project, matching every other app on that server)                       |
+| DNS             | wildcard `*.eduardoinerarte.dk` already points at the host, so a new subdomain needs no record |
+
+### Coolify API quirks, found the hard way
+
+The create and update endpoints do **not** accept the same fields, and the errors are unhelpful:
+
+- `POST /api/v1/applications/public` rejects **`fqdn`** and **`dockerfile_target_build`** with
+  `422 {"field":["This field is not allowed."]}`. Create without them.
+- `PATCH /api/v1/applications/<uuid>` accepts the target stage as `dockerfile_target_build`, but the
+  domain is **`domains`**, not `fqdn` — `fqdn` is rejected on update too, even though it is the field
+  name the API _returns_. Write `domains`, read `fqdn`.
+
+So provisioning is two calls: create, then patch the domain and the target stage. Same family of
+quirk as `is_build_time` on the envs endpoint (see the `env-config-and-secrets` skill).
 
 Secrets (Settings → Secrets and variables → Actions → _Secrets_):
 
@@ -133,3 +154,44 @@ homepage, which reads as health.
    healthcheck itself has a 20s start period, so a slow boot shows as retries rather than failure.
 5. **Rolling back** is redeploying the previous commit from Coolify's deployment list. There is no
    database, so a rollback is complete and instant — the one genuine advantage of having no state.
+
+## The database (v0.5, ADR-019)
+
+|           |                                                                                                                                               |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Resource  | `hunterready-db`, Postgres 18, in the `hunterready` Coolify project                                                                           |
+| Exposure  | **internal only** (`is_public: false`). Migrations run _inside_ the Coolify network as the post-deployment command; nothing needs it exposed. |
+| Roles     | `hunterready_owner` (Coolify's), `hunterready_app`, `hunterready_readonly`                                                                    |
+| Retention | 90 days from the last sign-in, swept by `scripts/db/retention.mjs`                                                                            |
+
+Env rows Coolify must carry, beyond the model provider:
+
+| Name                     | Notes                                                                               |
+| ------------------------ | ----------------------------------------------------------------------------------- |
+| `DATABASE_URL`           | the **app** role. Internal hostname is the database's Coolify uuid.                 |
+| `DATABASE_MIGRATION_URL` | the **owner** role. Only migrations and the retention sweep use it.                 |
+| `DATABASE_APP_PASSWORD`  | provisioned onto `hunterready_app` by the orchestrator on every deploy              |
+| `SESSION_SECRET`         | `openssl rand -hex 32`. Unset disables sessions rather than signing with a default. |
+
+### Verifying it locally before trusting it in production
+
+The production database is internal-only, which is correct — so the SQL and the orchestrator are
+verified against a throwaway local Postgres, and the real run happens inside the Coolify network:
+
+```bash
+docker run -d --name hr-pg -e POSTGRES_USER=hunterready_owner -e POSTGRES_PASSWORD=localdev \
+  -e POSTGRES_DB=hunterready -p 55432:5432 postgres:18-alpine
+
+DATABASE_MIGRATION_URL="postgres://hunterready_owner:localdev@127.0.0.1:55432/hunterready" \
+DATABASE_URL="postgres://hunterready_app:applocaldev@127.0.0.1:55432/hunterready" \
+DATABASE_APP_PASSWORD=applocaldev pnpm deploy:db
+```
+
+Both failure paths are worth confirming after any change to the orchestrator, because a deploy step
+that cannot fail is not a check:
+
+- unset `DATABASE_APP_PASSWORD` → step 3 must exit 1
+- give `DATABASE_URL` a wrong password → step 4 must exit 1
+
+`src/db/__tests__/repository.test.ts` skips itself when no database is reachable, so CI without one is
+not red for the wrong reason. Point `DATABASE_MIGRATION_URL` at the local container to run it.

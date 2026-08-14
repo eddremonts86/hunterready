@@ -15,7 +15,11 @@ coverage/
 # --- env ---
 .env
 .env.*
+# The templates are documentation and must be tracked. `.env.*` above swallows them, and
+# `.env.compose.example` was silently uncommitted until someone noticed the compose file referenced
+# variables nothing documented.
 !.env.example
+!.env.compose.example
 
 # --- os / editor ---
 .DS_Store
@@ -37,3 +41,6 @@ fixtures/private/
 .env
 .env.*
 accuracy-report.txt
+
+# Local compose values (real passwords). Only .env.compose.example is tracked.
+.env.compose.local
