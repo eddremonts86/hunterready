@@ -341,6 +341,42 @@ export function ReviewForm({
     onChange(next, shiftProvenance(provenance, list, resume[list].length, 1))
   }
 
+  /** The dynamic sections' own helpers. Separate from `addRow` — that one is typed to the fixed lists. */
+  const setCustomSection = (
+    at: number,
+    patch: Partial<Resume['custom'][number]>,
+  ) => {
+    const custom = resume.custom.map((section, i) =>
+      i === at ? { ...section, ...patch } : section,
+    )
+    onChange({ ...resume, custom })
+  }
+  const setCustomItem = (at: number, item: number, value: string) => {
+    const section = resume.custom[at]
+    if (section === undefined) return
+    setCustomSection(at, {
+      items: section.items.map((line, j) => (j === item ? value : line)),
+    })
+  }
+  const addCustomItem = (at: number) => {
+    const section = resume.custom[at]
+    if (section === undefined) return
+    setCustomSection(at, { items: [...section.items, ''] })
+  }
+  const removeCustomItem = (at: number, item: number) => {
+    const section = resume.custom[at]
+    if (section === undefined) return
+    setCustomSection(at, {
+      items: section.items.filter((_, j) => j !== item),
+    })
+  }
+  const removeCustomSection = (at: number) => {
+    onChange({
+      ...resume,
+      custom: resume.custom.filter((_, i) => i !== at),
+    })
+  }
+
   const removeRow = (
     list: 'work' | 'education' | 'skills',
     at: number,
@@ -850,6 +886,86 @@ export function ReviewForm({
           onClick={() => addRow('skills', { category: '', items: [] })}
         />
       </Section>
+
+      {/*
+        The dynamic sections — whatever this CV carries that the fixed groups do not.
+
+        A Danish CV arrives with KURSER and REFERENCER; others bring volunteering, awards, memberships,
+        publications, a driving licence, hobbies. `resume.custom` has always caught these and the
+        templates have always rendered them — but the Check panel silently skipped them, so the person
+        was shown "15 of 17 fields" while whole sections of their document had no place to be corrected
+        (Edd's screenshot: a red arrow from REFERENCER in the PDF to an empty spot in this panel).
+
+        One editor for all of them, because their shape is one shape: a title and its lines. No fixed
+        list of "allowed" section kinds — the headings are the candidate's, not ours, exactly like the
+        skills groups above.
+      */}
+      {resume.custom.map((section, i) => (
+        <Section
+          key={i}
+          title={section.title === '' ? 'Untitled section' : section.title}
+          count={section.items.length}
+          flagged={sectionFlagged(`custom.${i}`)}
+          defaultOpen={false}
+        >
+          <Field
+            label="Section heading"
+            value={section.title}
+            onChange={(title) => setCustomSection(i, { title })}
+            provenance={index.get(`custom.${i}.title`)}
+          />
+          {section.items.map((item, j) => (
+            <label key={j} className="flex flex-col gap-1.5">
+              <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
+                Line {j + 1}
+                <Flag entry={index.get(`custom.${i}.items.${j}`)} />
+              </span>
+              <div className="flex items-start gap-2">
+                <textarea
+                  value={item}
+                  rows={Math.min(4, Math.max(1, Math.ceil(item.length / 70)))}
+                  onChange={(event) => setCustomItem(i, j, event.target.value)}
+                  className={`${fieldClass(`custom.${i}.items.${j}`)} flex-1 resize-y leading-relaxed`}
+                />
+                <button
+                  type="button"
+                  aria-label={`Remove line ${j + 1} of ${section.title || 'this section'}`}
+                  onClick={() => removeCustomItem(i, j)}
+                  className="mt-1 rounded-field px-2 py-1 text-[13px] text-ink-soft transition-colors hover:bg-band hover:text-ink"
+                >
+                  ✕
+                </button>
+              </div>
+            </label>
+          ))}
+          <AddRow label="Add a line" onClick={() => addCustomItem(i)} />
+          <RemoveRow
+            label={`Remove the ${section.title || 'untitled'} section`}
+            onClick={() => removeCustomSection(i)}
+          />
+        </Section>
+      ))}
+
+      {/*
+        And a way to add a section that was never in the file at all — the person is the source of
+        truth about their own life, and "Volunteering" missing from the upload is not a reason it
+        cannot be on the document (docs/06: their own facts are not fabrication).
+      */}
+      <button
+        type="button"
+        onClick={() =>
+          onChange({
+            ...resume,
+            custom: [...resume.custom, { title: '', items: [''] }],
+          })
+        }
+        className="card flex w-full items-center justify-center gap-2 px-4 py-3 text-[14px] font-semibold text-signal transition-colors hover:bg-signal-wash"
+      >
+        + Add a section
+        <span className="text-[12px] font-normal text-ink-soft">
+          courses, volunteering, awards, references…
+        </span>
+      </button>
 
       <p className="text-meta text-ink-soft">
         Marked <span className="font-semibold text-caution">check</span> means

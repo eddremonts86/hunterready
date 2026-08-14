@@ -522,9 +522,20 @@ function HunterReady() {
   const consent = useProcessingConsent()
   const [rewrites, setRewrites] = useState<Array<BulletRewrite> | undefined>()
   const [rewriting, setRewriting] = useState(false)
-  /** Live progress of a rewrite pass: which job the model is on, and how many bullets are done. */
-  const [rewriteProgress, setRewriteProgress] = useState<
-    { done: number; total: number; company: string } | undefined
+  /**
+   * The visible checklist of a rewrite pass: every bullet named upfront, ticked green as the model
+   * finishes it. Edd's design, verbatim: "si ya sabes cuáles son los bullets, por qué no los muestras
+   * y vas marcando con un check verde cuando lo ejecutas".
+   */
+  const [rewriteChecklist, setRewriteChecklist] = useState<
+    | Array<{
+        workIndex: number
+        highlightIndex: number
+        company: string
+        text: string
+        status: 'pending' | 'working' | 'done' | 'failed'
+      }>
+    | undefined
   >()
   const [rewriteNote, setRewriteNote] = useState<string | undefined>()
   const [accepted, setAccepted] = useState<Set<string>>(new Set())
@@ -725,7 +736,7 @@ function HunterReady() {
    * polling — unlike a second streaming response — survives every proxy between a phone and the server.
    */
   useEffect(() => {
-    if (!busy) return
+    if (!busy && !targetBusy) return
     const timer = setInterval(() => {
       const id = progressIdRef.current
       if (id === undefined) return
@@ -750,7 +761,7 @@ function HunterReady() {
         })
     }, 700)
     return () => clearInterval(timer)
-  }, [busy])
+  }, [busy, targetBusy])
 
   const upload = useCallback(
     async (file: File) => {
@@ -831,43 +842,50 @@ function HunterReady() {
       if (loaded === undefined) return
       setRewriting(true)
       setRewriteNote(undefined)
-      setRewriteProgress(undefined)
 
       /**
-       * One request per job, not one per pass, and the reason is the person watching.
+       * One request per bullet, and every bullet on a visible checklist before the first call.
        *
-       * A whole-CV pass on the local model is minutes of silence — Edd's words: "es difícil esperar
-       * cinco minutos sin saber qué está pasando". Split per job, the pass reports which employer the
-       * model is reading right now, the counter moves with every finished chunk, and the suggestions
-       * appear in the list as they land instead of all at once at the end. The model does exactly the
-       * same work in the same order; only the silence is gone. Cancellation comes free too — leaving
-       * the workspace stops the loop at the next chunk boundary instead of wasting the rest of a pass.
+       * The person sees the whole queue upfront — each bullet named under its employer — and a green
+       * tick lands on each one as the model finishes it. The suggestions stream into the review list
+       * below at the same moments, readable and acceptable while the rest are still cooking. The model
+       * does the same work in the same order; only the silence is gone (Edd: "es difícil esperar cinco
+       * minutos sin saber qué está pasando").
+       *
+       * Per bullet rather than per job because the tick IS the product here: a six-bullet job that
+       * ticks once at the end is a half-minute of stillness. The rewrite cache makes re-runs cheap and
+       * the endpoint's own rate bucket absorbs the extra requests — they multiply HTTP calls, not
+       * model calls.
        */
-      const jobs = loaded.resume.work
-        .map((job, workIndex) => ({
+      const queue = loaded.resume.work.flatMap((job, workIndex) =>
+        job.highlights.map((text, highlightIndex) => ({
           workIndex,
+          highlightIndex,
           company: job.company,
-          targets: job.highlights.map((_, highlightIndex) => ({
-            workIndex,
-            highlightIndex,
-          })),
-        }))
-        .filter((job) => job.targets.length > 0)
-      const total = jobs.reduce((sum, job) => sum + job.targets.length, 0)
+          text,
+          status: 'pending' as const,
+        })),
+      )
+      setRewriteChecklist(queue.map((entry) => ({ ...entry })))
 
       const collected: Array<BulletRewrite> = []
       let failures = 0
-      // Reset the acceptances, but leave `rewrites` alone until the first chunk lands: the button
-      // panel with its live counter is the right screen while nothing has arrived yet.
+      // Reset the acceptances, but leave `rewrites` alone until the first result lands: the checklist
+      // is the right screen while nothing has arrived yet.
       setAccepted(new Set())
 
+      const mark = (
+        at: number,
+        status: 'pending' | 'working' | 'done' | 'failed',
+      ) => {
+        setRewriteChecklist((current) =>
+          current?.map((entry, i) => (i === at ? { ...entry, status } : entry)),
+        )
+      }
+
       try {
-        for (const job of jobs) {
-          setRewriteProgress({
-            done: collected.length,
-            total,
-            company: job.company,
-          })
+        for (const [at, target] of queue.entries()) {
+          mark(at, 'working')
           const response = await fetch('/api/rewrite', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -875,13 +893,19 @@ function HunterReady() {
               resume: loaded.resume,
               processing: consent.choice === 'granted' ? 'provider' : 'local',
               answers,
-              only: job.targets,
+              only: [
+                {
+                  workIndex: target.workIndex,
+                  highlightIndex: target.highlightIndex,
+                },
+              ],
             }),
           })
           const payload = (await response.json()) as Record<string, unknown>
 
           if (response.status === 429) {
             // The limiter is telling us to stop, so stop — keep what already arrived.
+            mark(at, 'failed')
             setRewriteNote(
               typeof payload.message === 'string'
                 ? payload.message
@@ -891,21 +915,18 @@ function HunterReady() {
           }
           if (!response.ok) {
             /*
-              One failed job does not throw away four good ones. Count it, keep going, and say at the
+              One failed bullet does not throw away the rest. Mark it amber, keep going, and say at the
               end how much was skipped — the pre-split behaviour lost the entire pass to one hiccup.
             */
-            failures += job.targets.length
+            failures++
+            mark(at, 'failed')
             continue
           }
           const chunk =
             (payload.rewrites as Array<BulletRewrite> | undefined) ?? []
           collected.push(...chunk)
           setRewrites([...collected])
-          setRewriteProgress({
-            done: collected.length,
-            total,
-            company: job.company,
-          })
+          mark(at, 'done')
         }
 
         if (failures > 0) {
@@ -923,7 +944,7 @@ function HunterReady() {
         }
       } finally {
         setRewriting(false)
-        setRewriteProgress(undefined)
+        setRewriteChecklist(undefined)
       }
     },
     [loaded, consent.choice],
@@ -972,6 +993,10 @@ function HunterReady() {
       setTargetBusy(true)
       setTargetError(undefined)
       setAdvertText(advert)
+      // The same narrated-wait channel as the upload: the advert read is one or two model calls,
+      // and on the local model that is long enough to deserve names on its stages.
+      progressIdRef.current = crypto.randomUUID()
+      setStages([])
       try {
         const response = await fetch('/api/target', {
           method: 'POST',
@@ -980,6 +1005,7 @@ function HunterReady() {
             advert,
             resume: loaded.resume,
             processing: consent.choice === 'granted' ? 'provider' : 'local',
+            progress: progressIdRef.current,
           }),
         })
         const payload = (await response.json()) as Record<string, unknown>
@@ -1480,6 +1506,7 @@ function HunterReady() {
                   <AdvertForm
                     busy={targetBusy}
                     error={targetError}
+                    stages={stages}
                     onSubmit={(advert) => void targetJob(advert)}
                   />
                 </div>
@@ -1866,33 +1893,140 @@ function HunterReady() {
                           working="Reading your bullets…"
                         />
                       </button>
-                      {rewriting && (
+                      {rewriting && rewriteChecklist === undefined && (
                         <span
                           role="status"
                           className="text-meta leading-relaxed text-ink-soft"
                         >
-                          {rewriteProgress === undefined
-                            ? 'One pass over every bullet — the longer your history, the longer this takes.'
-                            : `${rewriteProgress.done} of ${rewriteProgress.total} bullets · now reading ${rewriteProgress.company}`}
+                          One pass over every bullet — the longer your history,
+                          the longer this takes.
                         </span>
+                      )}
+                      {rewriteChecklist !== undefined && (
+                        <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-field border border-hairline bg-ground px-3 py-2.5">
+                          {/*
+                            Every bullet named before the first model call, ticked green as each one
+                            finishes. The queue is the progress bar — no percentage can lie about what
+                            is left when what is left is listed.
+                          */}
+                          {rewriteChecklist.map((entry, i) => {
+                            const previous = rewriteChecklist[i - 1]
+                            const showCompany =
+                              previous === undefined ||
+                              previous.company !== entry.company
+                            return (
+                              <div key={i} className="flex flex-col gap-1">
+                                {showCompany && (
+                                  <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-faint first:mt-0">
+                                    {entry.company}
+                                  </span>
+                                )}
+                                <span className="flex items-start gap-2">
+                                  {entry.status === 'done' ? (
+                                    <svg
+                                      aria-hidden
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2.6"
+                                      strokeLinecap="round"
+                                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-affirm"
+                                    >
+                                      <path d="m5 12.5 4.5 4.5L19 7" />
+                                    </svg>
+                                  ) : entry.status === 'working' ? (
+                                    <Spinner className="mt-0.5 h-3 w-3 shrink-0 text-signal" />
+                                  ) : entry.status === 'failed' ? (
+                                    <span
+                                      aria-label="skipped"
+                                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-center text-[11px] font-bold leading-none text-caution"
+                                    >
+                                      !
+                                    </span>
+                                  ) : (
+                                    <span
+                                      aria-hidden
+                                      className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full border border-hairline-strong"
+                                    />
+                                  )}
+                                  <span
+                                    className={`line-clamp-1 text-[12px] leading-relaxed ${
+                                      entry.status === 'done'
+                                        ? 'text-ink-faint'
+                                        : 'text-ink-soft'
+                                    }`}
+                                  >
+                                    {entry.text}
+                                  </span>
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
                       )}
                     </div>
                   ) : (
                     <div className="flex flex-col gap-2">
-                      {rewriting && rewriteProgress !== undefined && (
-                        <div
-                          role="status"
-                          className="flex items-center gap-2 rounded-field border border-hairline bg-ground px-3 py-2"
-                        >
-                          <Spinner className="h-3.5 w-3.5 shrink-0 text-signal" />
+                      {rewriteChecklist !== undefined && (
+                        <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-field border border-hairline bg-ground px-3 py-2.5">
                           {/*
-                            The suggestions below appear as each job finishes — the person can start
-                            reading and accepting while the model is still working on the next one.
+                            Every bullet named before the first model call, ticked green as each one
+                            finishes. The queue is the progress bar — no percentage can lie about what
+                            is left when what is left is listed.
                           */}
-                          <span className="text-[13px] text-ink-soft">
-                            {rewriteProgress.done} of {rewriteProgress.total}{' '}
-                            bullets · now reading {rewriteProgress.company}
-                          </span>
+                          {rewriteChecklist.map((entry, i) => {
+                            const previous = rewriteChecklist[i - 1]
+                            const showCompany =
+                              previous === undefined ||
+                              previous.company !== entry.company
+                            return (
+                              <div key={i} className="flex flex-col gap-1">
+                                {showCompany && (
+                                  <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-faint first:mt-0">
+                                    {entry.company}
+                                  </span>
+                                )}
+                                <span className="flex items-start gap-2">
+                                  {entry.status === 'done' ? (
+                                    <svg
+                                      aria-hidden
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2.6"
+                                      strokeLinecap="round"
+                                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-affirm"
+                                    >
+                                      <path d="m5 12.5 4.5 4.5L19 7" />
+                                    </svg>
+                                  ) : entry.status === 'working' ? (
+                                    <Spinner className="mt-0.5 h-3 w-3 shrink-0 text-signal" />
+                                  ) : entry.status === 'failed' ? (
+                                    <span
+                                      aria-label="skipped"
+                                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-center text-[11px] font-bold leading-none text-caution"
+                                    >
+                                      !
+                                    </span>
+                                  ) : (
+                                    <span
+                                      aria-hidden
+                                      className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full border border-hairline-strong"
+                                    />
+                                  )}
+                                  <span
+                                    className={`line-clamp-1 text-[12px] leading-relaxed ${
+                                      entry.status === 'done'
+                                        ? 'text-ink-faint'
+                                        : 'text-ink-soft'
+                                    }`}
+                                  >
+                                    {entry.text}
+                                  </span>
+                                </span>
+                              </div>
+                            )
+                          })}
                         </div>
                       )}
                       <RewriteReview

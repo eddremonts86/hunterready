@@ -247,10 +247,13 @@ function FixList({ findings }: { findings: Array<Finding> }) {
 export function AdvertForm({
   busy,
   error,
+  stages,
   onSubmit,
 }: {
   busy: boolean
   error?: string
+  /** The narrated wait — the server's own stage list, same channel as the upload screen. */
+  stages?: Array<{ label: string; detail?: string; done: boolean }>
   onSubmit: (advert: string) => void
 }) {
   const [text, setText] = useState('')
@@ -294,6 +297,39 @@ export function AdvertForm({
         >
           {busy ? 'Reading the advert…' : 'See how you match'}
         </button>
+        {busy && stages !== undefined && stages.length > 0 && (
+          <ol className="flex flex-col gap-1.5">
+            {stages.map((stage, index) => (
+              <li key={index} className="flex items-center gap-2 text-[13px]">
+                {stage.done ? (
+                  <svg
+                    aria-hidden
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    className="h-3.5 w-3.5 shrink-0 text-affirm"
+                  >
+                    <path d="m5 12.5 4.5 4.5L19 7" />
+                  </svg>
+                ) : (
+                  <span
+                    aria-hidden
+                    className="h-3 w-3 shrink-0 animate-spin rounded-full border-[1.5px] border-signal border-t-transparent"
+                    data-motion="essential"
+                  />
+                )}
+                <span
+                  className={stage.done ? 'text-ink-faint' : 'text-ink-soft'}
+                >
+                  {stage.label}
+                  {stage.detail === undefined ? '' : ` — ${stage.detail}`}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
         {!enough && text.trim() !== '' && (
           <span className="text-[13px] text-ink-soft">
             A little more of it, and we can work with this.
