@@ -15,15 +15,28 @@
  *    yet. A rights section that only appears once you have something to lose reads as a trap.
  */
 import { useState } from 'react'
+import { ButtonLabel } from '@/components/working'
 
-type State = 'idle' | 'working' | 'confirming' | 'done' | 'none' | 'error'
+/**
+ * `exporting` and `deleting` rather than one `working`, and the distinction is not cosmetic.
+ *
+ * With a single `working`, pressing "Yes, delete all of it" moved the state out of `confirming`, which
+ * removed the confirmation view and replaced it with the two idle buttons, greyed out and silent. The
+ * screen looked like the dialog had been dismissed at the exact moment the only irreversible operation
+ * in the product had in fact just started. TypeScript is what surfaced it: a `state === 'working'` check
+ * inside the `confirming` branch is unreachable, because the two states were mutually exclusive.
+ *
+ * Naming the operation lets the confirmation stay on screen and say what it is doing.
+ */
+type State =
+  'idle' | 'exporting' | 'deleting' | 'confirming' | 'done' | 'none' | 'error'
 
 export function AccountControls() {
   const [state, setState] = useState<State>('idle')
   const [message, setMessage] = useState<string | undefined>()
 
   const exportEverything = async () => {
-    setState('working')
+    setState('exporting')
     setMessage(undefined)
     try {
       const response = await fetch('/api/account/export')
@@ -51,7 +64,8 @@ export function AccountControls() {
   }
 
   const deleteEverything = async () => {
-    setState('working')
+    setState('deleting')
+    setMessage(undefined)
     try {
       const response = await fetch('/api/account/delete', { method: 'POST' })
       if (response.status === 404) {
@@ -73,7 +87,12 @@ export function AccountControls() {
     <div className="card flex flex-col gap-4 p-5">
       <h2 className="text-title text-ink">Your data</h2>
 
-      {state === 'confirming' ? (
+      {/*
+        The confirmation stays on screen while the deletion runs. It used to leave the moment the request
+        started, which put the idle buttons back in front of somebody who had just pressed the only
+        irreversible button in the product — indistinguishable from having cancelled.
+      */}
+      {state === 'confirming' || state === 'deleting' ? (
         <div className="flex flex-col gap-3">
           {/*
             Names what goes, rather than asking "are you sure?". A confirmation that repeats the
@@ -92,13 +111,24 @@ export function AccountControls() {
           <div className="flex flex-col gap-2 sm:flex-row">
             <button
               type="button"
+              disabled={state === 'deleting'}
+              aria-busy={state === 'deleting'}
               onClick={() => void deleteEverything()}
               className="btn flex-1 bg-alert px-4 py-2.5 text-[14px] text-white hover:bg-alert/90"
             >
-              Yes, delete all of it
+              <ButtonLabel
+                busy={state === 'deleting'}
+                idle="Yes, delete all of it"
+                working="Deleting…"
+              />
             </button>
+            {/*
+              Disabled too, once the deletion is running. "Keep my data" is a promise this button can no
+              longer keep at that point, and offering it would be worse than removing it.
+            */}
             <button
               type="button"
+              disabled={state === 'deleting'}
               onClick={() => setState('idle')}
               className="btn btn-quiet flex-1 px-4 py-2.5 text-[14px]"
             >
@@ -110,15 +140,25 @@ export function AccountControls() {
         <div className="flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
-            disabled={state === 'working'}
+            disabled={state === 'exporting'}
+            aria-busy={state === 'exporting'}
             onClick={() => void exportEverything()}
             className="btn btn-quiet flex-1 px-4 py-2.5 text-[14px]"
           >
-            Download everything we hold
+            {/*
+              An export gathers every stored CV, every variant and every application row and serialises
+              them, so it is the slowest of the two — and the label used to stay unchanged while it ran,
+              which reads as a button that swallowed the click.
+            */}
+            <ButtonLabel
+              busy={state === 'exporting'}
+              idle="Download everything we hold"
+              working="Putting it together…"
+            />
           </button>
           <button
             type="button"
-            disabled={state === 'working'}
+            disabled={state === 'exporting'}
             onClick={() => setState('confirming')}
             className="btn btn-quiet flex-1 px-4 py-2.5 text-[14px]"
           >

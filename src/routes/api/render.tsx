@@ -15,6 +15,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createFileRoute } from '@tanstack/react-router'
+import { errorEvent } from '@/lib/log'
 import { Resume } from '@/schema/resume'
 import { renderResume } from '@/render/render'
 import { docxFilename, renderDocx } from '@/render/docx/docx'
@@ -132,28 +133,74 @@ export const Route = createFileRoute('/api/render')({
         const parsed = Resume.safeParse(body)
 
         if (!parsed.success) {
+          /**
+           * A sentence, and no `issues` array.
+           *
+           * The issues used to be returned verbatim. Nobody read them — the client had no way to show
+           * anything, because a form POST navigated into the response — and a zod issue names the field
+           * path it rejected and can quote what it received, which is CV content travelling in a
+           * response body (docs/07). Now that the client *does* display `message`, the useful half is
+           * the sentence and the risky half was never being used.
+           */
           return Response.json(
-            { error: 'invalid_resume', issues: parsed.error.issues },
+            {
+              error: 'invalid_resume',
+              message:
+                'That CV is missing something we need in order to lay it out. Go back a step and check the details we read.',
+            },
             { status: 422 },
           )
         }
 
-        if (wantsDocx(url)) {
-          return docxResponse(
-            renderDocx(parsed.data),
-            docxFilename(parsed.data),
+        /**
+         * The render is wrapped, and this is not defensive habit — it is the failure mode this project
+         * has actually shipped. The Block 1 WASM bug (ADR-005) threw here in production, and an
+         * unhandled throw becomes the framework's 500 page. That was survivable when nothing depended
+         * on the shape of the failure; it stopped being survivable the moment the client started
+         * showing the message, and it was never survivable while the download was a form POST, because
+         * the browser navigated to the error and the person lost every correction they had made.
+         *
+         * The `message` is a sentence, not a stack. `renderResume` failures name fonts, glyphs and file
+         * paths, and a CV's own text can reach the exception — docs/07 forbids CV content in any
+         * response, log or error.
+         */
+        try {
+          if (wantsDocx(url)) {
+            return docxResponse(
+              renderDocx(parsed.data),
+              docxFilename(parsed.data),
+            )
+          }
+
+          const { bytes, filename } = await renderResume(
+            parsed.data,
+            readSelection(url),
+          )
+          return pdfResponse(
+            bytes,
+            filename,
+            url.searchParams.get('download') === '1',
+          )
+        } catch (error) {
+          /**
+           * The class name, never the message. `renderResume` failures quote the text they could not
+           * lay out, which means the message can carry a line of somebody's CV straight into the log —
+           * the one thing docs/07 forbids without exception. A constructor name is a bounded vocabulary
+           * and `code` is on the log's allowlist for exactly this kind of value.
+           */
+          errorEvent('render.failed', {
+            format: wantsDocx(url) ? 'docx' : 'pdf',
+            code: error instanceof Error ? error.constructor.name : 'unknown',
+          })
+          return Response.json(
+            {
+              error: 'render_failed',
+              message:
+                'We could not build the file just now. Your CV is unchanged — please try again.',
+            },
+            { status: 500 },
           )
         }
-
-        const { bytes, filename } = await renderResume(
-          parsed.data,
-          readSelection(url),
-        )
-        return pdfResponse(
-          bytes,
-          filename,
-          url.searchParams.get('download') === '1',
-        )
       },
     },
   },

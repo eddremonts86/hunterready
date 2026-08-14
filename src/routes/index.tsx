@@ -32,6 +32,8 @@ import { Reveal } from '@/components/reveal'
 import { ReviewForm } from '@/components/review-form'
 import { keyOf, RewriteReview } from '@/components/rewrite-review'
 import { AdvertForm, TargetPanel } from '@/components/target-panel'
+import { ButtonLabel, Spinner } from '@/components/working'
+import { DownloadFailed, saveRendered } from '@/lib/download'
 import type {
   AdvertReadingResult,
   CoverLetterOffer,
@@ -265,31 +267,74 @@ function StepBar({
 /**
  * POSTs the edited resume so the download is what the user is looking at, not a fixture.
  *
- * A form POST rather than `fetch` plus a blob URL, because it lets the browser stream the file straight
- * to disk instead of holding a CV in a JavaScript variable first.
- *
  * `format` is `'docx'` for the Word export (v0.6). Template and theme are still sent and the server
  * ignores them for `.docx`: there is one ATS-safe Word layout, and passing the user's design choice into
  * a format that cannot honour it would be a promise made in the query string.
+ *
+ * This used to build a hidden form and submit it. `src/lib/download.ts` carries the full reason it does
+ * not any more; the short version is that a form POST is a navigation, so a failed render replaced the
+ * page and took every unsaved correction with it.
  */
-function downloadDocument(
+async function downloadDocument(
   resume: Resume,
   templateId: TemplateId,
   themeId: ThemeId,
   format: 'pdf' | 'docx' = 'pdf',
-) {
-  const form = document.createElement('form')
-  form.method = 'POST'
-  form.action = `/api/render?template=${templateId}&theme=${themeId}&download=1&format=${format}`
-  form.style.display = 'none'
-  const input = document.createElement('input')
-  input.type = 'hidden'
-  input.name = 'resume'
-  input.value = JSON.stringify(resume)
-  form.appendChild(input)
-  document.body.appendChild(form)
-  form.submit()
-  form.remove()
+): Promise<void> {
+  await saveRendered(
+    `/api/render?template=${templateId}&theme=${themeId}&download=1&format=${format}`,
+    resume,
+    `CV.${format}`,
+  )
+}
+
+/**
+ * The two download buttons, their busy state and their failure message.
+ *
+ * Per format rather than one flag, because both buttons are on screen together: a single `busy` would
+ * grey out the Word button while the PDF is rendering and leave the person unable to tell which one
+ * they had pressed.
+ *
+ * ## On the flash, which is deliberate
+ *
+ * Measured on a warm server, a PDF render answers in about 50ms, so the spinner appears and vanishes
+ * inside two frames. The usual remedy is to delay showing it by 150ms or so, and it is the wrong one
+ * here: it would mean a fast render shows *nothing at all*, which is the state this exists to remove.
+ * A download has no other completion signal on the page — the browser's own indicator is not on every
+ * platform and not in every window — and the same button also serves the cold first render and a loaded
+ * production box, where the wait is seconds. A brief flash is the cost of never being silent.
+ */
+function useDownloads() {
+  const [format, setFormat] = useState<'pdf' | 'docx' | undefined>()
+  const [failure, setFailure] = useState<string | undefined>()
+
+  const start = useCallback(
+    async (
+      resume: Resume,
+      templateId: TemplateId,
+      themeId: ThemeId,
+      wanted: 'pdf' | 'docx' = 'pdf',
+    ) => {
+      // Two clicks would build the same document twice and save two copies to Downloads.
+      if (format !== undefined) return
+      setFormat(wanted)
+      setFailure(undefined)
+      try {
+        await downloadDocument(resume, templateId, themeId, wanted)
+      } catch (error) {
+        setFailure(
+          error instanceof DownloadFailed
+            ? error.message
+            : 'Something went wrong building the file. Your CV is still here — try again.',
+        )
+      } finally {
+        setFormat(undefined)
+      }
+    },
+    [format],
+  )
+
+  return { busyFormat: format, failure, start }
 }
 
 /**
@@ -379,6 +424,7 @@ function HunterReady() {
    * targeting panel — and `Library` holding it privately duplicated the base CV on every application.
    */
   const [savedResumeId, setSavedResumeId] = useState<string | undefined>()
+  const downloads = useDownloads()
 
   const upload = useCallback(
     async (file: File) => {
@@ -638,17 +684,7 @@ function HunterReady() {
               aria-live="polite"
             >
               <span className="flex h-16 w-16 items-center justify-center rounded-full bg-signal-wash text-signal">
-                <svg
-                  aria-hidden
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  className="h-7 w-7 animate-spin"
-                >
-                  <path d="M12 3a9 9 0 1 0 9 9" />
-                </svg>
+                <Spinner className="h-7 w-7" />
               </span>
 
               <div className="flex flex-col gap-3">
@@ -666,7 +702,10 @@ function HunterReady() {
                 aria-hidden
                 className="h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-band"
               >
-                <div className="indeterminate h-full w-1/3 rounded-full bg-signal" />
+                <div
+                  data-motion="essential"
+                  className="indeterminate h-full w-1/3 rounded-full bg-signal"
+                />
               </div>
 
               <p className="text-meta text-ink-soft">
@@ -1065,28 +1104,20 @@ function HunterReady() {
                       }
                     }}
                     /*
-                      A form POST so the browser streams the file to disk, and the *edited* text is what
-                      is sent — re-drafting here would quietly throw away their wording.
+                      The *edited* text is what is sent — re-drafting here would quietly throw away
+                      their wording.
+
+                      Not a form POST any more, for the reason in `src/lib/download.ts`, and the letter
+                      is where that mattered most: it is the one document on screen that the candidate
+                      has been writing by hand, and a navigation away from this panel discarded it.
                     */
-                    onDownloadLetter={(text) => {
-                      const form = document.createElement('form')
-                      form.method = 'POST'
-                      form.action = '/api/render-letter'
-                      form.style.display = 'none'
-                      for (const [name, value] of [
-                        ['resume', JSON.stringify(loaded.resume)],
-                        ['letter', text],
-                      ]) {
-                        const input = document.createElement('input')
-                        input.type = 'hidden'
-                        input.name = name
-                        input.value = value
-                        form.appendChild(input)
-                      }
-                      document.body.appendChild(form)
-                      form.submit()
-                      form.remove()
-                    }}
+                    onDownloadLetter={(text) =>
+                      saveRendered(
+                        '/api/render-letter',
+                        { resume: loaded.resume, letter: text },
+                        'Cover-letter.docx',
+                      )
+                    }
                     onSaveApplication={async ({
                       variant,
                       role,
@@ -1142,15 +1173,29 @@ function HunterReady() {
                 </span>
                 <button
                   type="button"
+                  disabled={downloads.busyFormat !== undefined}
+                  aria-busy={downloads.busyFormat === 'pdf'}
                   onClick={() =>
-                    downloadDocument(loaded.resume, templateId, themeId)
+                    void downloads.start(loaded.resume, templateId, themeId)
                   }
                   className="btn btn-quiet px-3.5 py-1.5 text-[13px]"
                 >
-                  <Icon name="download" className="h-4 w-4" />
-                  Download
+                  {downloads.busyFormat === 'pdf' ? (
+                    <Spinner className="h-4 w-4" />
+                  ) : (
+                    <Icon name="download" className="h-4 w-4" />
+                  )}
+                  {downloads.busyFormat === 'pdf' ? 'Building…' : 'Download'}
                 </button>
               </div>
+              {downloads.failure !== undefined && (
+                <p
+                  role="status"
+                  className="border-b border-alert/25 bg-alert-wash px-4 py-2 text-[13px] leading-relaxed text-ink"
+                >
+                  {downloads.failure}
+                </p>
+              )}
               <PaperPreview
                 resume={loaded.resume}
                 theme={theme}
@@ -1200,11 +1245,21 @@ function HunterReady() {
           */}
           <button
             type="button"
-            onClick={() => downloadDocument(loaded.resume, templateId, themeId)}
+            disabled={downloads.busyFormat !== undefined}
+            aria-busy={downloads.busyFormat === 'pdf'}
+            onClick={() =>
+              void downloads.start(loaded.resume, templateId, themeId)
+            }
             className="btn btn-primary px-6 py-3 text-[15px]"
           >
-            <Icon name="download" className="h-[18px] w-[18px]" />
-            Download the PDF
+            {downloads.busyFormat === 'pdf' ? (
+              <Spinner className="h-[18px] w-[18px]" />
+            ) : (
+              <Icon name="download" className="h-[18px] w-[18px]" />
+            )}
+            {downloads.busyFormat === 'pdf'
+              ? 'Building your PDF…'
+              : 'Download the PDF'}
           </button>
           {/*
             Word, beside the PDF rather than hidden behind a menu — v0.6.
@@ -1215,15 +1270,35 @@ function HunterReady() {
           */}
           <button
             type="button"
+            disabled={downloads.busyFormat !== undefined}
+            aria-busy={downloads.busyFormat === 'docx'}
             onClick={() =>
-              downloadDocument(loaded.resume, templateId, themeId, 'docx')
+              void downloads.start(loaded.resume, templateId, themeId, 'docx')
             }
             title="For portals that ask for a Word file"
             className="btn btn-quiet px-4 py-3 text-[14px]"
           >
-            Word (.docx)
+            <ButtonLabel
+              busy={downloads.busyFormat === 'docx'}
+              idle="Word (.docx)"
+              working="Building…"
+            />
           </button>
         </div>
+
+        {/*
+          The failure, in words, where the button is — and the page is still standing to show it.
+          That is the whole difference: this message could not have existed while the download was a
+          form POST, because a failed render navigated away from the screen that would have carried it.
+        */}
+        {downloads.failure !== undefined && (
+          <p
+            role="status"
+            className="rounded-field border border-alert/25 bg-alert-wash px-3.5 py-2.5 text-[14px] leading-relaxed text-ink"
+          >
+            {downloads.failure}
+          </p>
+        )}
 
         <div className="flex flex-1 flex-col gap-5 lg:min-h-0 lg:flex-row">
           {/* What changes the document, and what still needs checking. */}
@@ -1268,16 +1343,27 @@ function HunterReady() {
               </div>
 
               {rewrites === undefined ? (
-                <button
-                  type="button"
-                  disabled={rewriting}
-                  onClick={() => void askForRewrites()}
-                  className="btn btn-quiet px-4 py-2.5 text-[14px]"
-                >
-                  {rewriting
-                    ? 'Reading your bullets…'
-                    : 'Suggest better wording'}
-                </button>
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    disabled={rewriting}
+                    aria-busy={rewriting}
+                    onClick={() => void askForRewrites()}
+                    className="btn btn-quiet px-4 py-2.5 text-[14px]"
+                  >
+                    <ButtonLabel
+                      busy={rewriting}
+                      idle="Suggest better wording"
+                      working="Reading your bullets…"
+                    />
+                  </button>
+                  {rewriting && (
+                    <span className="text-meta leading-relaxed text-ink-soft">
+                      One pass over every bullet — the longer your history, the
+                      longer this takes.
+                    </span>
+                  )}
+                </div>
               ) : (
                 <RewriteReview
                   rewrites={rewrites}
@@ -1285,6 +1371,7 @@ function HunterReady() {
                   onAccept={acceptRewrite}
                   onDismiss={dismissRewrite}
                   onAnswer={(answers) => void askForRewrites(answers)}
+                  busy={rewriting}
                 />
               )}
 

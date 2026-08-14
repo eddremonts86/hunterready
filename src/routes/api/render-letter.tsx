@@ -10,6 +10,7 @@
  * indistinguishable from a bug.
  */
 import { createFileRoute } from '@tanstack/react-router'
+import { errorEvent } from '@/lib/log'
 import { Resume } from '@/schema/resume'
 import { letterFilename, renderLetterDocx } from '@/render/docx/docx'
 
@@ -60,20 +61,43 @@ export const Route = createFileRoute('/api/render-letter')({
           )
         }
 
-        const bytes = renderLetterDocx(
-          letter.slice(0, MAX_LETTER_CHARS),
-          parsed.data,
-        )
+        /**
+         * Wrapped for the same reason as `/api/render`: an unhandled throw here becomes the framework's
+         * 500 page, and the client now shows the message instead of navigating into it. The letter is
+         * the worst thing to lose this way — it is the one document the candidate has been editing by
+         * hand, and nothing has stored their edits.
+         *
+         * The class name only, never the message: a letter is nothing but the candidate's own words.
+         */
+        try {
+          const bytes = renderLetterDocx(
+            letter.slice(0, MAX_LETTER_CHARS),
+            parsed.data,
+          )
 
-        return new Response(bytes as unknown as BodyInit, {
-          headers: {
-            'content-type':
-              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'content-disposition': `attachment; filename="${letterFilename(parsed.data)}"`,
-            // A letter names the candidate and the employer; no intermediary should keep a copy.
-            'cache-control': 'no-store',
-          },
-        })
+          return new Response(bytes as unknown as BodyInit, {
+            headers: {
+              'content-type':
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'content-disposition': `attachment; filename="${letterFilename(parsed.data)}"`,
+              // A letter names the candidate and the employer; no intermediary should keep a copy.
+              'cache-control': 'no-store',
+            },
+          })
+        } catch (error) {
+          errorEvent('render_letter.failed', {
+            format: 'docx',
+            code: error instanceof Error ? error.constructor.name : 'unknown',
+          })
+          return Response.json(
+            {
+              error: 'render_failed',
+              message:
+                'We could not build the letter just now. Your text is unchanged — please try again.',
+            },
+            { status: 500 },
+          )
+        }
       },
     },
   },
