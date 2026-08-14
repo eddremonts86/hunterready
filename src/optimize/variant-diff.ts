@@ -165,18 +165,31 @@ export function diffResumes(before: Resume, after: Resume): Array<Change> {
   return changes
 }
 
-/** One line a person can read: "6 changes — 4 bullets reworded, 2 reordered." */
-export function summarizeChanges(changes: Array<Change>): string {
-  if (changes.length === 0) return 'Nothing changed.'
+/**
+ * The breakdown without a total: "4 reworded, 2 reordered".
+ *
+ * Split out from `summarizeChanges` because the before-and-after view shows the total as a figure in its
+ * own right, and a sentence that leads with the count again reads as a stutter — "1 change since you
+ * uploaded it. 1 change — 1 reworded." One implementation, so the two places cannot start disagreeing
+ * about what counts as what.
+ */
+export function changeBreakdown(changes: Array<Change>): string {
   const counts = changes.reduce<Record<ChangeKind, number>>(
     (acc, change) => ({ ...acc, [change.kind]: (acc[change.kind] ?? 0) + 1 }),
     { added: 0, removed: 0, changed: 0, reordered: 0 },
   )
-  const parts = [
+  return [
     counts.changed > 0 ? `${counts.changed} reworded` : undefined,
     counts.reordered > 0 ? `${counts.reordered} reordered` : undefined,
     counts.added > 0 ? `${counts.added} added` : undefined,
     counts.removed > 0 ? `${counts.removed} removed` : undefined,
-  ].filter((part): part is string => part !== undefined)
-  return `${changes.length} ${changes.length === 1 ? 'change' : 'changes'} — ${parts.join(', ')}.`
+  ]
+    .filter((part): part is string => part !== undefined)
+    .join(', ')
+}
+
+/** One line a person can read: "6 changes — 4 bullets reworded, 2 reordered." */
+export function summarizeChanges(changes: Array<Change>): string {
+  if (changes.length === 0) return 'Nothing changed.'
+  return `${changes.length} ${changes.length === 1 ? 'change' : 'changes'} — ${changeBreakdown(changes)}.`
 }

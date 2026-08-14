@@ -32,6 +32,7 @@ import { Reveal } from '@/components/reveal'
 import { ReviewForm } from '@/components/review-form'
 import { keyOf, RewriteReview } from '@/components/rewrite-review'
 import { AdvertForm, TargetPanel } from '@/components/target-panel'
+import { BeforeAfter } from '@/components/before-after'
 import { ButtonLabel, Spinner } from '@/components/working'
 import { DownloadFailed, saveRendered } from '@/lib/download'
 import type {
@@ -39,6 +40,7 @@ import type {
   CoverLetterOffer,
 } from '@/components/target-panel'
 import type { BulletRewrite } from '@/optimize/rewrite'
+import { diffResumes } from '@/optimize/variant-diff'
 import { Resume } from '@/schema/resume'
 import type { FieldProvenance } from '@/schema/provenance'
 import { needsReview } from '@/schema/provenance'
@@ -53,6 +55,18 @@ export const Route = createFileRoute('/')({ component: HunterReady })
 
 interface Loaded {
   resume: Resume
+  /**
+   * The CV exactly as it arrived, never written to again.
+   *
+   * Kept so "before and after" has a *before*. Until now there was none: `resume` is edited in place by
+   * every correction, every accepted rewrite and every tailoring pass, so by the time somebody had
+   * something to be pleased about, the thing they started with was gone.
+   *
+   * It is the as-ingested document rather than "one step ago", because the achievement being shown is
+   * the whole distance travelled — the file they had on disk against the file they are about to send.
+   * An undo history is a different feature and would answer a different question.
+   */
+  original: Resume
   provenance: Array<FieldProvenance>
   warnings: Array<string>
   method: 'llm' | 'local' | 'rules'
@@ -179,22 +193,29 @@ function Wordmark({ className = 'text-[17px]' }: { className?: string }) {
 }
 
 /**
- * Step chrome: a hairline rail that fills, and a counter.
+ * The header: a way back, the wordmark, and whatever the screen wants on the right.
  *
- * The counter is the honest part. The reference shows "9/20" through a twenty-screen questionnaire;
- * this flow has three stations and says so, because a progress bar that overstates what is left is
- * the same lie as one that understates it.
+ * ## The step counter is gone, and it should never have shipped
+ *
+ * It read `n/3` for Upload → Check → Download, and **no screen was ever step 3**. Downloading is a file
+ * save, not a station, so the rail sat permanently at 66% and the counter permanently said "2 of 3" —
+ * promising a place nobody arrives at. Edd asked the question that settles it: *"en algún momento
+ * llegamos al 3/3?"* No.
+ *
+ * The counter was written to be the honest alternative to the reference's "9/20" through a twenty-screen
+ * questionnaire, and DESIGN.md argued for it in exactly those terms: *"a progress bar that overstates
+ * what is left is the same lie as one that understates it."* A bar frozen at two thirds understates,
+ * every time, on the screen where the work is actually finished. The rule was right and the
+ * implementation was on the wrong side of it.
+ *
+ * There is also nothing left to count. The tabs collapsed the flow into one workspace: there is a
+ * landing page and there is the CV, and a progression indicator over two screens is furniture.
  */
 function StepBar({
-  step,
-  total,
   onBack,
   backLabel = 'Start over',
   right,
 }: {
-  /** Omitted on the landing page: see below. */
-  step?: number
-  total?: number
   onBack?: () => void
   /**
    * What the arrow does, for a screen reader. Named per screen because it differs: from the check step
@@ -203,34 +224,17 @@ function StepBar({
   backLabel?: string
   right?: React.ReactNode
 }) {
-  /*
-    The rail and the counter appear only once the person has actually started.
-
-    They were on the landing page first, showing a filled 1/3 before anyone had done anything, and
-    that is the same overstatement the counter exists to avoid — progress you have not made is not
-    progress. So the landing gets a plain header, and the rail appears at the consent step, which is
-    the first screen where there is something to be one-third of the way through.
-  */
-  const showRail = step !== undefined && total !== undefined
-
   return (
     <header className="sticky top-0 z-20 border-b border-hairline bg-ground/95 backdrop-blur">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         {/*
-          Two headers, one component. In a step the wordmark is centred between a back arrow and the
-          counter, which is the reference's arrangement and the right one when the chrome's job is to
-          say where you are. On the landing page there is no step to centre against, and a centred
-          wordmark with only a link on the right reads as mis-aligned rather than as centred — so it
-          goes left, where a landing page's mark belongs.
-        */}
-        {/*
           Always available, never warned about: nothing in this product is destructive.
 
-          Drawn in both arrangements. It used to live inside the counter branch, which meant a screen
-          without a step number — the targeting branch — silently lost its only way back and stranded
-          the user there. The back affordance has nothing to do with whether there is a counter.
+          Drawn independently of anything else in the header. It used to live inside the counter's
+          branch, which meant a screen without a step number — the targeting branch — silently lost its
+          only way back and stranded the user there.
         */}
-        {onBack !== undefined ? (
+        {onBack !== undefined && (
           <button
             type="button"
             onClick={onBack}
@@ -239,27 +243,21 @@ function StepBar({
           >
             <Icon name="arrow-left" />
           </button>
-        ) : (
-          showRail && <span className="w-9" />
         )}
         <Wordmark />
-        {showRail ? (
-          <span className="tally rounded-full border border-hairline px-2.5 py-1 text-[12px] font-semibold text-ink-soft">
-            {step}/{total}
-          </span>
-        ) : (
-          right
-        )}
+        {/*
+          A counterweight, so the wordmark is centred between two things rather than shoved to one side
+          by `justify-between`. Removing the step counter took the right-hand element away and left the
+          mark 493px off centre — measured, because a centred logo is the sort of thing the eye notices
+          without being able to say why.
+
+          `w-9` matches the back arrow exactly. Empty rather than a spacer div when there is no arrow
+          *and* no right slot, so the landing page keeps its mark on the left, which is where a landing
+          page's mark belongs.
+        */}
+        {right ??
+          (onBack !== undefined && <span aria-hidden className="w-9" />)}
       </div>
-      {showRail && (
-        /* A 2px rail rather than a 4px one: it is orientation, not an achievement. */
-        <div aria-hidden className="h-[2px] w-full bg-hairline">
-          <div
-            className="h-full bg-signal transition-[width] duration-500 ease-out"
-            style={{ width: `${(step / total) * 100}%` }}
-          />
-        </div>
-      )}
     </header>
   )
 }
@@ -417,6 +415,86 @@ function Segmented<T extends string>({
   )
 }
 
+/**
+ * The sidebar's five panels, one at a time.
+ *
+ * This replaces a stack of five cards that had grown to 2593px on a 1285px viewport — Edd's report was
+ * that the document eventually could not be seen at all. Moving the design controls onto the document
+ * cut it to 1536px, which was an improvement and not the answer: the column was still taller than any
+ * screen, and the fix had scattered the controls across two places.
+ *
+ * Tabs put every panel back in one column at a fixed height. What it costs is real and worth naming: the
+ * four panels you are not looking at are now invisible rather than merely below the fold, and DESIGN.md
+ * warns about exactly this — a browsable column becomes one you have to navigate. Two things pay for it.
+ * The tab strip lists all five, so nothing is hidden in the sense of being unfindable; and the badges
+ * carry each panel's state — the count still to check, the number of suggestions waiting — so the
+ * information that used to make you scroll is on the tab itself.
+ *
+ * `Check` is the default because it is the work of this screen. The other four are things you may do.
+ */
+type PanelId = 'check' | 'wording' | 'design' | 'job' | 'account'
+
+const PANELS: ReadonlyArray<{ id: PanelId; label: string }> = [
+  { id: 'check', label: 'Check' },
+  { id: 'wording', label: 'Wording' },
+  { id: 'design', label: 'Design' },
+  { id: 'job', label: 'Job' },
+  { id: 'account', label: 'Account' },
+]
+
+function PanelTabs({
+  active,
+  onChange,
+  badges,
+}: {
+  active: PanelId
+  onChange: (id: PanelId) => void
+  /** Per-tab state, so switching away does not hide what a panel is telling you. */
+  badges: Partial<Record<PanelId, { text: string; tone: 'signal' | 'caution' }>>
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="CV panels"
+      className="flex shrink-0 flex-wrap gap-1 rounded-full bg-band p-1"
+    >
+      {PANELS.map((panel) => {
+        const on = panel.id === active
+        const badge = badges[panel.id]
+        return (
+          <button
+            key={panel.id}
+            type="button"
+            role="tab"
+            aria-selected={on}
+            onClick={() => onChange(panel.id)}
+            className={[
+              'flex flex-1 items-center justify-center gap-1.5 rounded-full px-2.5 py-1.5 text-[13px] transition-colors',
+              on
+                ? 'border border-signal-edge bg-ground font-semibold text-signal'
+                : 'border border-transparent font-medium text-ink-soft hover:text-ink',
+            ].join(' ')}
+          >
+            {panel.label}
+            {badge !== undefined && (
+              <span
+                className={[
+                  'tally rounded-full px-1.5 text-[11px] font-bold',
+                  badge.tone === 'caution'
+                    ? 'bg-caution text-white'
+                    : 'bg-signal text-white',
+                ].join(' ')}
+              >
+                {badge.text}
+              </span>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function HunterReady() {
   const [loaded, setLoaded] = useState<Loaded | undefined>()
   const [busy, setBusy] = useState(false)
@@ -453,6 +531,9 @@ function HunterReady() {
    */
   const [savedResumeId, setSavedResumeId] = useState<string | undefined>()
   const downloads = useDownloads()
+  /** Whether the document pane is showing the comparison instead of the current CV. */
+  const [comparing, setComparing] = useState(false)
+  const [panel, setPanel] = useState<PanelId>('check')
 
   const upload = useCallback(
     async (file: File) => {
@@ -494,6 +575,8 @@ function HunterReady() {
 
         setLoaded({
           resume: parsed.data,
+          // The same object, and it must never be reassigned: this is the "before".
+          original: parsed.data,
           provenance:
             (payload.provenance as Array<FieldProvenance> | undefined) ?? [],
           warnings: (payload.warnings as Array<string> | undefined) ?? [],
@@ -641,6 +724,7 @@ function HunterReady() {
       if (parsed.success) {
         setLoaded({
           resume: parsed.data,
+          original: parsed.data,
           provenance: [],
           warnings: [],
           method: 'rules',
@@ -676,7 +760,7 @@ function HunterReady() {
     if (needsConsent(consent)) {
       return (
         <div className="flex min-h-screen flex-col bg-ground">
-          <StepBar step={1} total={3} />
+          <StepBar />
           <div className="flex flex-1 items-center justify-center px-4 py-10 sm:px-6">
             <ConsentGate
               provider={consent.provider as string}
@@ -704,7 +788,7 @@ function HunterReady() {
       return (
         <div className="relative flex min-h-screen flex-col overflow-hidden bg-ground">
           <div aria-hidden className="aurora" />
-          <StepBar step={1} total={3} />
+          <StepBar />
           <div className="relative z-[1] flex flex-1 items-center justify-center px-4 py-12 sm:px-6">
             <div
               className="rise flex w-full max-w-md flex-col items-center gap-6 text-center"
@@ -1037,7 +1121,7 @@ function HunterReady() {
         />
 
         {/* Same `lg:flex-none` as the check step, for the same reason — see the note there. */}
-        <div className="mx-auto flex w-full max-w-[1560px] flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:h-[calc(100vh-3.5rem)] lg:min-h-0 lg:flex-none lg:px-8">
+        <div className="mx-auto flex w-full flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:h-[calc(100vh-3.5rem)] lg:min-h-0 lg:flex-none lg:px-8">
           <div className="flex flex-col gap-1">
             <h1 className="text-display text-ink">
               {reading === undefined
@@ -1239,6 +1323,22 @@ function HunterReady() {
 
   // ── Step 2: check what we read, and take the print ──────────────────────────────────────
   const toCheck = loaded.provenance.filter(needsReview).length
+  /**
+   * What the document has gained since it arrived — the number the comparison is offered on.
+   *
+   * Computed every render rather than memoised: `diffResumes` walks two documents of a few hundred
+   * fields, which is nothing beside the sheet being laid out next to it, and a stale diff would offer a
+   * comparison of a document that is no longer on screen.
+   */
+  const changes = diffResumes(loaded.original, loaded.resume)
+  /** Suggestions still awaiting a decision, for the Wording tab's badge. */
+  const pendingRewrites =
+    rewrites === undefined
+      ? 0
+      : rewrites.filter(
+          (rewrite) =>
+            rewrite.outcome === 'suggested' && !accepted.has(keyOf(rewrite)),
+        ).length
   const readFields = loaded.provenance.length
   // A hint while they edit; the PDF is the authority on pagination.
   const fit = estimateFit(loaded.resume, theme)
@@ -1246,8 +1346,6 @@ function HunterReady() {
   return (
     <div className="flex min-h-screen flex-col bg-band">
       <StepBar
-        step={2}
-        total={3}
         onBack={() => {
           setLoaded(undefined)
           setError(undefined)
@@ -1268,7 +1366,7 @@ function HunterReady() {
         is already as tall as its content has nothing to scroll. Every pixel the sidebar grew pushed the
         document further down the page.
       */}
-      <div className="mx-auto flex w-full max-w-[1560px] flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:h-[calc(100vh-3.5rem-2px)] lg:min-h-0 lg:flex-none lg:px-8">
+      <div className="mx-auto flex w-full flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:h-[calc(100vh-3.5rem-2px)] lg:min-h-0 lg:flex-none lg:px-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-col gap-1">
             <h1 className="text-display text-ink">
@@ -1281,202 +1379,326 @@ function HunterReady() {
                 : 'Your dates and job titles are the ones worth a second look.'}
             </p>
           </div>
-          {/*
-            The primary action stays reachable from the top of the screen rather than at the bottom
-            of a long form: someone who only wants a cleaner PDF of a CV that parsed correctly should
-            not have to scroll past their whole history to find it.
-          */}
-          <button
-            type="button"
-            disabled={downloads.busyFormat !== undefined}
-            aria-busy={downloads.busyFormat === 'pdf'}
-            onClick={() =>
-              void downloads.start(loaded.resume, templateId, themeId)
-            }
-            className="btn btn-primary px-6 py-3 text-[15px]"
-          >
-            {downloads.busyFormat === 'pdf' ? (
-              <Spinner className="h-[18px] w-[18px]" />
-            ) : (
-              <Icon name="download" className="h-[18px] w-[18px]" />
-            )}
-            {downloads.busyFormat === 'pdf'
-              ? 'Building your PDF…'
-              : 'Download the PDF'}
-          </button>
-          {/*
-            Word, beside the PDF rather than hidden behind a menu — v0.6.
-            Many ATS portals require or prefer `.docx`, and several parse it better than any PDF, so a
-            candidate who needs it needs it *now*, at the moment they are uploading. It is the quiet
-            button because the PDF is what most people send and the one whose look they just chose;
-            the Word file has one ATS-safe layout and no design to pick.
-          */}
-          <button
-            type="button"
-            disabled={downloads.busyFormat !== undefined}
-            aria-busy={downloads.busyFormat === 'docx'}
-            onClick={() =>
-              void downloads.start(loaded.resume, templateId, themeId, 'docx')
-            }
-            title="For portals that ask for a Word file"
-            className="btn btn-quiet px-4 py-3 text-[14px]"
-          >
-            <ButtonLabel
-              busy={downloads.busyFormat === 'docx'}
-              idle="Word (.docx)"
-              working="Building…"
-            />
-          </button>
         </div>
-
-        {/*
-          The failure, in words, where the button is — and the page is still standing to show it.
-          That is the whole difference: this message could not have existed while the download was a
-          form POST, because a failed render navigated away from the screen that would have carried it.
-        */}
-        {downloads.failure !== undefined && (
-          <p
-            role="status"
-            className="rounded-field border border-alert/25 bg-alert-wash px-3.5 py-2.5 text-[14px] leading-relaxed text-ink"
-          >
-            {downloads.failure}
-          </p>
-        )}
 
         <div className="flex flex-1 flex-col gap-5 lg:min-h-0 lg:flex-row">
           {/* What changes the document, and what still needs checking. */}
-          <aside className="flex w-full shrink-0 flex-col gap-4 lg:w-[380px] lg:overflow-y-auto lg:pb-2 lg:pr-1">
-            {loaded.warnings.length > 0 && (
-              <div className="rounded-card border border-caution/25 bg-caution-wash p-4">
-                <h2 className="text-[13px] font-semibold text-caution">
-                  Worth knowing
-                </h2>
-                <ul className="mt-2 flex flex-col gap-1.5">
-                  {loaded.warnings.map((warning, i) => (
-                    <li
-                      key={i}
-                      className="text-[13px] leading-relaxed text-ink"
-                    >
-                      {warning}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+          {/*
+            One column, five panels, one at a time.
 
-            <ReviewForm
-              resume={loaded.resume}
-              provenance={loaded.provenance}
-              ocr={loaded.ocr}
-              /*
+            `overflow-y-auto` moved from the column to the *panel* below: the tab strip has to stay put
+            while its content scrolls, or the way back out of a long panel scrolls away with it.
+          */}
+          <aside className="flex w-full shrink-0 flex-col gap-3 lg:w-[400px] lg:min-h-0">
+            <PanelTabs
+              active={panel}
+              onChange={setPanel}
+              badges={{
+                ...(toCheck > 0
+                  ? {
+                      check: {
+                        text: String(toCheck),
+                        tone: 'caution' as const,
+                      },
+                    }
+                  : {}),
+                ...(rewrites !== undefined && pendingRewrites > 0
+                  ? {
+                      wording: {
+                        text: String(pendingRewrites),
+                        tone: 'signal' as const,
+                      },
+                    }
+                  : {}),
+              }}
+            />
+
+            <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-2 lg:pr-1">
+              {panel === 'check' && loaded.warnings.length > 0 && (
+                <div className="rounded-card border border-caution/25 bg-caution-wash p-4">
+                  <h2 className="text-[13px] font-semibold text-caution">
+                    Worth knowing
+                  </h2>
+                  <ul className="mt-2 flex flex-col gap-1.5">
+                    {loaded.warnings.map((warning, i) => (
+                      <li
+                        key={i}
+                        className="text-[13px] leading-relaxed text-ink"
+                      >
+                        {warning}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {panel === 'check' && (
+                <ReviewForm
+                  resume={loaded.resume}
+                  provenance={loaded.provenance}
+                  ocr={loaded.ocr}
+                  /*
                 The provenance comes back on structural edits, and taking it is not optional: adding or
                 removing a row renumbers every index-based path after it, so keeping the old list would
                 leave "we were not sure we read this" pointing at a row the person just typed.
               */
-              onChange={(resume, provenance) =>
-                setLoaded({
-                  ...loaded,
-                  resume,
-                  ...(provenance === undefined ? {} : { provenance }),
-                })
-              }
-            />
-
-            {/*
-              Wording comes *after* the check, never before it. The order is the argument: improving
-              a sentence we misread is worse than leaving it alone, and asking the candidate to judge
-              a rewrite of something they have not yet confirmed is asking the wrong question.
-            */}
-            <div className="card flex flex-col gap-3 p-4">
-              <div className="flex flex-col gap-1">
-                <h2 className="text-[15px] font-semibold text-ink">Wording</h2>
-                <p className="text-[13px] leading-relaxed text-ink-soft">
-                  Once your details are right, we can suggest stronger wording
-                  for each bullet. Nothing changes unless you accept it.
-                </p>
-              </div>
-
-              {rewrites === undefined ? (
-                <div className="flex flex-col gap-2">
-                  <button
-                    type="button"
-                    disabled={rewriting}
-                    aria-busy={rewriting}
-                    onClick={() => void askForRewrites()}
-                    className="btn btn-quiet px-4 py-2.5 text-[14px]"
-                  >
-                    <ButtonLabel
-                      busy={rewriting}
-                      idle="Suggest better wording"
-                      working="Reading your bullets…"
-                    />
-                  </button>
-                  {rewriting && (
-                    <span className="text-meta leading-relaxed text-ink-soft">
-                      One pass over every bullet — the longer your history, the
-                      longer this takes.
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <RewriteReview
-                  rewrites={rewrites}
-                  accepted={accepted}
-                  onAccept={acceptRewrite}
-                  onDismiss={dismissRewrite}
-                  onAnswer={(answers) => void askForRewrites(answers)}
-                  busy={rewriting}
+                  onChange={(resume, provenance) =>
+                    setLoaded({
+                      ...loaded,
+                      resume,
+                      ...(provenance === undefined ? {} : { provenance }),
+                    })
+                  }
                 />
               )}
 
-              {rewriteNote !== undefined && (
-                <p
-                  role="status"
-                  className="text-[13px] leading-relaxed text-ink-soft"
-                >
-                  {rewriteNote}
-                </p>
-              )}
-            </div>
+              {/*
+              Wording comes *after* the check, never before it — which a tab strip states less firmly
+              than a stack did, so the copy carries it: "Once your details are right". The order is the
+              argument, and improving a sentence we misread is worse than leaving it alone.
+            */}
+              {panel === 'wording' && (
+                <div className="card flex flex-col gap-3 p-4">
+                  <div className="flex flex-col gap-1">
+                    <h2 className="text-[15px] font-semibold text-ink">
+                      Wording
+                    </h2>
+                    <p className="text-[13px] leading-relaxed text-ink-soft">
+                      Once your details are right, we can suggest stronger
+                      wording for each bullet. Nothing changes unless you accept
+                      it.
+                    </p>
+                  </div>
 
-            {/*
+                  {rewrites === undefined ? (
+                    <div className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        disabled={rewriting}
+                        aria-busy={rewriting}
+                        onClick={() => void askForRewrites()}
+                        className="btn btn-quiet px-4 py-2.5 text-[14px]"
+                      >
+                        <ButtonLabel
+                          busy={rewriting}
+                          idle="Suggest better wording"
+                          working="Reading your bullets…"
+                        />
+                      </button>
+                      {rewriting && (
+                        <span className="text-meta leading-relaxed text-ink-soft">
+                          One pass over every bullet — the longer your history,
+                          the longer this takes.
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <RewriteReview
+                      rewrites={rewrites}
+                      accepted={accepted}
+                      onAccept={acceptRewrite}
+                      onDismiss={dismissRewrite}
+                      onAnswer={(answers) => void askForRewrites(answers)}
+                      busy={rewriting}
+                    />
+                  )}
+
+                  {rewriteNote !== undefined && (
+                    <p
+                      role="status"
+                      className="text-[13px] leading-relaxed text-ink-soft"
+                    >
+                      {rewriteNote}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/*
               The account, offered after the CV exists and never before it (ADR-004, ADR-011: the
               artifact comes before any question). It renders nothing at all on an installation with no
               database, so a deployment that cannot keep an account never offers one.
             */}
-            <Library
-              resume={loaded.resume}
-              onLoad={(resume) => setLoaded({ ...loaded, resume })}
-              savedId={savedResumeId}
-              onSavedIdChange={setSavedResumeId}
-            />
+              {panel === 'account' && (
+                <Library
+                  resume={loaded.resume}
+                  /*
+                A CV opened from the library gets a fresh `original`, because it is a different
+                document. Keeping the old one would compare a stored CV against a file uploaded earlier
+                in the same session, and "before and after" would show a distance nobody travelled.
+              */
+                  onLoad={(resume) =>
+                    setLoaded({ ...loaded, resume, original: resume })
+                  }
+                  savedId={savedResumeId}
+                  onSavedIdChange={setSavedResumeId}
+                />
+              )}
 
-            {/*
+              {/*
               Targeting sits below wording for the same reason wording sits below the check: each step
               is only worth doing once the one above it is right. Tailoring a CV we misread aims the
               wrong document at the job.
             */}
-            <div className="card flex flex-col gap-3 p-4">
-              <div className="flex flex-col gap-1">
-                <h2 className="text-[15px] font-semibold text-ink">
-                  Applying for something specific?
-                </h2>
-                <p className="text-[13px] leading-relaxed text-ink-soft">
-                  Paste the advert and we will show you which of their
-                  requirements your CV already answers, which are buried, and
-                  which are missing. We never add one you have not claimed.
-                </p>
-              </div>
+              {panel === 'job' && (
+                <div className="card flex flex-col gap-3 p-4">
+                  <div className="flex flex-col gap-1">
+                    <h2 className="text-[15px] font-semibold text-ink">
+                      Applying for something specific?
+                    </h2>
+                    <p className="text-[13px] leading-relaxed text-ink-soft">
+                      Paste the advert and we will show you which of their
+                      requirements your CV already answers, which are buried,
+                      and which are missing. We never add one you have not
+                      claimed.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setTargeting(true)}
+                    className="btn btn-quiet self-start px-4 py-2.5 text-[14px]"
+                  >
+                    {reading === undefined
+                      ? 'Target a job advert'
+                      : 'Back to this job'}
+                    <Icon name="arrow-right" className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+
+              {panel === 'design' && (
+                <div className="card flex flex-col gap-5 p-4">
+                  {/*
+                  Back in the sidebar, as a panel of its own.
+
+                  These were choice cards here, then a segmented row on the document, and now segmented
+                  rows here — Edd looked at the middle version and asked for tabs instead. The document
+                  pane keeps its full width for the comparison, which is what the move was competing
+                  with: two A4 sheets side by side need every pixel on the X axis, and a control strip
+                  above them was taking a hundred of them for controls you touch once.
+
+                  The compact form is kept rather than reverting to cards. Nine hint lines is what made
+                  this block 991px tall in the first place, and one hint for the option you chose reads
+                  better than three you have to compare.
+                */}
+
+                  <Segmented
+                    label="Layout"
+                    options={TEMPLATE_IDS.map((id) => ({
+                      id,
+                      label: templates[id].label.replace('Modern — ', ''),
+                      hint: templates[id].hint,
+                    }))}
+                    value={templateId}
+                    onChange={setTemplateId}
+                  />
+                  {/*
+                The document's language — v0.8. It changes the *furniture* only: section headings, month
+                names, the word for a current role. The candidate's own words are never translated, which
+                the hint says outright, because a user offered "Language" would reasonably expect us to
+                translate their bullets and would be right to be alarmed if we silently did.
+
+                Detected from the CV and overridable, because detection is a guess and the person
+                applying knows which country they are applying in. The hint is now unconditional: it used
+                to appear only on the detected option, which meant that choosing another language removed
+                the sentence promising we would not translate their words — the moment it matters most.
+              */}
+                  <Segmented
+                    label="Language"
+                    options={localeOptions().map((option) => ({
+                      id: option.id,
+                      label: option.label,
+                      hint: 'Headings and dates. Your own words stay exactly as written.',
+                    }))}
+                    value={resolveLocale(loaded.resume.locale)}
+                    onChange={(locale) =>
+                      setLoaded({
+                        ...loaded,
+                        resume: { ...loaded.resume, locale },
+                      })
+                    }
+                  />
+                  <Segmented
+                    label="Type and spacing"
+                    options={THEME_IDS.map((id) => ({
+                      id,
+                      label: themeLabels[id].label,
+                      hint: themeLabels[id].hint,
+                    }))}
+                    value={themeId}
+                    onChange={setThemeId}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/*
+              The download, at the foot of its own column.
+
+              It was at the top of the page, on the argument that somebody who only wants a cleaner PDF
+              of a CV that already parsed should not scroll past their whole history to find it. The tabs
+              made that argument obsolete — nothing is below a fold any more — and left two large buttons
+              floating in the header with no relationship to anything beside them. Edd: "estos dos
+              botones aquí arriba no tienen sentido."
+
+              Here they read as what they are: the end of the column you work down. Outside the scrolling
+              panel, so the last action never scrolls out of reach, and a full-width primary pill because
+              DESIGN.md is right that it reads as one decisive action in a way a rectangle does not.
+            */}
+            <div className="flex shrink-0 flex-col gap-2 border-t border-hairline pt-3">
               <button
                 type="button"
-                onClick={() => setTargeting(true)}
-                className="btn btn-quiet self-start px-4 py-2.5 text-[14px]"
+                disabled={downloads.busyFormat !== undefined}
+                aria-busy={downloads.busyFormat === 'pdf'}
+                onClick={() =>
+                  void downloads.start(loaded.resume, templateId, themeId)
+                }
+                className="btn btn-primary w-full px-6 py-3 text-[15px]"
               >
-                {reading === undefined
-                  ? 'Target a job advert'
-                  : 'Back to this job'}
-                <Icon name="arrow-right" className="h-4 w-4" />
+                {downloads.busyFormat === 'pdf' ? (
+                  <Spinner className="h-[18px] w-[18px]" />
+                ) : (
+                  <Icon name="download" className="h-[18px] w-[18px]" />
+                )}
+                {downloads.busyFormat === 'pdf'
+                  ? 'Building your PDF…'
+                  : 'Download the PDF'}
               </button>
+              {/*
+                Word, beside the PDF rather than hidden behind a menu — v0.6. Many ATS portals require or
+                prefer `.docx`, and several parse it better than any PDF. It stays the quiet button: the
+                PDF is what most people send and the one whose look they just chose, and the Word file has
+                one ATS-safe layout and no design to pick.
+              */}
+              <button
+                type="button"
+                disabled={downloads.busyFormat !== undefined}
+                aria-busy={downloads.busyFormat === 'docx'}
+                onClick={() =>
+                  void downloads.start(
+                    loaded.resume,
+                    templateId,
+                    themeId,
+                    'docx',
+                  )
+                }
+                title="For portals that ask for a Word file"
+                className="btn btn-quiet w-full px-4 py-2.5 text-[14px]"
+              >
+                <ButtonLabel
+                  busy={downloads.busyFormat === 'docx'}
+                  idle="Word (.docx)"
+                  working="Building…"
+                />
+              </button>
+              {downloads.failure !== undefined && (
+                <p
+                  role="status"
+                  className="rounded-field border border-alert/25 bg-alert-wash px-3 py-2 text-[13px] leading-relaxed text-ink"
+                >
+                  {downloads.failure}
+                </p>
+              )}
             </div>
           </aside>
 
@@ -1499,77 +1721,67 @@ function HunterReady() {
                   </span>
                 )}
               </span>
-              <span className="tally text-meta text-ink-soft">
-                A4 · {fit.pages} page{fit.pages === 1 ? '' : 's'}
-                {readFields > 0 &&
-                  ` · ${readFields - toCheck}/${readFields} read cleanly`}
+              <span className="flex flex-wrap items-center gap-3">
+                {/*
+                  The before-and-after switch, and it exists only once there is something to show.
+
+                  DESIGN.md: don't show a progress indicator for progress that has not happened. A button
+                  offering to display an achievement on a document nobody has changed yet is the
+                  interface version of the invented statistic this product refuses to print — so on a
+                  freshly uploaded CV this is simply not here, and it appears the moment the first
+                  correction or accepted suggestion lands.
+                */}
+                {changes.length > 0 && (
+                  <button
+                    type="button"
+                    aria-pressed={comparing}
+                    onClick={() => setComparing(!comparing)}
+                    className={[
+                      'flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-semibold transition-colors',
+                      comparing
+                        ? 'border-signal-edge bg-signal-wash text-signal'
+                        : 'border-hairline-strong text-ink-soft hover:text-ink',
+                    ].join(' ')}
+                  >
+                    {comparing ? 'Just the new one' : 'Before and after'}
+                    <span className="tally rounded-full bg-signal px-1.5 text-[11px] font-bold text-white">
+                      {changes.length}
+                    </span>
+                  </button>
+                )}
+                <span className="tally text-meta text-ink-soft">
+                  A4 · {fit.pages} page{fit.pages === 1 ? '' : 's'}
+                  {readFields > 0 &&
+                    ` · ${readFields - toCheck}/${readFields} read cleanly`}
+                </span>
               </span>
-            </div>
-            {/*
-              The document's own controls, on the document.
-
-              Three segmented rows rather than nine choice cards in the sidebar — see `Segmented` for the
-              measurement that prompted it. They wrap rather than scroll: a horizontally scrolling strip
-              of controls hides options behind a gesture nobody performs on a desktop.
-            */}
-            <div className="flex flex-wrap items-start gap-x-6 gap-y-3 border-b border-hairline px-4 py-3">
-              <Segmented
-                label="Layout"
-                options={TEMPLATE_IDS.map((id) => ({
-                  id,
-                  label: templates[id].label.replace('Modern — ', ''),
-                  hint: templates[id].hint,
-                }))}
-                value={templateId}
-                onChange={setTemplateId}
-              />
-              {/*
-                The document's language — v0.8. It changes the *furniture* only: section headings, month
-                names, the word for a current role. The candidate's own words are never translated, which
-                the hint says outright, because a user offered "Language" would reasonably expect us to
-                translate their bullets and would be right to be alarmed if we silently did.
-
-                Detected from the CV and overridable, because detection is a guess and the person
-                applying knows which country they are applying in. The hint is now unconditional: it used
-                to appear only on the detected option, which meant that choosing another language removed
-                the sentence promising we would not translate their words — the moment it matters most.
-              */}
-              <Segmented
-                label="Language"
-                options={localeOptions().map((option) => ({
-                  id: option.id,
-                  label: option.label,
-                  hint: 'Headings and dates. Your own words stay exactly as written.',
-                }))}
-                value={resolveLocale(loaded.resume.locale)}
-                onChange={(locale) =>
-                  setLoaded({
-                    ...loaded,
-                    resume: { ...loaded.resume, locale },
-                  })
-                }
-              />
-              <Segmented
-                label="Type and spacing"
-                options={THEME_IDS.map((id) => ({
-                  id,
-                  label: themeLabels[id].label,
-                  hint: themeLabels[id].hint,
-                }))}
-                value={themeId}
-                onChange={setThemeId}
-              />
             </div>
             {fit.advice !== undefined && (
               <p className="border-b border-hairline bg-band px-4 py-2 text-[13px] leading-relaxed text-ink-soft">
                 {fit.advice}
               </p>
             )}
-            <PaperPreview
-              resume={loaded.resume}
-              theme={theme}
-              Template={template.Component}
-            />
+            {/*
+              Comparing replaces the preview rather than opening beside it or over it. A modal would put
+              the achievement in a box to be dismissed, and a third column would shrink both sheets to
+              the point where neither is legible. The switch is one click away in either direction, which
+              is what makes replacing it safe — every station in this flow is re-enterable.
+            */}
+            {comparing ? (
+              <BeforeAfter
+                original={loaded.original}
+                current={loaded.resume}
+                changes={changes}
+                theme={theme}
+                Template={template.Component}
+              />
+            ) : (
+              <PaperPreview
+                resume={loaded.resume}
+                theme={theme}
+                Template={template.Component}
+              />
+            )}
           </main>
         </div>
       </div>
