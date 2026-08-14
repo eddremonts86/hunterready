@@ -53,6 +53,17 @@ export interface ConsentState {
    * the page cannot claim encryption on an installation with no key.
    */
   encryptsAtRest?: boolean
+  /**
+   * Whether this visitor may use the paid designs. Undefined until the server has answered.
+   *
+   * It rides along here for the same reason `encryptsAtRest` does: this hook is already the one place
+   * that asks the server what is true of *this* caller, and a second fetch of the same endpoint from a
+   * second hook would be two sources for one answer.
+   *
+   * Advisory. The gate is `/api/render`, which refuses a locked pairing regardless of what any client
+   * believes about itself.
+   */
+  paidDesigns?: boolean
   choice?: ConsentChoice
   decide: (choice: ConsentChoice) => void
   reset: () => void
@@ -84,6 +95,7 @@ export function useProcessingConsent(): ConsentState {
   const [encryptsAtRest, setEncryptsAtRest] = useState<boolean | undefined>(
     undefined,
   )
+  const [paidDesigns, setPaidDesigns] = useState<boolean | undefined>(undefined)
   const [choice, setChoice] = useState<ConsentChoice | undefined>(undefined)
 
   useEffect(() => {
@@ -94,12 +106,14 @@ export function useProcessingConsent(): ConsentState {
           response.json() as Promise<{
             provider: string | null
             encryptsAtRest?: boolean
+            paidDesigns?: boolean
           }>,
       )
       .then((data) => {
         if (cancelled) return
         setProvider(data.provider)
         setEncryptsAtRest(data.encryptsAtRest === true)
+        setPaidDesigns(data.paidDesigns === true)
         const stored = read()
         /**
          * A stored answer only counts for the provider it was given about. If the deployment moves
@@ -145,7 +159,7 @@ export function useProcessingConsent(): ConsentState {
     }
   }
 
-  return { provider, encryptsAtRest, choice, decide, reset }
+  return { provider, encryptsAtRest, paidDesigns, choice, decide, reset }
 }
 
 /** True when a decision is genuinely required: a provider exists and nobody has answered yet. */

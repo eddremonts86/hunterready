@@ -33,6 +33,7 @@ import { ReviewForm } from '@/components/review-form'
 import { keyOf, RewriteReview } from '@/components/rewrite-review'
 import { AdvertForm, TargetPanel } from '@/components/target-panel'
 import { BeforeAfter } from '@/components/before-after'
+import { DesignGallery } from '@/components/design-gallery'
 import { ButtonLabel, Spinner } from '@/components/working'
 import { DownloadFailed, saveRendered } from '@/lib/download'
 import type {
@@ -41,14 +42,15 @@ import type {
 } from '@/components/target-panel'
 import type { BulletRewrite } from '@/optimize/rewrite'
 import { diffResumes } from '@/optimize/variant-diff'
+import { tierOf } from '@/render/designs'
 import { Resume } from '@/schema/resume'
 import type { FieldProvenance } from '@/schema/provenance'
 import { needsReview } from '@/schema/provenance'
 import { estimateFit } from '@/render/fit'
-import { getTheme, THEME_IDS, themeLabels } from '@/render/themes'
+import { getTheme } from '@/render/themes'
 import type { ThemeId } from '@/render/themes'
 import { localeOptions, resolveLocale } from '@/render/locale'
-import { TEMPLATE_IDS, templates } from '@/render/templates/registry'
+import { templates } from '@/render/templates/registry'
 import type { TemplateId } from '@/render/templates/registry'
 
 export const Route = createFileRoute('/')({ component: HunterReady })
@@ -1366,6 +1368,16 @@ function HunterReady() {
    * as there is any.
    */
   const pages = measuredPages ?? fit.pages
+  /**
+   * Whether the design on screen is one this visitor cannot download.
+   *
+   * Previewing a locked design is deliberately allowed — it is HTML, it costs nothing, and choosing a look
+   * you cannot see first is not a choice. What must not happen is finding out at the download: that is the
+   * surprise-at-the-checkout pattern, where somebody composes a whole CV and is refused at the last step.
+   * So it is said where the choice is made, and on the button that would otherwise fail.
+   */
+  const lockedDesign =
+    tierOf(templateId, themeId) === 'paid' && consent.paidDesigns !== true
 
   return (
     <div className="flex min-h-screen flex-col bg-band">
@@ -1598,67 +1610,68 @@ function HunterReady() {
               )}
 
               {panel === 'design' && (
-                <div className="card flex flex-col gap-5 p-4">
+                <div className="card flex flex-col gap-3 p-4">
                   {/*
-                  Back in the sidebar, as a panel of its own.
+                    Thirty pairings, replacing the three segmented rows that were here.
 
-                  These were choice cards here, then a segmented row on the document, and now segmented
-                  rows here — Edd looked at the middle version and asked for tabs instead. The document
-                  pane keeps its full width for the comparison, which is what the move was competing
-                  with: two A4 sheets side by side need every pixel on the X axis, and a control strip
-                  above them was taking a hundred of them for controls you touch once.
+                    The rows were a fine control for twelve combinations spread across two questions. They
+                    cannot present thirty: a person choosing a design is not choosing a structure and a
+                    theme separately, they are choosing a look, and the gallery is the shape of that
+                    question. `design-gallery.tsx` carries why the cards show a type specimen rather than a
+                    thumbnail of a page.
+                  */}
+                  <div className="flex flex-col gap-1">
+                    <h2 className="text-[15px] font-semibold text-ink">
+                      Design
+                    </h2>
+                    <p className="text-[13px] leading-relaxed text-ink-soft">
+                      The layout decides what a reader meets first. The type
+                      decides how it sounds. Both are free to change at any
+                      point — nothing about your CV is rewritten.
+                    </p>
+                  </div>
 
-                  The compact form is kept rather than reverting to cards. Nine hint lines is what made
-                  this block 991px tall in the first place, and one hint for the option you chose reads
-                  better than three you have to compare.
-                */}
-
-                  <Segmented
-                    label="Layout"
-                    options={TEMPLATE_IDS.map((id) => ({
-                      id,
-                      label: templates[id].label.replace('Modern — ', ''),
-                      hint: templates[id].hint,
-                    }))}
-                    value={templateId}
-                    onChange={setTemplateId}
+                  <DesignGallery
+                    templateId={templateId}
+                    themeId={themeId}
+                    /*
+                      `=== true` on purpose: the field is `undefined` until the server answers, and an
+                      unknown entitlement must draw as locked rather than as unlocked. A padlock that
+                      appears a moment late is untidy; one that vanishes a moment late offers something
+                      the render endpoint will refuse.
+                    */
+                    entitled={consent.paidDesigns === true}
+                    onChoose={(design) => {
+                      setTemplateId(design.structure)
+                      setThemeId(design.theme)
+                    }}
                   />
+
                   {/*
-                The document's language — v0.8. It changes the *furniture* only: section headings, month
-                names, the word for a current role. The candidate's own words are never translated, which
-                the hint says outright, because a user offered "Language" would reasonably expect us to
-                translate their bullets and would be right to be alarmed if we silently did.
+                    The document's language stays a separate control, deliberately.
 
-                Detected from the CV and overridable, because detection is a guess and the person
-                applying knows which country they are applying in. The hint is now unconditional: it used
-                to appear only on the detected option, which meant that choosing another language removed
-                the sentence promising we would not translate their words — the moment it matters most.
-              */}
-                  <Segmented
-                    label="Language"
-                    options={localeOptions().map((option) => ({
-                      id: option.id,
-                      label: option.label,
-                      hint: 'Headings and dates. Your own words stay exactly as written.',
-                    }))}
-                    value={resolveLocale(loaded.resume.locale)}
-                    onChange={(locale) =>
-                      setLoaded({
-                        ...loaded,
-                        resume: { ...loaded.resume, locale },
-                      })
-                    }
-                  />
-                  <Segmented
-                    label="Type and spacing"
-                    options={THEME_IDS.map((id) => ({
-                      id,
-                      label: themeLabels[id].label,
-                      hint: themeLabels[id].hint,
-                    }))}
-                    value={themeId}
-                    onChange={setThemeId}
-                  />
+                    It is not a design choice — it changes the *words* of the furniture (headings, month
+                    names) and a person looking for a look is not looking for that. Folding it into
+                    thirty cards would have multiplied the catalogue by three and hidden a decision about
+                    language inside a decision about type.
+                  */}
+                  <div className="border-t border-hairline pt-3">
+                    <Segmented
+                      label="Language"
+                      options={localeOptions().map((option) => ({
+                        id: option.id,
+                        label: option.label,
+                        hint: 'Headings and dates. Your own words stay exactly as written.',
+                      }))}
+                      value={resolveLocale(loaded.resume.locale)}
+                      onChange={(locale) =>
+                        setLoaded({
+                          ...loaded,
+                          resume: { ...loaded.resume, locale },
+                        })
+                      }
+                    />
+                  </div>
                 </div>
               )}
             </div>
@@ -1666,20 +1679,23 @@ function HunterReady() {
             {/*
               The download, at the foot of its own column.
 
-              It was at the top of the page, on the argument that somebody who only wants a cleaner PDF
-              of a CV that already parsed should not scroll past their whole history to find it. The tabs
-              made that argument obsolete — nothing is below a fold any more — and left two large buttons
-              floating in the header with no relationship to anything beside them. Edd: "estos dos
-              botones aquí arriba no tienen sentido."
+              Restored here after being deleted by accident: the edit that swapped the Design panel for the
+              gallery replaced everything up to `</aside>`, and this footer was inside that range. The
+              product's primary action disappeared and the build stayed green, which is the reason CLAUDE.md
+              says to check a feature is reachable rather than to trust a passing suite.
 
-              Here they read as what they are: the end of the column you work down. Outside the scrolling
-              panel, so the last action never scrolls out of reach, and a full-width primary pill because
-              DESIGN.md is right that it reads as one decisive action in a way a rectangle does not.
+              Outside the scrolling panel, so the last action never scrolls out of reach, and a full-width
+              primary pill because DESIGN.md is right that it reads as one decisive action.
             */}
             <div className="flex shrink-0 flex-col gap-2 border-t border-hairline pt-3">
+              {/*
+                Disabled on a locked design rather than left to fail at the endpoint. `/api/render` is the
+                real gate — a client cannot be trusted with one — but letting somebody press a button whose
+                only possible outcome is a refusal is not respect for the gate, just a worse way to say no.
+              */}
               <button
                 type="button"
-                disabled={downloads.busyFormat !== undefined}
+                disabled={downloads.busyFormat !== undefined || lockedDesign}
                 aria-busy={downloads.busyFormat === 'pdf'}
                 onClick={() =>
                   void downloads.start(loaded.resume, templateId, themeId)
@@ -1697,13 +1713,12 @@ function HunterReady() {
               </button>
               {/*
                 Word, beside the PDF rather than hidden behind a menu — v0.6. Many ATS portals require or
-                prefer `.docx`, and several parse it better than any PDF. It stays the quiet button: the
-                PDF is what most people send and the one whose look they just chose, and the Word file has
-                one ATS-safe layout and no design to pick.
+                prefer `.docx`, and several parse it better than any PDF. It stays the quiet button: the PDF
+                is what most people send and the one whose look they just chose.
               */}
               <button
                 type="button"
-                disabled={downloads.busyFormat !== undefined}
+                disabled={downloads.busyFormat !== undefined || lockedDesign}
                 aria-busy={downloads.busyFormat === 'docx'}
                 onClick={() =>
                   void downloads.start(
@@ -1722,6 +1737,12 @@ function HunterReady() {
                   working="Building…"
                 />
               </button>
+              {lockedDesign && (
+                <p className="text-meta leading-relaxed text-ink-soft">
+                  Pick a design marked Included to download, or keep this one to
+                  compare.
+                </p>
+              )}
               {downloads.failure !== undefined && (
                 <p
                   role="status"
@@ -1787,6 +1808,18 @@ function HunterReady() {
                 </span>
               </span>
             </div>
+            {/*
+              Said where the document is, because the document is the thing that cannot be downloaded.
+              Caution rather than alert: nothing has failed — this is a fact about the plan, and colouring a
+              price as an error would make it feel like a fault.
+            */}
+            {lockedDesign && (
+              <p className="border-b border-caution/25 bg-caution-wash px-4 py-2 text-[13px] leading-relaxed text-ink">
+                This design is part of the paid plan. You can see it here, and
+                download any design marked <strong>Included</strong> — they
+                produce the same document, checked by the same parse test.
+              </p>
+            )}
             {fit.advice !== undefined && (
               <p className="border-b border-hairline bg-band px-4 py-2 text-[13px] leading-relaxed text-ink-soft">
                 {fit.advice}
