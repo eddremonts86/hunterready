@@ -160,10 +160,17 @@ That is the reference's central pattern and it is used where the flow genuinely 
 single question — not imposed on the review step, which needs the form and the
 document visible together and would be actively worse as twenty screens.
 
-**Three stations, and the chrome says so.** Upload → Check → Download. A 2px rail
-and an `n/3` counter, and both appear **only once the person has started** — a
-filled 1/3 on a landing page is progress nobody has made, which is the same
-overstatement the counter exists to avoid.
+**No progress counter, because there is no progression to count.** This used to
+specify a 2px rail and an `n/3` counter for Upload → Check → Download, on the
+argument that a bar overstating what is left is the same lie as one understating
+it. The rule holds; the counter broke it. **No screen was ever step 3** —
+downloading is a file save, not a station — so it sat frozen at "2 of 3" on the
+screen where the work is finished, understating every single time and pointing at
+a place nobody arrives at.
+
+The tabs then removed the premise: there is a landing page and there is the
+workspace, and a progression indicator over two screens is furniture. The header
+carries a way back, the wordmark, and whatever that screen needs on the right.
 
 **The landing hero is a 2×2 grid, ordered for the phone.** Headline top-left, the
 upload control spanning the right, the reasons bottom-left. On a phone the same three
@@ -178,6 +185,40 @@ not inherit the page's spacing rhythm, because it is a different object.
 **Every station is re-enterable**, forwards and backwards, always available and never
 warned about — PRODUCT.md requires recoverable errors. The back arrow is chrome, not
 a dialog.
+
+## Waiting
+
+**Nothing happens silently.** Every action that leaves the browser says so, in words,
+on the control that started it. `Spinner`, `Working` and `ButtonLabel` in
+`components/working.tsx` are the only three shapes this takes; a fourth one invented
+locally is how six screens ended up with six answers, four of them being "nothing".
+
+**Words, not just a ring.** The label carries the message and the ring carries the
+motion, in that order of importance. A greyed-out button whose text has not changed
+reads as a click that was swallowed.
+
+**Motion is essential here, so it survives reduced motion.** The stylesheet's
+`prefers-reduced-motion` rule stops everything except `data-motion="essential"`,
+which is slowed to 2.4s rather than frozen. A spinner that has stopped turning does
+not read as respect for a preference; it reads as a hung application, to the one
+person who has no other cue.
+
+**Name the shape of the wait, never a duration.** "One pass over every bullet — the
+longer your history, the longer this takes" is true for everybody. "About ten
+seconds" is wrong for most, and a promise that has already expired is how a working
+request starts looking broken.
+
+**Never a percentage we were not given.** None of these operations reports progress,
+so an indeterminate bar or a ring is the honest shape. See the Don't below — this is
+the same rule as the step rail's.
+
+**A loading state is not an empty state.** They look alike and mean opposite things:
+one is "we have not asked yet", the other is "you have nothing". The library showed
+ten saved CVs as "nothing saved yet" for the first moment of every visit.
+
+**Guard the button, do not merely dim it.** Two clicks on a silent Share minted two
+public links to somebody's employment history, and nobody closes a link they do not
+know exists.
 
 ## Elevation & Depth
 

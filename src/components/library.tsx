@@ -29,6 +29,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import { SignIn } from '@/components/sign-in'
+import { ButtonLabel, Working } from '@/components/working'
 import { signOut, useSession } from '@/lib/auth-client'
 import type { Resume } from '@/schema/resume'
 
@@ -118,6 +119,36 @@ export function Library({
   const [links, setLinks] = useState<Array<ShareLink>>([])
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | undefined>()
+  /**
+   * Whether the first list is still on its way.
+   *
+   * Its own flag rather than a branch on `resumes.length`, because those two states look identical and
+   * mean opposite things: an empty list is "you have saved nothing yet", and this is "we have not asked
+   * yet". Without it, somebody with ten saved CVs was shown the empty state — a message that is not
+   * merely unhelpful but false, and the one that arrives first.
+   */
+  const [listing, setListing] = useState(true)
+  /**
+   * Which share action is in flight, keyed by token, plus `'new'` for creating one.
+   *
+   * Keyed rather than a single flag because several links are on screen at once: one boolean would put
+   * every row in the same state and leave nobody able to tell which one they had clicked.
+   */
+  const [shareBusy, setShareBusy] = useState<Set<string>>(new Set())
+  const [sending, setSending] = useState<Set<string>>(new Set())
+
+  /** Add/remove on a keyed busy set, without mutating the state object in place. */
+  const mark = (
+    set: (updater: (current: Set<string>) => Set<string>) => void,
+    key: string,
+    on: boolean,
+  ) =>
+    set((current) => {
+      const next = new Set(current)
+      if (on) next.add(key)
+      else next.delete(key)
+      return next
+    })
 
   const refresh = useCallback(async () => {
     try {
@@ -153,11 +184,17 @@ export function Library({
         onSavedIdChange(first.id)
     } catch {
       // A library that cannot be listed is not a reason to interrupt somebody editing their CV.
+    } finally {
+      // In `finally` so a 404, a parse failure and a dead network all stop claiming to be still loading.
+      setListing(false)
     }
   }, [signedIn, available, savedId, onSavedIdChange])
 
   useEffect(() => {
     if (signedIn) void refresh()
+    // Nothing is being fetched for a visitor with no account, so there is nothing to wait for. Without
+    // this the signed-out panel would sit under a spinner for a request that is never sent.
+    else setListing(false)
     // `refresh` is stable enough for this: it depends only on sign-in state, which is the trigger.
   }, [signedIn, refresh])
 
@@ -202,6 +239,14 @@ export function Library({
       setNote('Save this CV first, then you can share it.')
       return
     }
+    /**
+     * Guarded, not just indicated. Two clicks on a silent button minted **two** public URLs to
+     * somebody's employment history, and the second one is invisible to whoever created it — it does
+     * not appear until the list refreshes, and closing a link you do not know exists is not something
+     * anybody does.
+     */
+    if (shareBusy.has('new')) return
+    mark(setShareBusy, 'new', true)
     try {
       const response = await fetch('/api/share', {
         method: 'POST',
@@ -221,11 +266,20 @@ export function Library({
       await refresh()
     } catch {
       setNote('We could not reach the server.')
+    } finally {
+      mark(setShareBusy, 'new', false)
     }
-  }, [savedId, refresh])
+  }, [savedId, refresh, shareBusy])
 
+  /**
+   * Close a link. The one action here whose whole purpose is to stop something being readable, which is
+   * why silence was worst on this button: a person revoking a link is usually revoking it in a hurry,
+   * and a control that gives no sign it registered invites a second click and then a doubt.
+   */
   const revoke = useCallback(
     async (token: string) => {
+      if (shareBusy.has(token)) return
+      mark(setShareBusy, token, true)
       try {
         await fetch('/api/share', {
           method: 'DELETE',
@@ -235,13 +289,17 @@ export function Library({
         await refresh()
       } catch {
         setNote('We could not close that link just now.')
+      } finally {
+        mark(setShareBusy, token, false)
       }
     },
-    [refresh],
+    [refresh, shareBusy],
   )
 
   const markSent = useCallback(
     async (variantId: string) => {
+      if (sending.has(variantId)) return
+      mark(setSending, variantId, true)
       try {
         await fetch('/api/application', {
           method: 'PATCH',
@@ -251,9 +309,11 @@ export function Library({
         await refresh()
       } catch {
         setNote('We could not update that just now.')
+      } finally {
+        mark(setSending, variantId, false)
       }
     },
-    [refresh],
+    [refresh, sending],
   )
 
   if (!available) return null
@@ -304,6 +364,21 @@ export function Library({
   }
 
   /* ── Signed in: the library ─────────────────────────────────────────────────────────────── */
+
+  /*
+    The first list, before it arrives. Not a skeleton of rows: we do not know how many there are, and a
+    three-row shimmer in front of somebody who has one saved CV is a guess drawn as a fact. One line
+    that says what is happening, in the card the list will occupy, so the panel does not resize twice.
+  */
+  if (listing) {
+    return (
+      <div className="card flex flex-col gap-3 p-4">
+        <h2 className="text-[15px] font-semibold text-ink">Your account</h2>
+        <Working label="Fetching what you have saved…" />
+      </div>
+    )
+  }
+
   const others = resumes.filter((row) => row.id !== savedId)
   const current = resumes.find((row) => row.id === savedId)
 
@@ -328,11 +403,11 @@ export function Library({
             onClick={() => void save()}
             className="btn btn-primary px-4 py-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-45"
           >
-            {busy
-              ? 'Saving…'
-              : current === undefined
-                ? 'Save this CV'
-                : 'Save changes'}
+            <ButtonLabel
+              busy={busy}
+              idle={current === undefined ? 'Save this CV' : 'Save changes'}
+              working="Saving…"
+            />
           </button>
           {current !== undefined && (
             <span className="text-meta text-ink-soft">
@@ -413,10 +488,16 @@ export function Library({
                 ) : (
                   <button
                     type="button"
+                    disabled={sending.has(row.id)}
+                    aria-busy={sending.has(row.id)}
                     onClick={() => void markSent(row.id)}
                     className="btn btn-quiet shrink-0 px-3 py-1 text-[12px]"
                   >
-                    Mark as sent
+                    <ButtonLabel
+                      busy={sending.has(row.id)}
+                      idle="Mark as sent"
+                      working="Saving…"
+                    />
                   </button>
                 )}
               </li>
@@ -436,10 +517,16 @@ export function Library({
           </h3>
           <button
             type="button"
+            disabled={shareBusy.has('new')}
+            aria-busy={shareBusy.has('new')}
             onClick={() => void share()}
             className="btn btn-quiet px-3.5 py-1.5 text-[12px]"
           >
-            Copy a link
+            <ButtonLabel
+              busy={shareBusy.has('new')}
+              idle="Copy a link"
+              working="Making it…"
+            />
           </button>
         </div>
         <p className="text-[13px] leading-relaxed text-ink-soft">
@@ -470,10 +557,16 @@ export function Library({
                 {link.live && (
                   <button
                     type="button"
+                    disabled={shareBusy.has(link.token)}
+                    aria-busy={shareBusy.has(link.token)}
                     onClick={() => void revoke(link.token)}
                     className="btn btn-quiet shrink-0 px-3 py-1 text-[12px]"
                   >
-                    Close it
+                    <ButtonLabel
+                      busy={shareBusy.has(link.token)}
+                      idle="Close it"
+                      working="Closing…"
+                    />
                   </button>
                 )}
               </li>

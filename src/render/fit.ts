@@ -11,6 +11,7 @@
  */
 import type { PdfcnTheme } from '@/components/pdf/theme-types'
 import type { Resume } from '@/schema/resume'
+import { PHOTO_BOX_PT } from './templates/modern-base'
 
 /** A4 at 96 dpi. */
 const PAGE_HEIGHT = 1123
@@ -44,7 +45,15 @@ function careerYears(resume: Resume): number {
   return 2026 - Math.min(...years)
 }
 
-export function estimateFit(resume: Resume, theme: PdfcnTheme): FitEstimate {
+export function estimateFit(
+  resume: Resume,
+  theme: PdfcnTheme,
+  /**
+   * Whether the chosen template will draw the photo — true only for the European convention with a photo
+   * set. Optional, so every existing caller keeps working and the estimate is unchanged without one.
+   */
+  options: { photo?: boolean } = {},
+): FitEstimate {
   const body = theme.typography.body.fontSize
   const leading = body * theme.typography.body.lineHeight
   const { page, sectionGap, componentGap } = theme.spacing
@@ -59,13 +68,25 @@ export function estimateFit(resume: Resume, theme: PdfcnTheme): FitEstimate {
 
   let height = 0
 
-  // Header: name, headline, contact, links, summary.
-  height +=
+  /**
+   * Header: name, headline, contact, links — and the photo beside them, not under them.
+   *
+   * The masthead is a row, so its height is the *taller* of the two columns, and this used to count only
+   * the text. A 78pt photo against roughly 53pt of text meant the estimate was 25pt short — about 1.7
+   * lines of body copy, which is enough to print "1 page" over a document that runs to two. An honest
+   * counter is a rule here (docs/11), and a label that lies about the page count is the same class of
+   * mistake as a padded progress bar.
+   */
+  let masthead = 0
+  masthead +=
     theme.typography.heading.fontSize.h1 * theme.typography.heading.lineHeight
-  height += resume.basics.headline === undefined ? 0 : leading
-  height += leading // contact line
-  height += resume.basics.links.length > 0 ? leading : 0
-  height += resume.basics.personalDetails.length > 0 ? leading : 0
+  masthead += resume.basics.headline === undefined ? 0 : leading
+  masthead += leading // contact line
+  masthead += resume.basics.links.length > 0 ? leading : 0
+  masthead += resume.basics.personalDetails.length > 0 ? leading : 0
+
+  height += options.photo === true ? Math.max(masthead, PHOTO_BOX_PT) : masthead
+  // The summary sits below the row, so it is added whatever the photo does.
   height += lineCount(resume.basics.summary, charsPerLine) * leading
 
   const section = (rows: number) =>

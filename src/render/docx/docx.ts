@@ -45,6 +45,7 @@ import {
   joinParts,
   resolveLocale,
 } from '../format'
+import { documentFilename } from '../filename'
 import { strings } from '../locale'
 import { zipSync } from './zip'
 
@@ -528,45 +529,14 @@ export function renderDocx(resume: Resume): Uint8Array {
 }
 
 /**
- * Letters NFD cannot help with, because they are not accented vowels — they are their own letters.
+ * `Marta Sørensen` → `Marta-Sorensen-CV.docx`. ASCII only: some portals reject non-ASCII names.
  *
- * `é` is `e` plus a combining acute, so stripping combining marks handles it. **`ø` is not.** It is
- * U+00F8, a single character with no decomposition, and the same is true of `æ`, `ß`, `đ` and `ł`.
- * Relying on NFD alone turned `Marta Sørensen` into `Marta-S-rensen-CV.docx`, which is a Danish nurse's
- * name mangled in the filename of the document she is about to send to a Danish hospital. Two of the
- * three languages this product targets are full of these.
+ * The transliteration table that used to live here is now in `render/filename.ts`, shared with the PDF
+ * path. That path had its own copy which handled `é` and mangled `ø`, so one nurse got two different
+ * spellings of her own name from two buttons beside each other. Two copies of a subtle rule drift.
  */
-const TRANSLITERATE: Record<string, string> = {
-  ø: 'o',
-  Ø: 'O',
-  æ: 'ae',
-  Æ: 'Ae',
-  å: 'a',
-  Å: 'A',
-  œ: 'oe',
-  Œ: 'Oe',
-  ß: 'ss',
-  đ: 'd',
-  Đ: 'D',
-  ð: 'd',
-  Ð: 'D',
-  þ: 'th',
-  Þ: 'Th',
-  ł: 'l',
-  Ł: 'L',
-  ñ: 'n',
-  Ñ: 'N',
-}
-
-/** `Marta Sørensen` → `Marta-Sorensen-CV.docx`. ASCII only: some portals reject non-ASCII names. */
 export function docxFilename(resume: Resume): string {
-  const base = resume.basics.fullName
-    .replace(/[øØæÆåÅœŒßđĐðÐþÞłŁñÑ]/g, (char) => TRANSLITERATE[char] ?? char)
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^A-Za-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return `${base === '' ? 'CV' : `${base}-CV`}.docx`
+  return documentFilename(resume.basics.fullName, 'docx')
 }
 
 /**

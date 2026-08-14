@@ -65,6 +65,40 @@
   --color-alert: #c02424; /* 5.96:1 */
   --color-alert-wash: #fdeded;
 
+  /* ── shadcn's token names, pointed at the palette above ───────────────
+     Vendored components in `src/components/ui/` are written against shadcn's default vocabulary —
+     `bg-background`, `text-muted-foreground`, `ring-ring`. None of those existed here, so a fetched
+     component rendered with no colour at all: Tailwind 4 simply does not emit a utility for an
+     undefined token, and a popover with no background is an unreadable pane of overlapping text.
+
+     Aliased rather than given values of their own, which is the whole point. shadcn's defaults are a
+     complete neutral palette plus its own primary, and adopting them would put a second grey ramp and a
+     second brand hue in a system whose first rule is that there is **one** accent (DESIGN.md). This way
+     a component fetched tomorrow inherits this world instead of importing another one, and the files
+     stay byte-identical to upstream so they can still be diffed (CLAUDE.md).
+
+     The mapping is by role, not by resemblance: `accent` is shadcn's *hover surface*, not our accent
+     hue, so it points at Signal Wash and its foreground at Signal. */
+  --color-background: var(--color-ground);
+  --color-foreground: var(--color-ink);
+  --color-card: var(--color-ground);
+  --color-card-foreground: var(--color-ink);
+  --color-popover: var(--color-ground);
+  --color-popover-foreground: var(--color-ink);
+  --color-primary: var(--color-signal);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--color-band);
+  --color-secondary-foreground: var(--color-ink);
+  --color-muted: var(--color-band);
+  --color-muted-foreground: var(--color-ink-soft);
+  --color-accent: var(--color-signal-wash);
+  --color-accent-foreground: var(--color-signal);
+  --color-destructive: var(--color-alert);
+  --color-destructive-foreground: #ffffff;
+  --color-border: var(--color-hairline);
+  --color-input: var(--color-hairline-strong);
+  --color-ring: var(--color-signal);
+
   /* ── Type ───────────────────────────────────────────────────────────── */
   --font-sans:
     'Figtree Variable', 'Figtree', ui-sans-serif, system-ui, -apple-system,
@@ -438,14 +472,30 @@ body {
   border-radius: 4px;
 }
 
-/** Someone who has asked the OS for less motion is not asking to be surprised by our transitions. */
+/**
+ * Someone who has asked the OS for less motion is not asking to be surprised by our transitions.
+ *
+ * With one exception, and it matters: this rule used to freeze the loading indicators too. A ring that
+ * has stopped turning does not read as "reduced motion", it reads as a hung application — and it was
+ * shown to the one visitor who has no other cue that work is still running. WCAG 2.3.3 is about motion
+ * used for decoration; a spinner's movement is its meaning.
+ *
+ * So anything marked `data-motion="essential"` keeps moving, slowly. Everything else still stops:
+ * the drifting background washes, the rise-in on scroll, every transition.
+ */
 @media (prefers-reduced-motion: reduce) {
-  *,
+  *:not([data-motion='essential']),
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  /* Slower than the 1s default: still legible as "working", no longer a spin somebody has to watch. */
+  [data-motion='essential'] {
+    animation-duration: 2.4s !important;
+    animation-iteration-count: infinite !important;
   }
 }

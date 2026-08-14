@@ -24,6 +24,7 @@ import type { JobRequirements } from '@/optimize/jd'
 import { resolveLocalProvider, resolveProvider } from '@/structure/provider'
 import { checkRateLimit, clientKey } from '@/lib/rate-limit'
 import { event, requestId } from '@/lib/log'
+import { mayUseThirdParty } from '@/lib/entitlements'
 
 /** Defensive: the client sends back what `/api/target` gave it, and a shape can be lost in transit. */
 function readRequirements(value: unknown): JobRequirements {
@@ -116,8 +117,16 @@ export const Route = createFileRoute('/api/cover-letter')({
           )
         }
 
-        // Fail-closed: absent is not consent. Declining routes to the local model.
-        const mayUseProvider = payload.processing === 'provider'
+        /**
+         * Two conditions, not one (ADR-023): consent **and** a paid plan. Local otherwise.
+         *
+         * `processing` is the client's answer to the consent gate and is never trusted alone — it is
+         * one half of an `&&` whose other half the client cannot influence.
+         */
+        const mayUseProvider = await mayUseThirdParty(
+          request,
+          payload.processing === 'provider',
+        )
         if (
           (mayUseProvider ? resolveProvider() : resolveLocalProvider()) ===
           undefined

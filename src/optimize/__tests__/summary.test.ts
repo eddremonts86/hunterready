@@ -273,3 +273,69 @@ describe('the candidate keeps their own summary when the model is unavailable', 
     expect(result.outcome).toBe('unavailable')
   })
 })
+
+describe('a true summary that reads machine-written gets one more try', () => {
+  it('takes the plainer second attempt', async () => {
+    /**
+     * The soft guard, end to end. Both versions pass the fabrication and overclaim checks — the first
+     * one just sounds like every other generated summary. Unlike a fabrication, it is not thrown away:
+     * it is kept as a floor while the model is asked for something plainer.
+     */
+    const { tailorSummary, turns } = await withModelReturning(
+      {
+        summary:
+          'A results-driven warehouse supervisor, leveraging a robust approach to the shift rota, showcasing eight years in cold-chain distribution.',
+        rationale: 'first try',
+      },
+      {
+        summary:
+          'Warehouse supervisor with eight years in cold-chain distribution. Runs the shift rota for a team of 14.',
+        rationale: 'second try, plainer',
+      },
+    )
+
+    const result = await tailorSummary({
+      resume: RESUME,
+      requirements: REQUIREMENTS,
+    })
+
+    expect(result.outcome).toBe('suggested')
+    expect(result.suggestion).not.toMatch(
+      /results-driven|leveraging|robust|showcasing/i,
+    )
+    expect(turns()).toBe(2)
+  })
+
+  it('ships the first version when the retry is no cleaner, rather than nothing', async () => {
+    // It passed both hard guards, so it is true and targeted. Refusing over style would be the wrong
+    // trade, and the candidate edits or rejects it either way.
+    const machine =
+      'A results-driven supervisor leveraging a robust rota across two bays.'
+    const { tailorSummary } = await withModelReturning(
+      { summary: machine, rationale: 'first' },
+      { summary: machine, rationale: 'second, identical' },
+    )
+
+    const result = await tailorSummary({
+      resume: RESUME,
+      requirements: REQUIREMENTS,
+    })
+    expect(result.outcome).toBe('suggested')
+    expect(result.suggestion).toBe(machine)
+  })
+
+  it('does not spend a second call when the first version is already plain', async () => {
+    const { tailorSummary, turns } = await withModelReturning({
+      summary:
+        'Warehouse supervisor with eight years in cold-chain distribution. Runs the shift rota for a team of 14.',
+      rationale: 'clean first time',
+    })
+
+    const result = await tailorSummary({
+      resume: RESUME,
+      requirements: REQUIREMENTS,
+    })
+    expect(result.outcome).toBe('suggested')
+    expect(turns()).toBe(1)
+  })
+})

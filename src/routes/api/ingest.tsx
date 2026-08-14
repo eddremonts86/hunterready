@@ -10,10 +10,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { ingest, MAX_BYTES } from '@/ingest'
 import { extractResume } from '@/structure/extract'
-import { resolveProvider } from '@/structure/provider'
+import { resolveLocalProvider, resolveProvider } from '@/structure/provider'
 import { sanityWarnings } from '@/structure/sanity'
 import { checkRateLimit, clientKey } from '@/lib/rate-limit'
 import { errorEvent, event, requestId } from '@/lib/log'
+import { mayUseThirdParty } from '@/lib/entitlements'
 
 export const Route = createFileRoute('/api/ingest')({
   server: {
@@ -63,7 +64,18 @@ export const Route = createFileRoute('/api/ingest')({
         let mayUseProvider = false
         try {
           const form = await request.formData()
-          mayUseProvider = form.get('processing') === 'provider'
+          /**
+           * Consent **and** a paid plan (ADR-023). Local otherwise, for everybody.
+           *
+           * The form field is the client's answer to the consent gate and is one half of an `&&` whose
+           * other half the client cannot influence. An anonymous visitor has no plan, so nothing they
+           * upload leaves the server — which makes the statelessness promise and the transfer promise
+           * the same promise for the commonest kind of visitor.
+           */
+          mayUseProvider = await mayUseThirdParty(
+            request,
+            form.get('processing') === 'provider',
+          )
           const file = form.get('file')
           if (!(file instanceof File)) {
             return Response.json(
@@ -153,6 +165,28 @@ export const Route = createFileRoute('/api/ingest')({
           !chosenOverModel
         ) {
           errorEvent('ingest.provider_degraded', {
+            requestId: id,
+            method: extracted.method,
+          })
+        }
+
+        /**
+         * The same alarm for the **local** model, which ADR-023 made everybody's default.
+         *
+         * Before that change the local path was the exception, taken by people who declined a
+         * transfer, and its failure showed up as one person getting a worse read. Now it is the path
+         * almost every CV takes, so a broken or unpulled model silently drops the entire product to
+         * regular expressions — with the user still receiving a plausible CV and nothing anywhere
+         * saying why it got worse. The metric that existed for the third party is worth strictly more
+         * here.
+         */
+        if (
+          !mayUseProvider &&
+          resolveLocalProvider() !== undefined &&
+          extracted.method === 'rules' &&
+          !chosenOverModel
+        ) {
+          errorEvent('ingest.local_degraded', {
             requestId: id,
             method: extracted.method,
           })

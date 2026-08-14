@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { estimateFit } from '../fit'
+import { PHOTO_BOX_PT } from '../templates/modern-base'
 import { getTheme } from '../themes'
 import { Resume } from '@/schema/resume'
 
@@ -105,5 +106,70 @@ describe('estimateFit', () => {
         expect(advice.length).toBeGreaterThan(30)
       }
     }
+  })
+})
+
+/**
+ * The photo's effect on the page estimate.
+ *
+ * The masthead is a row, so its height is the taller of the text column and the photo. Counting only the
+ * text made the estimate short on a European CV with a photo — enough to label a two-page document
+ * "1 page", which docs/11's honest-counter rule exists to prevent.
+ */
+describe('a photo makes the masthead taller, and the estimate knows', () => {
+  const theme = getTheme('modern')
+
+  it('fills more of the page when the photo is taller than the text beside it', () => {
+    const short = resumeWith(2, 3)
+    const plain = estimateFit(short, theme)
+    const withPhoto = estimateFit(short, theme, { photo: true })
+
+    expect(withPhoto.pages).toBeGreaterThanOrEqual(plain.pages)
+    if (withPhoto.pages === plain.pages) {
+      expect(withPhoto.lastPageFill).toBeGreaterThan(plain.lastPageFill)
+    }
+  })
+
+  it('changes nothing when no photo is drawn', () => {
+    // The default has to leave every existing caller's number exactly as it was.
+    const short = resumeWith(2, 3)
+    expect(estimateFit(short, theme, { photo: false })).toEqual(
+      estimateFit(short, theme),
+    )
+  })
+
+  it('takes the taller of the two columns, not the sum of them', () => {
+    /**
+     * The assertion that pins `max()` rather than `+`. A masthead with a headline, a contact line, links
+     * *and* personal details is already taller than the 78pt photo, so adding the photo must change
+     * nothing at all. Summing them would over-count by the whole text column and start warning about a
+     * second page that does not exist — the opposite failure, and just as dishonest.
+     */
+    const tall = Resume.parse({
+      schemaVersion: '1.0',
+      basics: {
+        fullName: 'Test Person',
+        headline: 'Registered Nurse — Intensive and Post-Operative Care',
+        email: 'a@b.co',
+        phone: '+45 22 14 88 03',
+        links: [{ label: 'LinkedIn', url: 'https://example.org/in/test' }],
+        personalDetails: [{ label: 'Nationality', value: 'Danish' }],
+      },
+      work: [
+        {
+          company: 'Employer',
+          role: 'Nurse',
+          startDate: '2020-01',
+          endDate: null,
+          highlights: ['A responsibility described in one realistic sentence.'],
+        },
+      ],
+    })
+
+    expect(estimateFit(tall, theme, { photo: true })).toEqual(
+      estimateFit(tall, theme),
+    )
+    // Guards the guard: if PHOTO_BOX_PT grew past that masthead, this test would pass vacuously.
+    expect(PHOTO_BOX_PT).toBeLessThan(90)
   })
 })

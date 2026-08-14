@@ -10,6 +10,7 @@
  * `scripts/copy-wasm.mjs` and the Block 1 finding in ADR-005.
  */
 import type { Resume } from '@/schema/resume'
+import { documentFilename } from './filename'
 import { loadThemeFonts } from './fonts'
 import { DEFAULT_THEME_ID, getTheme } from './themes'
 import type { ThemeId } from './themes'
@@ -26,16 +27,19 @@ export interface RenderResult {
   filename: string
 }
 
-/** `"Marta Sørensen"` → `"Marta-Sorensen-CV.pdf"`. */
+/**
+ * `"Marta Sørensen"` → `"Marta-Sorensen-CV.pdf"`.
+ *
+ * Which is what this always claimed and did not do. It stripped combining marks only, so `ø` — a
+ * character with no NFD decomposition — fell through to the non-ASCII replacement and produced
+ * `Marta-S-rensen-CV.pdf`, while the `.docx` button a centimetre away got the same name right. The bug
+ * was invisible because the filename lived in a response header nothing in the codebase read: the
+ * browser took it straight off the wire. Reading that header on the client is what surfaced it.
+ *
+ * `render/filename.ts` is now the one implementation for both, which is what stops them diverging again.
+ */
 export function suggestFilename(resume: Resume): string {
-  const base = resume.basics.fullName
-    .normalize('NFD')
-    // Strip combining marks so the filename survives every filesystem and mail client:
-    // "Marta Sørensen" → "Marta-Sorensen". Fixture names exercise ø, å and é.
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^A-Za-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return `${base === '' ? 'CV' : base}-CV.pdf`
+  return documentFilename(resume.basics.fullName, 'pdf')
 }
 
 export async function renderResume(

@@ -10,6 +10,7 @@
  * works without an account, and saying so here is what keeps that true rather than technically true.
  */
 import { useState } from 'react'
+import { ButtonLabel } from '@/components/working'
 import { signIn, signUp } from '@/lib/auth-client'
 import { RETENTION_DAYS } from '@/db/retention-policy'
 
@@ -127,11 +128,11 @@ export function SignIn({ onSignedIn }: { onSignedIn?: () => void }) {
         disabled={busy}
         className="btn btn-primary w-full py-3.5 text-[15px]"
       >
-        {busy
-          ? 'Working…'
-          : mode === 'signIn'
-            ? 'Sign in'
-            : 'Create my account'}
+        <ButtonLabel
+          busy={busy}
+          idle={mode === 'signIn' ? 'Sign in' : 'Create my account'}
+          working="Working…"
+        />
       </button>
 
       {error !== undefined && (

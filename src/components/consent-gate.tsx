@@ -18,6 +18,11 @@
  *    option and a privacy penalty: if the private choice is also the bad choice, nobody takes it and
  *    the option was decoration.
  *
+ *  • **Only asked of somebody it can happen to.** Since ADR-023 the third-party model is a paid
+ *    capability, and `/api/processing` reports no provider to an anonymous or free visitor — so this
+ *    gate never appears for them. That falls out of the existing rule below rather than needing a new
+ *    one, and it is the right behaviour: asking permission for a transfer that cannot occur trains
+ *    people to click through consent screens.
  *  • **When nothing is configured, nothing is asked.** If no model provider is set, no transfer will
  *    happen, and requesting consent for it would be theatre.
  *

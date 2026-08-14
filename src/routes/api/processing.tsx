@@ -16,6 +16,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { resolveProvider } from '@/structure/provider'
 import { encryptionEnabled } from '@/db/crypto'
+import { entitlementFor } from '@/lib/entitlements'
 
 /**
  * Host → the company's name as a person would recognise it.
@@ -36,8 +37,18 @@ function displayName(label: string): string {
 export const Route = createFileRoute('/api/processing')({
   server: {
     handlers: {
-      GET: () => {
-        const provider = resolveProvider()
+      GET: async ({ request }) => {
+        /**
+         * A provider is only named when this caller could actually reach it — consent gate included.
+         *
+         * ADR-023 makes the third-party model a paid capability, so for an anonymous or free visitor
+         * the honest answer is that nothing leaves the server. Returning `null` for them is not
+         * hiding a capability: it is reporting theirs. It also switches the consent gate off by
+         * itself, because `needsConsent` requires a named provider — and asking permission for a
+         * transfer that cannot happen is theatre.
+         */
+        const { thirdParty, plan } = await entitlementFor(request)
+        const provider = thirdParty ? resolveProvider() : undefined
 
         return Response.json(
           {
@@ -57,6 +68,13 @@ export const Route = createFileRoute('/api/processing')({
              * from the server.
              */
             encryptsAtRest: encryptionEnabled(),
+            /**
+             * What tier this caller is on, for the interface — never a reason shown to somebody with no
+             * account, who simply sees that their CV stays here.
+             */
+            plan,
+            /** Whether a third-party model is configured *at all*, so the UI can offer the upgrade. */
+            thirdPartyAvailable: resolveProvider() !== undefined,
           },
           { headers: { 'cache-control': 'no-store' } },
         )

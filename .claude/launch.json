@@ -18,7 +18,7 @@
       "autoPort": false
     },
     {
-      "//": "The production image, attached rather than launched. `vite dev` cannot prove the render path — the WASM bug in Block 1 passed dev and failed a real build (ADR-005) — so this entry exists to preview what `pnpm build && pnpm start` actually serves. Start it first: pnpm docker:build && pnpm docker:run.",
+      "//": "The real stack, attached rather than launched: the app image plus Postgres plus the local model. `vite dev` cannot prove the render path — the WASM bug in Block 1 passed dev and failed a real build (ADR-005) — and since v0.5 it cannot prove much else either, because accounts, encryption at rest and the local-by-default model (ADR-023) are all services rather than code. Start it first with `pnpm docker:build`, then: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d. NOT `pnpm docker:run` — that starts the app alone, with no database and no model, so persistence reports itself off and every generated text silently falls back to regular expressions. 3100 because Hermes' WhatsApp bridge holds 127.0.0.1:3000 while Docker publishes on *:3000, and a URL that resolves to one of two servers depending on v4/v6 order is not something to debug twice.",
       "name": "hunterready-container",
       "url": "http://localhost:3100"
     }

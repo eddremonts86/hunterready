@@ -255,6 +255,24 @@ skeleton and differ in which blocks render. The photo is the only `PdfImage` in 
 system, and the ATS ruleset above still holds: nothing but the photo may be an image,
 and the round-trip test runs against both variants independently.
 
+**The photo must be a PNG data URL.** takumi-pdf 0.6.4 embeds a PNG and **silently
+drops a JPEG or a WebP** — no error, no warning, and no image in the document. Measured
+through the real endpoint with one square encoded three ways, counting image XObjects
+in the returned bytes: PNG → 1, JPEG → 0, WebP → 0. It surfaced the worst possible way,
+with the browser preview showing a photo and the downloaded PDF having none.
+
+That constraint sets the resolution. The photo prints at 78pt ≈ 27.5mm, and PNG is
+about five times a JPEG on photographic content — 342KB against 54KB at 400px. So
+`src/lib/photo.ts` stores 260px (≈240dpi, ~139KB worst case, ~64KB for a real
+portrait), and those bytes are paid for in the encrypted `jsonb` row, in every render
+request, in every share-link read and in the GDPR export. `ats-roundtrip.test.ts` pins
+the behaviour, so the day the renderer learns JPEG the test **fails** and the
+resolution can go back up.
+
+The photo is also the **last** child of the masthead row, never the first: a parser
+walks the DOM in order, and the name, contact line and links have to be extracted
+before anything image-shaped appears in the region a screener scans for a name.
+
 The ATS rating is shown in the UI. `showcase` carries an explicit "may not parse
 cleanly in older ATS — use for direct/human applications" warning. Being honest
 about this is a feature.
