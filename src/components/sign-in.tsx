@@ -64,47 +64,48 @@ export function SignIn({ onSignedIn }: { onSignedIn?: () => void }) {
   return (
     <form
       onSubmit={(event) => void submit(event)}
-      className="rim bench mx-auto flex w-full max-w-md flex-col gap-4 p-5"
+      className="mx-auto flex w-full max-w-md flex-col gap-5"
     >
-      <div className="flex flex-col gap-2">
-        <h2 className="stencil text-[11px] text-safelight">
+      <div className="flex flex-col gap-3">
+        <h2 className="text-display text-ink">
           {mode === 'signIn' ? 'Come back to your CV' : 'Keep your CV here'}
+          <span className="text-signal">.</span>
         </h2>
-        <p className="text-[12px] leading-relaxed text-tray-enamel">
+        <p className="text-[15px] leading-relaxed text-ink-soft">
           An account means we remember your CV between visits, so you can come
           back to it and keep a version of what you sent to each employer.
         </p>
-        <p className="text-[11px] leading-relaxed text-developer-gray">
+        <p className="text-meta leading-relaxed text-ink-soft">
           We keep it for {RETENTION_DAYS} days after your last visit, then
           delete it — and you can delete it yourself at any time.{' '}
           <a
             href="/privacy"
-            className="text-safelight underline underline-offset-4"
+            className="font-medium text-signal underline decoration-signal/30 underline-offset-4 hover:decoration-signal"
           >
             What we do with your data
           </a>
         </p>
         {/* The exit, said plainly. An account the person did not need is data we did not need. */}
-        <p className="text-[10px] leading-relaxed text-developer-gray">
+        <p className="rounded-field bg-band px-3 py-2 text-meta leading-relaxed text-ink-soft">
           You do not need one. Everything except remembering works without an
           account, and nothing is stored if you skip this.
         </p>
       </div>
 
-      <label className="flex flex-col gap-1">
-        <span className="stencil text-[9px] text-safelight/70">Email</span>
+      <label className="flex flex-col gap-1.5">
+        <span className="text-[13px] font-semibold text-ink">Email</span>
         <input
           type="email"
           required
           autoComplete="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          className="rim bg-print-black/40 px-2 py-2 text-[12px] text-tray-enamel"
+          className="field"
         />
       </label>
 
-      <label className="flex flex-col gap-1">
-        <span className="stencil text-[9px] text-safelight/70">Password</span>
+      <label className="flex flex-col gap-1.5">
+        <span className="text-[13px] font-semibold text-ink">Password</span>
         <input
           type="password"
           required
@@ -112,10 +113,10 @@ export function SignIn({ onSignedIn }: { onSignedIn?: () => void }) {
           autoComplete={mode === 'signIn' ? 'current-password' : 'new-password'}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          className="rim bg-print-black/40 px-2 py-2 text-[12px] text-tray-enamel"
+          className="field"
         />
         {mode === 'signUp' && (
-          <span className="text-[9px] text-developer-gray">
+          <span className="text-meta text-ink-soft">
             At least 10 characters.
           </span>
         )}
@@ -124,7 +125,7 @@ export function SignIn({ onSignedIn }: { onSignedIn?: () => void }) {
       <button
         type="submit"
         disabled={busy}
-        className="rim stencil px-4 py-2.5 text-[10px] text-tray-enamel transition-colors hover:bg-amber-shadow/25 disabled:opacity-50"
+        className="btn btn-primary w-full py-3.5 text-[15px]"
       >
         {busy
           ? 'Working…'
@@ -136,7 +137,7 @@ export function SignIn({ onSignedIn }: { onSignedIn?: () => void }) {
       {error !== undefined && (
         <p
           role="status"
-          className="text-[10px] leading-relaxed text-tray-enamel/80"
+          className="rounded-field bg-caution-wash px-3 py-2 text-[13px] leading-relaxed text-ink"
         >
           {error}
         </p>
@@ -149,7 +150,7 @@ export function SignIn({ onSignedIn }: { onSignedIn?: () => void }) {
             setMode('signIn')
             setError(undefined)
           }}
-          className="stencil self-start text-[9px] text-safelight/70 underline underline-offset-4 hover:text-safelight"
+          className="self-center text-meta font-medium text-signal underline decoration-signal/30 underline-offset-4 hover:decoration-signal"
         >
           I already have an account
         </button>

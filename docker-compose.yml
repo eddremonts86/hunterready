@@ -42,8 +42,16 @@ services:
       MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
       MINIMAX_BASE_URL: ${MINIMAX_BASE_URL:-}
       MINIMAX_MODEL: ${MINIMAX_MODEL:-}
-    ports:
-      - '${APP_PORT:-3100}:3000'
+      # Coolify's convention for a compose stack: `SERVICE_FQDN_<SERVICE>_<PORT>` tells its proxy which
+      # container and port back this domain. It has to be declared **on the service**, not only as a
+      # stack-level variable — with it missing, the deploy reports `running:healthy` (it is) while
+      # Traefik answers `503 no available server`, because nothing told the proxy where to route.
+      SERVICE_FQDN_APP_3000: ${SERVICE_FQDN_APP_3000:-}
+    # `expose`, not `ports`. Publishing to the host makes the container reachable on a host port, which
+    # is not how Coolify's proxy finds it — it routes over the stack's own network. A published port
+    # here also collides with anything else on that number across a dozen co-hosted apps.
+    expose:
+      - '3000'
 
   db:
     image: postgres:18-alpine
