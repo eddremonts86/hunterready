@@ -53,6 +53,7 @@ import type {
   CoverLetterOffer,
 } from '@/components/target-panel'
 import type { BulletRewrite } from '@/optimize/rewrite'
+import { shiftTarget } from '@/optimize/rewrite-shift'
 import { diffResumes } from '@/optimize/variant-diff'
 import { tierOf } from '@/render/designs'
 import { Resume } from '@/schema/resume'
@@ -975,6 +976,17 @@ function HunterReady() {
     if (rewrite.suggestion === undefined) return
     setLoaded((current) => {
       if (current === undefined) return current
+      /*
+        Belt and braces under the coordinate shifting: apply only when the bullet at these coordinates
+        is still the text the model actually read. If anything slipped past the shift — a code path
+        that forgot to emit its edit — the failure is "nothing happened", never "a different line was
+        overwritten".
+      */
+      const present =
+        current.resume.work[rewrite.workIndex]?.highlights[
+          rewrite.highlightIndex
+        ]
+      if (present !== rewrite.original) return current
       const work = current.resume.work.map((job, jobIndex) =>
         jobIndex === rewrite.workIndex
           ? {
@@ -1015,7 +1027,10 @@ function HunterReady() {
           ...job,
           highlights: job.highlights.map((text, index) => {
             const hit = mine.find((entry) => entry.highlightIndex === index)
-            return hit?.suggestion ?? text
+            // Same guard as the single accept: the suggestion applies only to the text it was about.
+            return hit !== undefined && text === hit.original
+              ? (hit.suggestion ?? text)
+              : text
           }),
         }
       })
@@ -1947,13 +1962,37 @@ function HunterReady() {
                 removing a row renumbers every index-based path after it, so keeping the old list would
                 leave "we were not sure we read this" pointing at a row the person just typed.
               */
-                  onChange={(resume, provenance) =>
+                  onChange={(resume, provenance, edit) => {
                     setLoaded({
                       ...loaded,
                       resume,
                       ...(provenance === undefined ? {} : { provenance }),
                     })
-                  }
+                    /*
+                      A structural edit renumbers the coordinates the open suggestions point at, so
+                      they shift with it — the same arithmetic the provenance flags just went through.
+                      The accepted set is keyed by those coordinates too, so it is rebuilt through the
+                      same mapping: an accepted suggestion stays accepted at its new address, and the
+                      deleted row's entries leave both lists together.
+                    */
+                    if (edit !== undefined && rewrites !== undefined) {
+                      const moved = rewrites.flatMap((entry) => {
+                        const next = shiftTarget(entry, edit)
+                        return next === undefined
+                          ? []
+                          : [{ before: keyOf(entry), entry: next }]
+                      })
+                      setRewrites(moved.map((m) => m.entry))
+                      setAccepted(
+                        (current) =>
+                          new Set(
+                            moved
+                              .filter((m) => current.has(m.before))
+                              .map((m) => keyOf(m.entry)),
+                          ),
+                      )
+                    }
+                  }}
                   /*
                     Read off the registry rather than compared against a template id, so a third
                     convention would be one entry in one file — that check does not want to live in the

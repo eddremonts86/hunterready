@@ -17,6 +17,7 @@ import {
   needsReview,
   shiftProvenance,
 } from '@/schema/provenance'
+import type { StructuralEdit } from '@/optimize/rewrite-shift'
 import type { FieldProvenance } from '@/schema/provenance'
 import type { Resume } from '@/schema/resume'
 import { formatRange } from '@/render/format'
@@ -255,7 +256,19 @@ export function ReviewForm({
    * flags end up on the wrong rows — see `shiftProvenance`. Field edits leave the shape alone and pass
    * nothing, which is why this is optional rather than always required.
    */
-  onChange: (next: Resume, provenance?: Array<FieldProvenance>) => void
+  onChange: (
+    next: Resume,
+    provenance?: Array<FieldProvenance>,
+    /**
+     * Which structural edit happened, when one did — a row or bullet inserted or removed.
+     *
+     * The parent holds open rewrite suggestions addressed by {workIndex, highlightIndex}, and every
+     * structural edit renumbers those coordinates exactly as it renumbers the provenance paths.
+     * Without this descriptor, accepting a suggestion after deleting a row writes the model's text
+     * over the WRONG bullet. Text edits pass nothing: they move no indices.
+     */
+    edit?: StructuralEdit,
+  ) => void
   /** The text was read off an image, which changes the honest answer to "how much of this?" */
   ocr?: boolean
   /**
@@ -338,7 +351,13 @@ export function ReviewForm({
     const next = { ...resume, [list]: [...resume[list], row] }
     // Appended at the end, so no existing index moves — the shift is a no-op and passing the list
     // through anyway keeps one code path for all insertions if we ever add "insert above".
-    onChange(next, shiftProvenance(provenance, list, resume[list].length, 1))
+    onChange(
+      next,
+      shiftProvenance(provenance, list, resume[list].length, 1),
+      list === 'work'
+        ? { kind: 'work-row', at: resume[list].length, delta: 1 }
+        : undefined,
+    )
   }
 
   /** The dynamic sections' own helpers. Separate from `addRow` — that one is typed to the fixed lists. */
@@ -396,6 +415,7 @@ export function ReviewForm({
     onChange(
       { ...resume, [list]: rows },
       shiftProvenance(provenance, list, at, -1),
+      list === 'work' ? { kind: 'work-row', at, delta: -1 } : undefined,
     )
   }
 
@@ -417,13 +437,48 @@ export function ReviewForm({
         `${removed.list}.${at}.`,
       ),
     }))
-    onChange({ ...resume, [removed.list]: rows }, [...shifted, ...restored])
+    onChange(
+      { ...resume, [removed.list]: rows },
+      [...shifted, ...restored],
+      removed.list === 'work' ? { kind: 'work-row', at, delta: 1 } : undefined,
+    )
     setRemoved(undefined)
   }
 
   /** Bullets live inside a work row, so they renumber inside it rather than shifting the list. */
   const setHighlights = (i: number, highlights: Array<string>) =>
     setWork(i, { highlights })
+
+  /**
+   * Removing or adding a bullet is a structural edit twice over: the provenance paths
+   * `work.i.highlights.N` renumber (a bug this fixes in passing — they never shifted before, so a
+   * confidence flag could sit on the wrong line after a deletion), and the parent's open suggestions
+   * renumber with them.
+   */
+  const removeBullet = (i: number, b: number) => {
+    const work = resume.work.map((job, index) =>
+      index === i
+        ? { ...job, highlights: job.highlights.filter((_, at) => at !== b) }
+        : job,
+    )
+    onChange(
+      { ...resume, work },
+      shiftProvenance(provenance, `work.${i}.highlights`, b, -1),
+      { kind: 'work-bullet', workIndex: i, at: b, delta: -1 },
+    )
+  }
+  const addBullet = (i: number) => {
+    const at = resume.work[i]?.highlights.length ?? 0
+    const work = resume.work.map((job, index) =>
+      index === i ? { ...job, highlights: [...job.highlights, ''] } : job,
+    )
+    onChange({ ...resume, work }, undefined, {
+      kind: 'work-bullet',
+      workIndex: i,
+      at,
+      delta: 1,
+    })
+  }
 
   const total = provenance.length
   const flaggedCount = flaggedPaths.length
@@ -682,19 +737,11 @@ export function ReviewForm({
                   />
                   <RemoveRow
                     label={`Remove bullet ${b + 1}`}
-                    onClick={() =>
-                      setHighlights(
-                        i,
-                        item.highlights.filter((_, at) => at !== b),
-                      )
-                    }
+                    onClick={() => removeBullet(i, b)}
                   />
                 </div>
               ))}
-              <AddRow
-                label="Add a line"
-                onClick={() => setHighlights(i, [...item.highlights, ''])}
-              />
+              <AddRow label="Add a line" onClick={() => addBullet(i)} />
             </div>
 
             <RemoveRow
