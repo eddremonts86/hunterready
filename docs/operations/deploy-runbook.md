@@ -195,3 +195,43 @@ that cannot fail is not a check:
 
 `src/db/__tests__/repository.test.ts` skips itself when no database is reachable, so CI without one is
 not red for the wrong reason. Point `DATABASE_MIGRATION_URL` at the local container to run it.
+
+## Coolify and Docker Compose: the trap that took production down
+
+Recorded because the symptom points at nothing. The site answered **`503 no available server`** while
+Coolify reported the application `running:healthy` and the deploy log was entirely green.
+
+**For a `build_pack: dockercompose` application, Coolify ignores the `fqdn` field.** It builds the
+Traefik labels from **`docker_compose_domains`**, which held the auto-generated
+`app-<uuid>.<ip>.sslip.io:3000` — so the proxy was routing a hostname nobody requests. `fqdn` looked
+correct in the API, which is exactly why the deploy passed.
+
+The fix, and the shape took three rejected attempts to find:
+
+```bash
+# PATCH /api/v1/applications/<uuid>
+# `docker_compose_domains` is an ARRAY of {name, domain}, where `name` is the compose SERVICE name.
+{"docker_compose_domains":[{"name":"app","domain":"https://hunterready.eduardoinerarte.dk"}]}
+```
+
+The rejections, in order, because each one names a wrong guess worth not repeating:
+
+| sent                           | answer                                              |
+| ------------------------------ | --------------------------------------------------- |
+| a JSON **string**              | `must be an array`                                  |
+| an **object** keyed by service | `docker_compose_domains.app.name field is required` |
+| the field named `domains`      | `cannot be used for dockercompose applications`     |
+
+Four more things this cost, all of them cheap once known:
+
+- **`SERVICE_FQDN_<SERVICE>_<PORT>` must be declared on the service**, not only as a stack-level
+  variable. It is what tells the proxy which container and port back the domain.
+- **`expose`, not `ports`.** Coolify routes over the stack's own network. Publishing to the host does
+  not help it find the container and collides with everything else on that number.
+- **Postgres 18 mounts at `/var/lib/postgresql`**, not `/var/lib/postgresql/data`. The old path makes
+  the container refuse to start — and easy to miss, because a `docker run` with no volume works fine.
+- `docker_compose_raw` is base64 in the API. `/services` and `/applications` are different endpoints
+  with different shapes; a compose stack created as an application is not visible under services.
+
+**BuilderHunt is not the model for this.** It runs `build_pack: dockerfile`, so its group in the
+Coolify UI does not come from a compose stack at all. Copying its answers here was the wrong instinct.
