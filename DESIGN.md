@@ -160,10 +160,17 @@ That is the reference's central pattern and it is used where the flow genuinely 
 single question — not imposed on the review step, which needs the form and the
 document visible together and would be actively worse as twenty screens.
 
-**Three stations, and the chrome says so.** Upload → Check → Download. A 2px rail
-and an `n/3` counter, and both appear **only once the person has started** — a
-filled 1/3 on a landing page is progress nobody has made, which is the same
-overstatement the counter exists to avoid.
+**No progress counter, because there is no progression to count.** This used to
+specify a 2px rail and an `n/3` counter for Upload → Check → Download, on the
+argument that a bar overstating what is left is the same lie as one understating
+it. The rule holds; the counter broke it. **No screen was ever step 3** —
+downloading is a file save, not a station — so it sat frozen at "2 of 3" on the
+screen where the work is finished, understating every single time and pointing at
+a place nobody arrives at.
+
+The tabs then removed the premise: there is a landing page and there is the
+workspace, and a progression indicator over two screens is furniture. The header
+carries a way back, the wordmark, and whatever that screen needs on the right.
 
 **The landing hero is a 2×2 grid, ordered for the phone.** Headline top-left, the
 upload control spanning the right, the reasons bottom-left. On a phone the same three
