@@ -23,6 +23,7 @@ import { MAX_ADVERT_CHARS, MIN_ADVERT_CHARS } from '@/optimize/advert'
 import type { JobRequirements } from '@/optimize/jd'
 import { resolveLocalProvider, resolveProvider } from '@/structure/provider'
 import { checkRateLimit, clientKey } from '@/lib/rate-limit'
+import { progressEnd, progressReporter } from '@/lib/progress'
 import { event, requestId } from '@/lib/log'
 import { mayUseThirdParty } from '@/lib/entitlements'
 
@@ -141,7 +142,13 @@ export const Route = createFileRoute('/api/cover-letter')({
           )
         }
 
+        const progressId =
+          typeof (payload as { progress?: unknown }).progress === 'string'
+            ? ((payload as { progress?: unknown }).progress as string)
+            : undefined
+
         const letter = await draftCoverLetter({
+          onProgress: progressReporter(progressId),
           resume: parsed.data,
           requirements: readRequirements(payload.requirements),
           advert,
@@ -164,6 +171,8 @@ export const Route = createFileRoute('/api/cover-letter')({
          * The outcome and nothing else. A rising `refused` share is the signal that the prompt or the
          * model has drifted toward inventing things about employers, and it is invisible otherwise.
          */
+        if (progressId !== undefined) progressEnd(progressId)
+
         event('cover.done', {
           requestId: id,
           status: letter.outcome,

@@ -1,23 +1,24 @@
 /**
- * "Executive" document theme — serif throughout, larger scale, generous margins.
+ * "Executive" — serif, generous margins, and the masthead set in a full graphite band.
  *
- * For senior candidates whose CV is read by a hiring committee rather than skimmed off a
- * pile. Costs vertical space, so it fits fewer roles per page: the template's page-count
- * warning matters most under this theme.
+ * The band is the strongest signal in the catalogue and only this theme gets it: a committee sees the
+ * name in white on near-black before anything else. Costs vertical space, which is what executive means.
  */
 import { defaultPrimitives } from '@/components/pdf/primitives'
-import type { PdfcnTheme } from '@/components/pdf/theme-types'
+import type { DocTheme } from './style'
 import {
   DEVELOPER_GRAY,
   FONT_SERIF,
-  NEUTRALIZED_SEMANTICS,
+  GRAPHITE_INK,
+  GRAPHITE_WASH,
+  NEUTRALIZED_ALERTS,
   PAPER_MUTED,
   PAPER_WHITE,
   PRINT_BLACK,
   SILVER_GRAY,
 } from './tokens'
 
-export const executiveTheme: PdfcnTheme = {
+export const executiveTheme: DocTheme = {
   name: 'executive',
   primitives: defaultPrimitives,
   colors: {
@@ -25,10 +26,11 @@ export const executiveTheme: PdfcnTheme = {
     background: PAPER_WHITE,
     muted: PAPER_MUTED,
     mutedForeground: DEVELOPER_GRAY,
-    primary: PRINT_BLACK,
+    primary: GRAPHITE_INK,
     primaryForeground: PAPER_WHITE,
     border: SILVER_GRAY,
-    ...NEUTRALIZED_SEMANTICS,
+    accent: GRAPHITE_INK,
+    ...NEUTRALIZED_ALERTS,
   },
   typography: {
     body: {
@@ -64,5 +66,16 @@ export const executiveTheme: PdfcnTheme = {
   page: {
     size: 'A4',
     orientation: 'portrait',
+  },
+  style: {
+    accent: GRAPHITE_INK,
+    accentWash: GRAPHITE_WASH,
+    onAccent: PAPER_WHITE,
+    masthead: 'band',
+    heading: 'shortline',
+    nameInAccent: false,
+    headingInAccent: false,
+    bulletsInAccent: false,
+    roleInAccent: false,
   },
 }

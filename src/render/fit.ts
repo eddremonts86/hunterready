@@ -12,6 +12,7 @@
 import type { PdfcnTheme } from '@/components/pdf/theme-types'
 import type { Resume } from '@/schema/resume'
 import { PHOTO_BOX_PT } from './templates/modern-base'
+import { styleOf } from './themes/style'
 
 /** A4 at 96 dpi. */
 const PAGE_HEIGHT = 1123
@@ -84,6 +85,14 @@ export function estimateFit(
   masthead += leading // contact line
   masthead += resume.basics.links.length > 0 ? leading : 0
   masthead += resume.basics.personalDetails.length > 0 ? leading : 0
+
+  /**
+   * The theme's masthead construction has a real height cost. A `band` wraps the whole block in 28pt of
+   * painted padding — precisely the size of miss that made this estimator print "1 page" over a two-page
+   * document once before (the photo, 25pt). The heading treatments are ignored on purpose: a band adds
+   * ~6pt per section against a ~840pt page, inside the noise this estimator already carries.
+   */
+  masthead += styleOf(theme).masthead === 'band' ? 28 : 0
 
   height += options.photo === true ? Math.max(masthead, PHOTO_BOX_PT) : masthead
   // The summary sits below the row, so it is added whatever the photo does.

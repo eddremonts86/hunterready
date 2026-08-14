@@ -21,9 +21,10 @@ import {
 } from '../index'
 import {
   ALLOWED_PRINT_COLORS,
-  NEUTRALIZED_SEMANTICS,
+  NEUTRALIZED_ALERTS,
   ROOM_COLORS,
 } from '../tokens'
+import { styleOf } from '../style'
 
 const THEMES_DIR = join(process.cwd(), 'src/render/themes')
 const HEX = /^#[0-9a-fA-F]{6}$/
@@ -56,6 +57,47 @@ describe('the registry is coherent', () => {
   })
 })
 
+describe('no two themes are the same design in different clothes', () => {
+  /**
+   * The test Edd's complaint wrote. The first catalogue's thirty designs were one grey document in
+   * thirty spacing configurations — every theme drew the same hairline heading in the same ink, so the
+   * only difference a buyer could see was the typeface. Nobody pays for that, and nobody should.
+   */
+  it('accents are plentiful, and ink-only is a choice at most two themes make', () => {
+    /*
+      Not strict uniqueness any more: `minimal` and `editorial` both choose plain ink, and that is
+      legitimate — restraint is an identity — but only while it stays rare. Three monochrome themes
+      would mean the grey catalogue growing back one theme at a time.
+    */
+    const accents = entries.map(([, theme]) => styleOf(theme).accent)
+    expect(new Set(accents).size).toBeGreaterThanOrEqual(entries.length - 1)
+    const inkOnly = accents.filter((accent) => accent === '#0D0D0D')
+    expect(inkOnly.length).toBeLessThanOrEqual(2)
+  })
+
+  it('no two themes are the same look', () => {
+    // The whole identity at once: what the heading does, what the masthead does, and in which ink.
+    const looks = entries.map(([, theme]) => {
+      const style = styleOf(theme)
+      return [
+        style.heading,
+        style.masthead,
+        style.accent,
+        style.paper ?? 'white',
+        style.nameFontFamily ?? 'heading-face',
+      ].join('/')
+    })
+    expect(new Set(looks).size).toBe(entries.length)
+  })
+
+  it('at least three genuinely different masthead constructions exist', () => {
+    const mastheads = new Set(
+      entries.map(([, theme]) => styleOf(theme).masthead),
+    )
+    expect(mastheads.size).toBeGreaterThanOrEqual(3)
+  })
+})
+
 describe('The Amber Never Touches The Print Rule', () => {
   it.each(entries)('%s uses only hex colors', (_id, theme) => {
     for (const [key, value] of Object.entries(theme.colors)) {
@@ -85,10 +127,24 @@ describe('The Amber Never Touches The Print Rule', () => {
   )
 
   it.each(entries)('%s neutralizes the alert semantics', (_id, theme) => {
-    for (const [key, expected] of Object.entries(NEUTRALIZED_SEMANTICS)) {
+    // `accent` is a real color per theme now; the alerts stay ink — a CV has no error states.
+    for (const [key, expected] of Object.entries(NEUTRALIZED_ALERTS)) {
       expect(theme.colors[key as keyof typeof theme.colors]).toBe(expected)
     }
   })
+
+  it.each(entries)(
+    '%s draws its style block only from the allowed palette',
+    (_id, theme) => {
+      const allowed = ALLOWED_PRINT_COLORS.map((c) => c.toLowerCase())
+      const style = styleOf(theme)
+      for (const key of ['accent', 'accentWash', 'onAccent'] as const) {
+        expect(allowed, `style.${key} = ${style[key]}`).toContain(
+          style[key].toLowerCase(),
+        )
+      }
+    },
+  )
 
   it('no theme source file hardcodes a room color', async () => {
     const files = (await readdir(THEMES_DIR)).filter((f) => f.endsWith('.ts'))

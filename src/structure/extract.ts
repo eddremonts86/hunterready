@@ -15,6 +15,7 @@ import type { FieldProvenance } from '@/schema/provenance'
 import { applyHeuristics } from './heuristics'
 import { buildUserPrompt, PROMPT_VERSION, SYSTEM_PROMPT } from './prompt'
 import { extractByRules } from './fallback'
+import { detectLocale } from './detect-locale'
 import { resolveLocalProvider, resolveProvider } from './provider'
 import { recoverMissingHighlights } from './recover'
 import { errorEvent } from '@/lib/log'
@@ -41,6 +42,8 @@ const ExtractionPayload = z.object({
 
 export interface ExtractOptions {
   signal?: AbortSignal
+  /** Live narration for the waiting screen. Stage labels and counts only — never document content. */
+  onProgress?: (label: string, detail?: string) => void
   /**
    * Set false when the user declined to have their CV sent to a third-party model provider.
    *
@@ -89,6 +92,14 @@ function toolSchema(): Record<string, unknown> {
   })
 }
 
+/** Stamp the detected language onto a freshly extracted resume. One place, both paths. */
+function withDetectedLocale<T extends { locale: string }>(
+  resume: T,
+  normalizedText: string,
+): T {
+  return { ...resume, locale: detectLocale(normalizedText) }
+}
+
 export async function extractResume(
   normalizedText: string,
   options: ExtractOptions = {},
@@ -115,13 +126,16 @@ export async function extractResume(
    *
    * So the local model corrects the rules instead of replacing them. See `local-refine.ts`.
    */
+  const onProgress = options.onProgress ?? (() => {})
+
   if (options.useProvider === false) {
     const local = resolveLocalProvider()
+    onProgress('Structuring with rules')
     const { resume, provenance } = extractByRules(normalizedText)
     if (local === undefined) {
       return {
         ok: true,
-        resume,
+        resume: withDetectedLocale(resume, normalizedText),
         provenance,
         promptVersion: `${PROMPT_VERSION}+rules-only`,
         repairs: 0,
@@ -129,6 +143,14 @@ export async function extractResume(
       }
     }
     const { refineLocally } = await import('./local-refine')
+    /*
+      The long one. A small model on our own CPU re-reads the document and files corrections; on a busy
+      box this is minutes, and it is exactly the wait Edd described as "no tener puta idea de lo que está
+      pasando". The label says whose hardware, because that is the promise being kept while it is slow.
+    */
+    onProgress(
+      'The model on our own server is double-checking names, dates and employers',
+    )
     const refined = await refineLocally({
       normalizedText,
       draft: resume,
@@ -138,7 +160,7 @@ export async function extractResume(
     })
     return {
       ok: true,
-      resume: refined.resume,
+      resume: withDetectedLocale(refined.resume, normalizedText),
       provenance: refined.provenance,
       promptVersion: `${PROMPT_VERSION}+local-refine(${refined.corrections})`,
       repairs: 0,
@@ -156,7 +178,7 @@ export async function extractResume(
     const { resume, provenance } = extractByRules(normalizedText)
     return {
       ok: true,
-      resume,
+      resume: withDetectedLocale(resume, normalizedText),
       provenance,
       promptVersion: `${PROMPT_VERSION}+rules-only`,
       repairs: 0,
@@ -177,6 +199,7 @@ export async function extractResume(
   while (repairs <= MAX_REPAIRS) {
     let response: Anthropic.Message
     try {
+      onProgress('The model is reading your CV and structuring it')
       response = await client.messages.create(
         {
           model,
@@ -216,7 +239,7 @@ export async function extractResume(
       const { resume, provenance } = extractByRules(normalizedText)
       return {
         ok: true,
-        resume,
+        resume: withDetectedLocale(resume, normalizedText),
         provenance,
         promptVersion: `${PROMPT_VERSION}+rules-fallback`,
         repairs,
@@ -342,7 +365,7 @@ export async function extractResume(
     if (recovered(rules.resume) > recovered(recovery.resume)) {
       return {
         ok: true,
-        resume: rules.resume,
+        resume: withDetectedLocale(rules.resume, normalizedText),
         provenance: rules.provenance,
         promptVersion: `${PROMPT_VERSION}+rules-outperformed`,
         repairs,
@@ -352,7 +375,7 @@ export async function extractResume(
 
     return {
       ok: true,
-      resume: recovery.resume,
+      resume: withDetectedLocale(recovery.resume, normalizedText),
       provenance: [...provenance, ...recovery.provenance],
       promptVersion: PROMPT_VERSION,
       repairs,

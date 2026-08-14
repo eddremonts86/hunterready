@@ -45,9 +45,34 @@ const FACES = [
     role: 'app labels (stencilled caps)',
   },
   {
+    pkg: 'playfair-display',
+    weights: ['400', '700'],
+    role: 'document display serif (editorial, blossom)',
+  },
+  {
+    pkg: 'eb-garamond',
+    weights: ['400', '700'],
+    role: 'document classical serif (parchment, heritage)',
+  },
+  {
+    pkg: 'space-grotesk',
+    weights: ['400', '700'],
+    role: 'document grotesque (grotesk)',
+  },
+  {
+    pkg: 'lora',
+    weights: ['400', '700'],
+    role: 'document warm serif (brush body)',
+  },
+  {
+    pkg: 'josefin-sans',
+    weights: ['400', '700'],
+    role: 'document geometric sans (glacier)',
+  },
+  {
     pkg: 'caveat-brush',
     weights: ['400'],
-    role: 'app display (grease pencil)',
+    role: 'app display (grease pencil) and the brush theme name',
   },
 ]
 

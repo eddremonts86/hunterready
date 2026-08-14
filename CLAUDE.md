@@ -50,10 +50,13 @@ grep -rn "optimize/thing" src --include='*.ts' --include='*.tsx' | grep -v __tes
 - **No CV content in logs, errors, analytics or telemetry.** Ever. See [docs/07-privacy.md](docs/07-privacy.md).
 - **The print is not ours.** DESIGN.md's hardest rule: Signal Blue (`#1B3BD8`), every
   other chrome colour, and the chrome typeface (Figtree) appear nowhere in a CV preview
-  or an exported PDF. Documents use the renderer's own neutral themes and its own faces
-  (Source Sans 3 / Source Serif 4). A CV carrying our accent carries our brand into
-  someone else's job application.
-  _This rule outlived the v0.6 world change unaltered — it was never about amber._
+  or an exported PDF. Documents draw from their **own** print palette — seven accent inks
+  and their washes in `src/render/themes/tokens.ts`, enforced by test — and the renderer's
+  own bundled faces (ten OFL families — see `scripts/bundle-fonts.mjs`). A CV
+  carrying our accent carries our brand into someone else's job application; a CV carrying
+  a navy of its own is just a CV (ADR-024).
+  _This rule outlived the v0.6 world change unaltered — it was never about amber, and it
+  was never about banning color._
 - **Nothing is irreversible, and nothing warns that it is.** The darkroom world says
   "there is no undo"; this product says the opposite. Variants are test strips.
 - **PDF colors are hex.** The renderer rejects `oklch`. Themes are a hand-maintained

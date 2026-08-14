@@ -57,6 +57,8 @@ export interface LocaleStrings {
   /** Between the two ends of a date range. En dash everywhere; kept here so it stays one decision. */
   rangeSeparator: string
   headings: {
+    /** The sidebar template's label over email/phone/links. */
+    contact: string
     summary: string
     work: string
     education: string
@@ -97,6 +99,7 @@ const STRINGS: Record<OutputLocale, LocaleStrings> = {
     present: 'Present',
     rangeSeparator: ' – ',
     headings: {
+      contact: 'Contact',
       summary: 'Summary',
       work: 'Experience',
       education: 'Education',
@@ -128,6 +131,7 @@ const STRINGS: Record<OutputLocale, LocaleStrings> = {
     present: 'Actualidad',
     rangeSeparator: ' – ',
     headings: {
+      contact: 'Contacto',
       summary: 'Perfil',
       work: 'Experiencia',
       education: 'Formación',
@@ -159,6 +163,7 @@ const STRINGS: Record<OutputLocale, LocaleStrings> = {
     present: 'Nu',
     rangeSeparator: ' – ',
     headings: {
+      contact: 'Kontakt',
       summary: 'Profil',
       work: 'Erfaring',
       education: 'Uddannelse',

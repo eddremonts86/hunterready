@@ -40,6 +40,27 @@ import { currentUserId } from '@/lib/session'
 /** Plans that may use the third-party model. A set, so adding a tier is one edit. */
 const THIRD_PARTY_PLANS = new Set(['pro'])
 
+/**
+ * The developer switch: every design unlocked for this **process**.
+ *
+ * Edd's complaint was exact: a developer who cannot download and try the paid half of the catalogue
+ * cannot test the paid half of the catalogue. So the dev server (`pnpm dev`, NODE_ENV=development)
+ * unlocks everything with no configuration, and the local container — which is a production build and
+ * knows nothing about dev — gets `HR_UNLOCK_DESIGNS=true` in `docker-compose.local.yml`, a file that is
+ * gitignored and machine-local.
+ *
+ * ⚠️ Never set `HR_UNLOCK_DESIGNS` in Coolify. It is not a plan, it is the absence of the gate. It
+ * deliberately unlocks only *designs*: the third-party model keeps its own entitlement, because that
+ * switch spends money and moves someone's CV to another company, and no developer convenience is worth
+ * defaulting into either.
+ */
+export function designsUnlocked(): boolean {
+  return (
+    process.env.HR_UNLOCK_DESIGNS === 'true' ||
+    process.env.NODE_ENV === 'development'
+  )
+}
+
 export type Entitlement = {
   /** Whether the account may use the third-party model at all, before consent is considered. */
   thirdParty: boolean
