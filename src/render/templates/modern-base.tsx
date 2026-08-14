@@ -31,6 +31,20 @@ import type { OutputLocale } from '../locale'
 
 export type Convention = 'intl' | 'eu'
 
+/**
+ * The printed size of the photo, in points, and the only place it is written down.
+ *
+ * `fit.ts` imports it, because a page-count estimate that does not know how tall the masthead is will
+ * confidently print "1 page" over a two-page document. Two copies of this number would drift the first
+ * time somebody adjusted one, and the symptom would be a label that lies — which is the one thing this
+ * product cannot afford to ship.
+ *
+ * 78pt ≈ 27.5mm, the size a European CV photo is expected to be. Raising it is a one-line change here,
+ * and the estimate follows automatically — but measure the page count first: the nurse fixture fits on one
+ * page at 78 and spills onto a second at 120.
+ */
+export const PHOTO_BOX_PT = 78
+
 interface BodyProps {
   resume: Resume
   theme: PdfcnTheme
@@ -281,8 +295,8 @@ function Body({ resume, theme, convention }: BodyProps) {
                 parser, and the renderer's clipping is one more thing that can differ between the preview
                 and the PDF. The crop itself already happened in the browser, so this is a plain square.
               */
-              width: 78,
-              height: 78,
+              width: PHOTO_BOX_PT,
+              height: PHOTO_BOX_PT,
               // Preserves the subject when the source was not perfectly square after all.
               objectFit: 'cover',
             }}

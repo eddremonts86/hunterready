@@ -1341,7 +1341,12 @@ function HunterReady() {
         ).length
   const readFields = loaded.provenance.length
   // A hint while they edit; the PDF is the authority on pagination.
-  const fit = estimateFit(loaded.resume, theme)
+  const fit = estimateFit(loaded.resume, theme, {
+    // Passed, not inferred: the estimate is only honest if it knows what the template will draw.
+    photo:
+      template.convention === 'eu' &&
+      loaded.resume.basics.photoUrl !== undefined,
+  })
 
   return (
     <div className="flex min-h-screen flex-col bg-band">

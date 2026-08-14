@@ -25,6 +25,7 @@
 import { useRef, useState } from 'react'
 import { Spinner } from '@/components/working'
 import { cropToDataUrl, rejectPhoto } from '@/lib/photo'
+import type { PhotoShape } from '@/lib/photo'
 
 export function PhotoField({
   value,
@@ -50,12 +51,28 @@ export function PhotoField({
    * without re-reading the file.
    */
   const [offset, setOffset] = useState(0.25)
+  /**
+   * Square or round, and it is cut into the pixels rather than asked of the PDF renderer, which ignores
+   * `borderRadius` on an image — measured. `photo.ts` carries the detail.
+   *
+   * Held here rather than in the resume because it is not a fact about the person: the shape lives in the
+   * image itself once it is cut, so the stored photo *is* the answer and this state only remembers which
+   * button to highlight while the tab is open.
+   */
+  const [shape, setShape] = useState<PhotoShape>('square')
   const sourceRef = useRef<HTMLImageElement | undefined>(undefined)
 
-  const recrop = (at: number) => {
+  /**
+   * Re-cut from the **source**, never from the current crop.
+   *
+   * Cutting a circle out of an already-circular PNG would eat another ring of pixels each time, and going
+   * back to a square from a round one would leave transparent corners. Every change re-derives from the
+   * original file, which is why it is held in a ref for as long as the tab is open.
+   */
+  const recrop = (at: number, form: PhotoShape) => {
     const image = sourceRef.current
     if (image === undefined) return
-    const next = cropToDataUrl(image, at)
+    const next = cropToDataUrl(image, at, form)
     if (next !== undefined) onChange(next)
   }
 
@@ -84,7 +101,7 @@ export function PhotoField({
       }
       image.onload = () => {
         sourceRef.current = image
-        const next = cropToDataUrl(image, offset)
+        const next = cropToDataUrl(image, offset, shape)
         setBusy(false)
         if (next === undefined) {
           setError('We could not prepare that photo. Try another one.')
@@ -130,7 +147,9 @@ export function PhotoField({
           <img
             src={value}
             alt="Your photo, as it will appear on the CV"
-            className="h-[72px] w-[72px] shrink-0 rounded-field border border-hairline object-cover"
+            className={`h-[72px] w-[72px] shrink-0 border border-hairline object-cover ${
+              shape === 'round' ? 'rounded-full' : 'rounded-field'
+            }`}
           />
         )}
 
@@ -189,6 +208,47 @@ export function PhotoField({
         in memory, so dragging it costs no file read and loses no quality with each move — every crop comes
         from the original, never from the previous crop.
       */}
+      {/*
+        Shape, only while the source is in memory.
+
+        After a reload there is no original to re-cut, and offering a toggle that would have to work from
+        an already-cut image is offering something that produces a worse picture each time it is pressed.
+        The copy says what to do instead.
+      */}
+      {value !== undefined && sourceRef.current !== undefined && (
+        <div className="flex items-center gap-2">
+          <span className="text-meta shrink-0 text-ink-soft">Shape</span>
+          <div className="flex gap-0.5 rounded-full bg-band p-0.5">
+            {(['square', 'round'] as const).map((form) => (
+              <button
+                key={form}
+                type="button"
+                aria-pressed={shape === form}
+                onClick={() => {
+                  setShape(form)
+                  recrop(offset, form)
+                }}
+                className={[
+                  'rounded-full px-3 py-1 text-[12px] capitalize transition-colors',
+                  shape === form
+                    ? 'border border-signal-edge bg-ground font-semibold text-signal'
+                    : 'border border-transparent font-medium text-ink-soft hover:text-ink',
+                ].join(' ')}
+              >
+                {form}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {value !== undefined && sourceRef.current === undefined && (
+        <p className="text-meta leading-relaxed text-ink-soft">
+          Add the photo again to change its shape or framing — we keep the
+          picture, not the original file.
+        </p>
+      )}
+
       {value !== undefined && sourceRef.current !== undefined && (
         <label className="flex items-center gap-2">
           <span className="text-meta shrink-0 text-ink-soft">Framing</span>
@@ -201,7 +261,7 @@ export function PhotoField({
             onChange={(event) => {
               const next = Number(event.target.value) / 100
               setOffset(next)
-              recrop(next)
+              recrop(next, shape)
             }}
             className="h-1.5 min-w-0 flex-1 accent-signal"
           />

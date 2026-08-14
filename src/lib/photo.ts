@@ -112,15 +112,33 @@ export function rejectPhoto(file: {
   return undefined
 }
 
+/** Square or a circle. The circle is cut into the pixels, not asked of the renderer — see below. */
+export type PhotoShape = 'square' | 'round'
+
 /**
  * Draw the chosen square into a `data:` URL.
  *
  * Browser only — it needs a canvas. Kept here beside `squareCrop` so the two halves of one operation are
  * not in different files, and so the caller never has to touch a canvas itself.
+ *
+ * ## The circle is cut here, not in the template
+ *
+ * The obvious way to round a photo is `borderRadius` on the image in the PDF template. Measured: takumi
+ * ignores it completely — a `borderRadius: 60` on a 120pt image produced a hard-edged square and not one
+ * clipping operator anywhere in the PDF.
+ *
+ * Cutting it into the pixels is better than a workaround, though. The preview in the sidebar and the image
+ * in the PDF become *the same bytes*, so they cannot disagree — which is the failure this render path is
+ * most afraid of, and the one that already bit this feature once when the JPEG encoding made a photo
+ * appear in the preview and vanish from the document.
+ *
+ * The corners are transparent rather than white. PNG keeps alpha, so a round photo sits on whatever the
+ * page is instead of carrying a white box around itself on a themed background.
  */
 export function cropToDataUrl(
   image: HTMLImageElement,
   offset = 0.25,
+  shape: PhotoShape = 'square',
 ): string | undefined {
   const { sx, sy, size } = squareCrop(
     image.naturalWidth,
@@ -134,15 +152,26 @@ export function cropToDataUrl(
   if (context === null) return undefined
 
   /**
-   * White underneath, even though PNG keeps its alpha.
+   * White underneath a square, and nothing underneath a circle.
    *
-   * A portrait cut out of its background would otherwise be transparent, and the square would show
-   * whatever the page is — which is white today and is a theme's decision tomorrow. Filling it here means
-   * the square in the sidebar and the square in the PDF are the same picture, which is the promise the
-   * preview makes.
+   * A portrait cut out of its background is transparent, and a square with a transparent hole in it would
+   * show whatever the page is — white today, a theme's decision tomorrow. So a square gets a white ground.
+   * A round photo must *not*, or the fill would paint the corners the circle exists to remove.
    */
-  context.fillStyle = '#ffffff'
-  context.fillRect(0, 0, PHOTO_SIZE_PX, PHOTO_SIZE_PX)
+  if (shape === 'square') {
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, PHOTO_SIZE_PX, PHOTO_SIZE_PX)
+  } else {
+    const half = PHOTO_SIZE_PX / 2
+    context.beginPath()
+    context.arc(half, half, half, 0, Math.PI * 2)
+    context.closePath()
+    context.clip()
+    // White inside the circle only: the same reason as above, minus the corners.
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, PHOTO_SIZE_PX, PHOTO_SIZE_PX)
+  }
+
   context.imageSmoothingQuality = 'high'
   context.drawImage(
     image,
