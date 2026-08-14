@@ -45,6 +45,12 @@ import type { FabricationFinding } from './fabrication'
 import { resolveLocalProvider, resolveProvider } from '@/structure/provider'
 import { unwrapToolInput } from '@/structure/tool-input'
 import { errorEvent } from '@/lib/log'
+import {
+  describeAiTells,
+  findAiTells,
+  HUMAN_VOICE_RULES,
+  pickCleaner,
+} from './ai-tells'
 
 /**
  * Bump on any prompt change.
@@ -63,7 +69,7 @@ import { errorEvent } from '@/lib/log'
  * rewrite-v2 and the rule simply had not been carried across, and a summary needs it *more* than a
  * bullet does, because compressing a career is what invites the arithmetic.
  */
-export const SUMMARY_PROMPT_VERSION = 'summary-v3'
+export const SUMMARY_PROMPT_VERSION = 'summary-v4'
 
 const MAX_TOKENS = 800
 const MAX_ATTEMPTS = 2
@@ -297,7 +303,9 @@ Write in the language the CV is written in. A Danish CV gets a Danish summary, e
 in English.
 
 The candidate may be a nurse, an electrician, a warehouse supervisor or a teacher. Do not reach for
-office or software vocabulary.`
+office or software vocabulary.
+
+${HUMAN_VOICE_RULES}`
 
 /** Everything the candidate wrote, as grounding material. Mirrors `rewrite.ts`'s context builder. */
 function resumeContext(resume: Resume): string {
@@ -450,6 +458,8 @@ export async function tailorSummary(
 
   let lastRejected: Array<FabricationFinding> | undefined
   let lastOverclaimed: Array<string> | undefined
+  /** The cleanest guard-passing version seen so far. Shipped if no attempt comes back tell-free. */
+  let best: { summary: string; rationale: string } | undefined
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     let response: Anthropic.Message
@@ -512,12 +522,55 @@ export async function tailorSummary(
     const overclaimed = findOverclaims(parsed.data.summary, gap.missing)
 
     if (rejected.length === 0 && overclaimed.length === 0) {
-      return {
-        original,
-        suggestion: parsed.data.summary,
+      /**
+       * The guards passed, so this is true. Now: does it read as though a machine wrote it?
+       *
+       * A **soft** check, and the difference from the two above is the whole design. An invented claim
+       * is a lie and kills the suggestion; an AI tell is a style problem on a suggestion that is still
+       * true and may still be an improvement. Throwing it away because it says "showcasing" would trade
+       * something valuable for something cosmetic.
+       *
+       * So: keep it, name the phrases back, and take one more attempt — then ship whichever version has
+       * fewer tells. That can never be worse than the first attempt.
+       */
+      const candidate = {
+        summary: parsed.data.summary,
         rationale: clamp(parsed.data.rationale),
-        outcome: 'suggested',
       }
+      const tells = findAiTells(candidate.summary)
+
+      if (tells.length === 0) {
+        return {
+          original,
+          suggestion: candidate.summary,
+          rationale: candidate.rationale,
+          outcome: 'suggested',
+        }
+      }
+
+      best =
+        best === undefined ||
+        pickCleaner(best.summary, candidate.summary) === candidate.summary
+          ? candidate
+          : best
+
+      if (attempt === MAX_ATTEMPTS - 1) break
+
+      messages.push(
+        { role: 'assistant', content: blocks },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result' as const,
+              tool_use_id: toolUse.id,
+              is_error: true,
+              content: `${describeAiTells(tells)} Everything else about it was fine — keep the same facts and the same structure.`,
+            },
+          ],
+        },
+      )
+      continue
     }
 
     lastRejected = rejected.length > 0 ? rejected : undefined
@@ -544,6 +597,19 @@ export async function tailorSummary(
         ],
       },
     )
+  }
+
+  /**
+   * A version that passed both guards but still reads a little machine-written beats no summary at all:
+   * it is true, it is targeted, and the candidate edits or rejects it either way.
+   */
+  if (best !== undefined) {
+    return {
+      original,
+      suggestion: best.summary,
+      rationale: best.rationale,
+      outcome: 'suggested',
+    }
   }
 
   return {

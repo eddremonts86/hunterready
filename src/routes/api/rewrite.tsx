@@ -112,6 +112,10 @@ export const Route = createFileRoute('/api/rewrite')({
           promptVersion: result.promptVersion,
           bullets: result.rewrites.length,
           ...result.tally,
+          // Whether the voice rules are holding. A rising share is the signal to spend a retry on
+          // bullets too, and without the number that decision would be a guess.
+          voiceTells: result.voice.tells,
+          voiceSuggestions: result.voice.suggestionsWithTells,
           ms: Date.now() - started,
         })
 

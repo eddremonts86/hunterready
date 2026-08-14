@@ -30,6 +30,7 @@ import {
   REWRITE_PROMPT_VERSION,
   REWRITE_SYSTEM_PROMPT,
 } from './prompt'
+import { countAiTells } from './ai-tells'
 
 const MAX_TOKENS = 1024
 
@@ -294,6 +295,18 @@ export interface RewriteResult {
   promptVersion: string
   /** Counts by outcome. `fabricated` rising is the signal that the prompt or model has drifted. */
   tally: Record<RewriteOutcome, number>
+  /**
+   * How many suggestions still read as machine-written, and how many phrases in total.
+   *
+   * **Measured here, not retried.** The summary and the cover letter get a second attempt when they trip
+   * the voice check, because each is one model call. A rewrite pass is roughly twenty-five, so retrying
+   * every bullet that says "robust" would double the cost of the feature for a style fix the candidate
+   * can make in two seconds — they are reading and accepting each line anyway.
+   *
+   * So the prompt does the work (`HUMAN_VOICE_RULES`) and this counts whether it is working. A rising
+   * share is the signal to spend the retry after all, and without it that decision would be a guess.
+   */
+  voice: { suggestionsWithTells: number; tells: number }
 }
 
 /**
@@ -346,6 +359,7 @@ export async function rewriteBullets(
   }
 
   const rewrites: Array<BulletRewrite> = []
+  const voice = { suggestionsWithTells: 0, tells: 0 }
 
   for (const target of targets) {
     const job = resume.work[target.workIndex]
@@ -398,9 +412,17 @@ export async function rewriteBullets(
       outcome: result.outcome,
       rejected: result.rejected,
     }
+    if (rewrite.suggestion !== undefined) {
+      const tells = countAiTells(rewrite.suggestion)
+      if (tells > 0) {
+        voice.suggestionsWithTells++
+        voice.tells += tells
+      }
+    }
+
     cacheSet(key, rewrite)
     rewrites.push(rewrite)
   }
 
-  return { rewrites, promptVersion: REWRITE_PROMPT_VERSION, tally }
+  return { rewrites, promptVersion: REWRITE_PROMPT_VERSION, tally, voice }
 }

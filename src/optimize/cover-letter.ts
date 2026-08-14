@@ -47,9 +47,15 @@ import { findOverclaims } from './summary'
 import { resolveLocalProvider, resolveProvider } from '@/structure/provider'
 import { unwrapToolInput } from '@/structure/tool-input'
 import { errorEvent } from '@/lib/log'
+import {
+  describeAiTells,
+  findAiTells,
+  HUMAN_VOICE_RULES,
+  pickCleaner,
+} from './ai-tells'
 
 /** Bump on any prompt change. */
-export const COVER_LETTER_PROMPT_VERSION = 'cover-v1'
+export const COVER_LETTER_PROMPT_VERSION = 'cover-v2'
 
 const MAX_TOKENS = 1400
 const MAX_ATTEMPTS = 2
@@ -130,7 +136,9 @@ Write in the language of the advert. A Danish advert gets a Danish letter, even 
 the letter is read by the employer, unlike the CV, which is also read by a machine.
 
 The candidate may be a nurse, an electrician, a warehouse supervisor or a teacher. Do not reach for
-office or software vocabulary, and do not assume a desk.`
+office or software vocabulary, and do not assume a desk.
+
+${HUMAN_VOICE_RULES}`
 
 function resumeContext(resume: Resume): string {
   const lines: Array<string> = []
@@ -263,6 +271,8 @@ submit_letter.`,
 
   let lastRejected: Array<FabricationFinding> | undefined
   let lastOverclaimed: Array<string> | undefined
+  /** The cleanest guard-passing draft so far. Shipped if no attempt comes back tell-free. */
+  let best: { body: string; rationale: string } | undefined
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     let response: Anthropic.Message
@@ -315,11 +325,52 @@ submit_letter.`,
     const overclaimed = findOverclaims(parsed.data.body, gap.missing)
 
     if (rejected.length === 0 && overclaimed.length === 0) {
-      return {
-        text: assemble(parsed.data.body, resume, request.company),
+      /**
+       * Three guards passed, so nothing here is invented. Now: does it read like every other generated
+       * cover letter?
+       *
+       * This form is where it matters most. A recruiter reads the letter before the CV, and a letter
+       * that opens "I was thrilled to see this vacancy" identifies itself in eight words. A **soft**
+       * check, like the summary's: keep the draft, name the phrases, take one more attempt, ship the
+       * cleaner of the two.
+       */
+      const candidate = {
+        body: parsed.data.body,
         rationale: clamp(parsed.data.rationale),
-        outcome: 'drafted',
       }
+      const tells = findAiTells(candidate.body)
+
+      if (tells.length === 0) {
+        return {
+          text: assemble(candidate.body, resume, request.company),
+          rationale: candidate.rationale,
+          outcome: 'drafted',
+        }
+      }
+
+      best =
+        best === undefined ||
+        pickCleaner(best.body, candidate.body) === candidate.body
+          ? candidate
+          : best
+
+      if (attempt === MAX_ATTEMPTS - 1) break
+
+      messages.push(
+        { role: 'assistant', content: blocks },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result' as const,
+              tool_use_id: toolUse.id,
+              is_error: true,
+              content: `${describeAiTells(tells)} The facts were fine — keep them and keep the structure.`,
+            },
+          ],
+        },
+      )
+      continue
     }
 
     lastRejected = rejected.length > 0 ? rejected : undefined
@@ -346,6 +397,18 @@ submit_letter.`,
         ],
       },
     )
+  }
+
+  /**
+   * A draft that passed all three guards but still reads a shade generated beats refusing: it is true,
+   * it is aimed at this advert, and it is editable on the screen it appears on.
+   */
+  if (best !== undefined) {
+    return {
+      text: assemble(best.body, resume, request.company),
+      rationale: best.rationale,
+      outcome: 'drafted',
+    }
   }
 
   return {

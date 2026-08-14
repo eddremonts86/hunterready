@@ -1,3 +1,5 @@
+import { HUMAN_VOICE_RULES } from './ai-tells'
+
 /**
  * The bullet-rewriting prompt — enforcement layer 1 of three (docs/06-ai-optimization.md).
  *
@@ -11,7 +13,7 @@
  * the candidate is the entire difference, and it is the feature a competitor cannot copy by adding a
  * better model.
  */
-export const REWRITE_PROMPT_VERSION = 'rewrite-v2'
+export const REWRITE_PROMPT_VERSION = 'rewrite-v3'
 
 export const REWRITE_SYSTEM_PROMPT = `You rewrite one bullet point from a CV. You are an editor, not an author.
 
@@ -61,7 +63,9 @@ software vocabulary, and do not assume an office.
 
 RATIONALE
 One short line saying what you changed and why, addressed to the candidate. "Led is stronger than
-was responsible for, and the unit size now comes first." Not "Enhanced impact and clarity."`
+was responsible for, and the unit size now comes first." Not "Enhanced impact and clarity."
+
+${HUMAN_VOICE_RULES}`
 
 export function buildRewritePrompt(input: {
   bullet: string
