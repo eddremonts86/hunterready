@@ -244,18 +244,36 @@ export function PaperPreview({
           {breaks.map((offset, index) => (
             <div key={index} style={sheetStyle}>
               {/*
-                The same content on every sheet, shifted up so this page's slice is the part on view. One
-                tree per sheet rather than one tree cloned: the templates are pure and cheap, and cloning
-                a laid-out DOM subtree is how a preview starts disagreeing with itself.
+                Each sheet shows content from its own break up to the **next** break — not a fixed page
+                height — and that distinction is the fix for content appearing twice.
+
+                A page can end early. When the next block will not fit, the break lands at that block's
+                top, which may be well short of a full page: the first version still drew a full page's
+                worth from each offset, so everything between the break and the page height was painted at
+                the bottom of one sheet and again at the top of the next. Edd's screenshot caught it —
+                three sentences and an EXPERIENCE heading repeated across the seam.
+
+                Real pages behave the way this now does: a page that ends early leaves white space below,
+                which is exactly what takumi produces when `breakInside: 'avoid'` pushes an entry over.
               */}
               <div
                 style={{
-                  transform: `translateY(-${offset}px)`,
-                  // Rendered at the content width, so a wrap here matches the measurer exactly.
-                  width: SHEET_WIDTH - page.marginLeft - page.marginRight,
+                  height: Math.min(
+                    usable,
+                    (breaks[index + 1] ?? Infinity) - offset,
+                  ),
+                  overflow: 'hidden',
                 }}
               >
-                <Template resume={resume} theme={theme} />
+                <div
+                  style={{
+                    transform: `translateY(-${offset}px)`,
+                    // Rendered at the content width, so a wrap here matches the measurer exactly.
+                    width: SHEET_WIDTH - page.marginLeft - page.marginRight,
+                  }}
+                >
+                  <Template resume={resume} theme={theme} />
+                </div>
               </div>
             </div>
           ))}
