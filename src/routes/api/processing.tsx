@@ -15,6 +15,7 @@
  */
 import { createFileRoute } from '@tanstack/react-router'
 import { resolveProvider } from '@/structure/provider'
+import { encryptionEnabled } from '@/db/crypto'
 
 /**
  * Host → the company's name as a person would recognise it.
@@ -47,6 +48,15 @@ export const Route = createFileRoute('/api/processing')({
              */
             provider:
               provider === undefined ? null : displayName(provider.label),
+            /**
+             * Whether stored CVs are encrypted at rest on *this* installation (ADR-021).
+             *
+             * Read from the code rather than written into the privacy notice as prose, so the page cannot
+             * claim encryption on a deployment that has no `DATA_ENCRYPTION_KEY`. The same reason the
+             * provider is fetched instead of hardcoded: a claim about what this server does has to come
+             * from the server.
+             */
+            encryptsAtRest: encryptionEnabled(),
           },
           { headers: { 'cache-control': 'no-store' } },
         )

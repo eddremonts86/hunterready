@@ -17,6 +17,7 @@
 import { and, eq, lt, sql } from 'drizzle-orm'
 import { Resume } from '@/schema/resume'
 import { db } from './client'
+import { decryptJson, encryptJson } from './crypto'
 import {
   accessLog,
   authUsers,
@@ -49,9 +50,15 @@ async function record(
   }
 }
 
-/** Parse a stored document, or throw with something a developer can act on. */
+/**
+ * Decrypt and parse a stored document, or throw with something a developer can act on.
+ *
+ * The single funnel every read goes through, which is why encryption needed no changes at the call
+ * sites. `decryptJson` passes plaintext rows through unchanged, so rows written before the key existed
+ * keep reading (ADR-021).
+ */
 function parseDocument(raw: unknown, id: string): Resume {
-  const parsed = Resume.safeParse(raw)
+  const parsed = Resume.safeParse(decryptJson(raw))
   if (!parsed.success) {
     throw new Error(
       `stored document ${id} does not match the current Resume schema: ${parsed.error.issues
@@ -85,7 +92,9 @@ export async function saveResume(input: {
 }): Promise<string> {
   const values = {
     userId: input.userId,
-    document: input.resume,
+    // Encrypted at rest (ADR-021). `schemaVersion` stays in the clear on purpose: a migration has to be
+    // able to find rows of a given version without holding the key.
+    document: encryptJson(input.resume),
     schemaVersion: input.resume.schemaVersion,
     label: input.label ?? 'My CV',
     updatedAt: new Date(),
@@ -152,12 +161,19 @@ export async function saveVariant(input: {
     .values({
       userId: input.userId,
       resumeId: input.resumeId,
-      document: input.resume,
+      document: encryptJson(input.resume),
       schemaVersion: input.resume.schemaVersion,
       company: input.company,
       role: input.role,
+      /**
+       * The advert stays readable; the gap report does not.
+       *
+       * A job advert is public text somebody pasted. A gap report **quotes the CV back** — its `found`
+       * arrays are the candidate's own bullets — so it is CV content wearing a different name, and it gets
+       * the same treatment as the document.
+       */
       jobDescription: input.jobDescription,
-      gapReport: input.gapReport,
+      gapReport: encryptJson(input.gapReport),
       status: input.status ?? 'draft',
       deleteAfter: extended,
     })
@@ -387,12 +403,26 @@ export async function exportEverything(userId: string) {
 
   await record(userId, 'account.exported')
 
+  /**
+   * Decrypted for the export, and this is not optional.
+   *
+   * Article 15 is a right to your data, not to a base64 envelope you cannot open. The rows come straight
+   * out of the table, so without this the download would be ciphertext — technically complete, and
+   * useless in exactly the way a compliance gesture is useless.
+   */
   return {
     exportedAt: new Date().toISOString(),
     retentionPolicy: `Deleted after ${RETENTION_DAYS} days without signing in.`,
     account,
-    resumes: cvs,
-    variants: tailored,
+    resumes: cvs.map((row) => ({
+      ...row,
+      document: decryptJson(row.document),
+    })),
+    variants: tailored.map((row) => ({
+      ...row,
+      document: decryptJson(row.document),
+      gapReport: decryptJson(row.gapReport),
+    })),
     accessLog: log,
     shareLinks: links,
   }

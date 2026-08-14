@@ -235,3 +235,29 @@ Four more things this cost, all of them cheap once known:
 
 **BuilderHunt is not the model for this.** It runs `build_pack: dockerfile`, so its group in the
 Coolify UI does not come from a compose stack at all. Copying its answers here was the wrong instinct.
+
+## The encryption key (ADR-021)
+
+`DATA_ENCRYPTION_KEY` — 64 hex characters, `openssl rand -hex 32`. Set it in Coolify's environment for
+the stack, exactly like the database passwords.
+
+```bash
+openssl rand -hex 32
+```
+
+**Losing it loses every stored CV.** There is no recovery path and there should not be one, so the
+obligation is real:
+
+1. Back the key up somewhere that is **not this server** — a password manager entry is fine, a note on
+   the same host is not.
+2. Never rotate it without re-encrypting first. Changing the key makes every existing row throw
+   `could not decrypt stored CV content`, which is the correct behaviour and not a fixable state without
+   the old key. A rotation is: read with the old key, write with the new one, in one pass, with both keys
+   present.
+3. A wrong or missing key is visible rather than silent. At startup the app logs
+   `crypto.state` with `encrypting` or `plaintext_no_key`, and a malformed key logs
+   `crypto.bad_key` and falls back to plaintext rather than pretending. Grep for those after a deploy.
+
+An installation with no key still works and stores plaintext. That is deliberate — it keeps a laptop
+usable — and it is also why `/privacy` reads the real state from the server instead of asserting
+encryption in prose.

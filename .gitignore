@@ -44,3 +44,6 @@ accuracy-report.txt
 
 # Local compose values (real passwords). Only .env.compose.example is tracked.
 .env.compose.local
+
+# Local-only compose overlay: publishes host ports for review. Never deployed.
+docker-compose.local.yml

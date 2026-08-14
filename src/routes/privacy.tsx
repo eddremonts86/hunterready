@@ -17,6 +17,9 @@
  *   • "We never log what your CV says" — `src/lib/log.ts` emits counts and codes only.
  *   • "We keep a log of when it was read" — the `access_log` table, written by `record()` in
  *                                      `src/db/repository.ts` and included in the export.
+ *   • "Your CV is stored encrypted" — `src/db/crypto.ts`, AES-256-GCM, and the page reads
+ *                                      `encryptionEnabled()` from the server so it cannot claim it on an
+ *                                      installation with no key (ADR-021).
  *   • "Every link expires by itself"  — `shares.expiresAt` is `notNull`, `SHARE_DAYS` is the default and
  *                                      `SHARE_MAX_DAYS` the ceiling, clamped in `createShare`. There is
  *                                      no code path that creates a share without an expiry.
@@ -65,6 +68,14 @@ function Section({
 
 function Privacy() {
   const consent = useProcessingConsent()
+  /**
+   * Read from the server, not asserted here.
+   *
+   * The page must not be able to claim encryption on an installation with no `DATA_ENCRYPTION_KEY`.
+   * Same discipline as naming the provider: a statement about what this server does comes from the
+   * server (ADR-021).
+   */
+  const encrypted = consent.encryptsAtRest === true
   const provider =
     typeof consent.provider === 'string' && consent.provider !== ''
       ? consent.provider
@@ -162,6 +173,30 @@ function Privacy() {
             The deletion is real, not a flag on a row. It happens whether or not
             you ask, and you can also ask at any moment with the button below.
           </p>
+          {/*
+            Stated with its limit in the same paragraph. "Encrypted at rest" is a phrase that does a lot
+            of reassuring work and most products leave it there; on one server the key is on the same
+            machine, and a reader deciding whether to trust us is entitled to that sentence too.
+          */}
+          {encrypted ? (
+            <p>
+              While we hold it,{' '}
+              <strong className="font-semibold text-ink">
+                your CV is stored encrypted
+              </strong>
+              . If someone got hold of our disk or a backup copy, what they
+              would find is unreadable without a key that is not in it. Being
+              straight about the limit: the key lives on the same server as the
+              data, so this protects a stolen copy and not someone who has
+              broken into the server itself.
+            </p>
+          ) : (
+            <p>
+              This installation stores your CV without encryption. That is worth
+              knowing rather than hiding: it means a copy of our database would
+              be readable.
+            </p>
+          )}
         </Section>
 
         <Section title="What we record">
