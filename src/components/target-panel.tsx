@@ -50,6 +50,17 @@ export interface SummaryOffer {
   overclaimed?: Array<string>
 }
 
+/** What `/api/cover-letter` returns. Mirrors `CoverLetter` without importing the server module. */
+export interface CoverLetterOffer {
+  text?: string
+  rationale: string
+  outcome: 'drafted' | 'refused' | 'unavailable'
+  rejected?: Array<{ kind: string; value: string }>
+  overclaimed?: Array<string>
+  /** Set by the client when the request itself failed, so the panel can say something true. */
+  message?: string
+}
+
 export interface AdvertReadingResult {
   source: 'model' | 'rules'
   roleTitle?: string
@@ -312,6 +323,8 @@ export function TargetPanel({
   onUseVariant,
   onAcceptSummary,
   onSaveApplication,
+  onDraftLetter,
+  onDownloadLetter,
 }: {
   resume: Resume
   reading: AdvertReadingResult
@@ -333,6 +346,13 @@ export function TargetPanel({
     company?: string
     gap: GapReport
   }) => Promise<boolean>
+  /**
+   * Draft a cover letter for this job. Given the edited requirement list, not the original reading —
+   * a requirement the candidate removed should not shape the letter either.
+   */
+  onDraftLetter?: (requirements: JobRequirements) => Promise<CoverLetterOffer>
+  /** Download the letter on screen, including any edits, as `.docx`. */
+  onDownloadLetter?: (text: string) => void
 }) {
   /**
    * Requirements the candidate has said were never asked for.
@@ -347,6 +367,10 @@ export function TargetPanel({
   const [saveState, setSaveState] = useState<
     'idle' | 'saving' | 'saved' | 'failed'
   >('idle')
+  const [letter, setLetter] = useState<CoverLetterOffer | undefined>()
+  const [letterBusy, setLetterBusy] = useState(false)
+  /** The letter as edited. Held separately so re-drafting cannot silently discard their wording. */
+  const [letterText, setLetterText] = useState('')
 
   const requirements = useMemo<JobRequirements>(() => {
     const keep = (items: Array<string>) =>
@@ -683,6 +707,125 @@ export function TargetPanel({
           </>
         )}
       </div>
+
+      {/*
+        ── The cover letter ──────────────────────────────────────────────────────────────
+        Offered here rather than as its own screen: this is where the advert already is, and a letter
+        without one is a template. Deliberately a separate action from targeting — most people who look
+        at a gap report will not want a letter, and drafting one on every paste would spend a model call
+        on curiosity.
+      */}
+      {onDraftLetter !== undefined && (
+        <div className="card flex flex-col gap-3 p-4">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-[15px] font-semibold text-ink">
+              A cover letter for this job
+            </h2>
+            <p className="text-[13px] leading-relaxed text-ink-soft">
+              Built from your CV and this advert only. It will not claim
+              anything you have not written, and it will not say we admire a
+              company we know nothing about — we only know what the advert says.
+            </p>
+          </div>
+
+          {letter === undefined ? (
+            <button
+              type="button"
+              disabled={letterBusy}
+              onClick={() => {
+                setLetterBusy(true)
+                void onDraftLetter(requirements)
+                  .then((offer) => {
+                    setLetter(offer)
+                    setLetterText(offer.text ?? '')
+                  })
+                  .finally(() => setLetterBusy(false))
+              }}
+              className="btn btn-quiet self-start px-4 py-2.5 text-[14px] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              {letterBusy ? 'Writing…' : 'Write a first draft'}
+            </button>
+          ) : letter.outcome === 'drafted' ? (
+            <>
+              {/*
+                Editable, and the edit is what downloads. A letter is the one artifact here written in
+                the candidate's own voice, and handing back something uneditable would make the draft a
+                take-it-or-leave-it.
+              */}
+              <textarea
+                value={letterText}
+                onChange={(fired) => setLetterText(fired.target.value)}
+                rows={14}
+                aria-label="Your cover letter"
+                className="field min-h-[260px] resize-y font-sans leading-relaxed"
+              />
+              {letter.rationale !== '' && (
+                <p className="text-[13px] leading-relaxed text-ink-soft">
+                  {letter.rationale}
+                </p>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                {onDownloadLetter !== undefined && (
+                  <button
+                    type="button"
+                    onClick={() => onDownloadLetter(letterText)}
+                    className="btn btn-quiet px-4 py-2 text-[13px]"
+                  >
+                    Download as Word
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(letterText)
+                  }}
+                  className="btn btn-quiet px-4 py-2 text-[13px]"
+                >
+                  Copy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLetter(undefined)
+                    setLetterText('')
+                  }}
+                  className="text-meta text-ink-soft underline decoration-hairline-strong underline-offset-4 transition-colors hover:text-ink"
+                >
+                  Start again
+                </button>
+              </div>
+            </>
+          ) : letter.outcome === 'refused' ? (
+            /*
+              The guard worked and the user is told what it caught. There is no original letter to fall
+              back on, so a refusal is the outcome — which is better than a letter carrying a sentence
+              the candidate would be asked to defend.
+            */
+            <p className="text-[13px] leading-relaxed text-ink">
+              We did not write one.
+              {letter.overclaimed !== undefined && letter.overclaimed.length > 0
+                ? ` Every version claimed ${letter.overclaimed
+                    .map((item) => `“${item}”`)
+                    .join(', ')}, which your CV does not evidence.`
+                : ''}
+              {letter.rejected !== undefined && letter.rejected.length > 0
+                ? ` Every version added something neither your CV nor the advert says (${letter.rejected
+                    .map((finding) => finding.value)
+                    .join(
+                      ', ',
+                    )}) — usually a compliment about the employer that nothing backs.`
+                : ''}{' '}
+              Try again, or write the first line yourself and we will leave it
+              alone.
+            </p>
+          ) : (
+            <p className="text-[13px] leading-relaxed text-ink-soft">
+              {letter.message ??
+                'Writing a cover letter is not available on this installation. Everything else on this screen still works.'}
+            </p>
+          )}
+        </div>
+      )}
 
       {/*
         ── Keep it ───────────────────────────────────────────────────────────────────────

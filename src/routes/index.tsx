@@ -32,7 +32,10 @@ import { Reveal } from '@/components/reveal'
 import { ReviewForm } from '@/components/review-form'
 import { keyOf, RewriteReview } from '@/components/rewrite-review'
 import { AdvertForm, TargetPanel } from '@/components/target-panel'
-import type { AdvertReadingResult } from '@/components/target-panel'
+import type {
+  AdvertReadingResult,
+  CoverLetterOffer,
+} from '@/components/target-panel'
 import type { BulletRewrite } from '@/optimize/rewrite'
 import { Resume } from '@/schema/resume'
 import type { FieldProvenance } from '@/schema/provenance'
@@ -1013,6 +1016,76 @@ function HunterReady() {
                       answers 404 for both "not signed in" and "this installation stores nothing", and
                       neither is an error worth an alarm on a screen about a job advert.
                     */
+                    /*
+                      Its own request, not part of targeting: most people who read a gap report will not
+                      want a letter, and drafting one on every paste would spend a model call on
+                      curiosity. Given the *edited* requirement list — a requirement the candidate
+                      removed should not shape the letter either.
+                    */
+                    onDraftLetter={async (requirements) => {
+                      try {
+                        const response = await fetch('/api/cover-letter', {
+                          method: 'POST',
+                          headers: { 'content-type': 'application/json' },
+                          body: JSON.stringify({
+                            resume: loaded.resume,
+                            advert: advertText,
+                            requirements,
+                            roleTitle: reading.roleTitle,
+                            company: reading.company,
+                            processing:
+                              consent.choice === 'granted'
+                                ? 'provider'
+                                : 'local',
+                          }),
+                        })
+                        const payload = (await response.json()) as Record<
+                          string,
+                          unknown
+                        >
+                        if (!response.ok) {
+                          return {
+                            rationale: '',
+                            outcome: 'unavailable',
+                            message:
+                              typeof payload.message === 'string'
+                                ? payload.message
+                                : 'We could not write one just now.',
+                          }
+                        }
+                        return payload as unknown as CoverLetterOffer
+                      } catch {
+                        return {
+                          rationale: '',
+                          outcome: 'unavailable',
+                          message:
+                            'We could not reach the server. Your CV is untouched.',
+                        }
+                      }
+                    }}
+                    /*
+                      A form POST so the browser streams the file to disk, and the *edited* text is what
+                      is sent — re-drafting here would quietly throw away their wording.
+                    */
+                    onDownloadLetter={(text) => {
+                      const form = document.createElement('form')
+                      form.method = 'POST'
+                      form.action = '/api/render-letter'
+                      form.style.display = 'none'
+                      for (const [name, value] of [
+                        ['resume', JSON.stringify(loaded.resume)],
+                        ['letter', text],
+                      ]) {
+                        const input = document.createElement('input')
+                        input.type = 'hidden'
+                        input.name = name
+                        input.value = value
+                        form.appendChild(input)
+                      }
+                      document.body.appendChild(form)
+                      form.submit()
+                      form.remove()
+                    }}
                     onSaveApplication={async ({
                       variant,
                       role,

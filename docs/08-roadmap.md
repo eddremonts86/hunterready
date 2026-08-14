@@ -306,10 +306,30 @@ ATS-safe Word layout, and offering a design in the format uploaded to the crudes
 selling a decision that cannot be honoured. Details and the three defects found in
 [05-pdf-rendering.md](05-pdf-rendering.md#docx-export--v06).
 
-## v0.7 — "It writes the letter"
+## v0.7 — "It writes the letter" · shipped
 
-Cover letter generation from the CV and the advert, under the same anti-fabrication rules and reusing
-v0.4's advert requirements. Every claim traceable to the CV, guard-checked, accepted by the candidate.
+Cover letter generation from the CV and the advert (`src/optimize/cover-letter.ts`), reusing v0.4's
+requirements and carrying **three** guards where the summary needed two.
+
+The third is the one specific to the form, and the reason it exists is worth stating: the classic
+cover-letter sentence is flattery — _"I have long admired your work in paediatric oncology"_ — which
+invents nothing about the candidate, passes a CV-only fabrication check cleanly, and is a claim about the
+world they cannot defend. An interviewer asking "what do you know about our paediatric unit?" is asking
+about a sentence a machine wrote.
+
+It needed no new checker. `buildGrounding(resume, advert)` takes an `extraSource`, so the advert joins the
+grounding set: the letter may name the hospital _because the advert names it_, and may not name a
+specialty, an award or a value the advert never mentioned. That is the right grounding set for a letter
+and the wrong one for a CV bullet.
+
+A refusal returns nothing rather than a fallback, because unlike a rewrite there is no original to keep —
+and it says what it caught. The greeting and sign-off are assembled in code, not by the model: a model
+asked for a greeting invents a surname, and "Dear Ms Jensen" to whoever actually opens the envelope is a
+small disaster. The draft is editable and the edit is what downloads, as `.docx` through the v0.6 writer.
+
+**Verified against the real model**: a letter that named the employer from the advert, claimed only the two
+evidenced requirements, and left the missing one alone. Its own rationale showed the retry loop working —
+attempt one used `ICU`, which is in neither document, and attempt two wrote it out.
 
 ## v0.8 — "It speaks the language"
 
