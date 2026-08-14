@@ -336,10 +336,35 @@ attempt one used `ICU`, which is in neither document, and attempt two wrote it o
 Multi-language output: EN / ES / DA. The _document_, not just the chrome — section headings, date
 formats and regional conventions per locale. Latin-Extended coverage is already proven in the fonts.
 
-## v0.9 — "It can be shown"
+## v0.9 — "It can be shown" · shipped
 
-A public share link with an expiry, revocable. Expiry is the default rather than an option: a link that
-never dies is a CV leaked forever.
+A public share link (`shares` table, `/api/share`, `/api/shared`, `/s/$token`) — the only unauthenticated
+read of a CV in this product, so its limits are structural rather than conventional:
+
+- **`expiresAt` is `notNull`.** There is no code path that creates a share without an expiry. Fourteen
+  days by default, ninety at most, and a request for longer is _clamped_ rather than refused — the
+  pressure on this parameter is always toward longer, so the ceiling lives in the store.
+- **The token is the primary key**, a `gen_random_uuid()`. The URL is the credential; a sequential id
+  would have made every CV ever shared readable by counting.
+- **Revoking sets `revokedAt` rather than deleting**, so the access log can still explain what a visitor
+  saw last week — and it takes effect on the next read.
+- **Unknown, revoked, expired and deleted are one answer.** Byte-identical 404s, because telling a
+  visitor that a token _was_ valid confirms the CV exists to somebody holding a guessed URL.
+- **The document is referenced, not snapshotted.** Correcting the CV fixes what a live link shows;
+  a frozen copy per link would leave a typo in circulation with no way to withdraw it.
+- **Views are counted, never logged per visit.** One audit row per view against the _owner_, flagged
+  `by_other`. No visitor identity exists anywhere — that would be a record of people reading a CV.
+- `noindex, nofollow, noarchive` on both the API and the page.
+
+Sharing requires the CV to be saved first and **says so** rather than saving silently: publishing an
+employment history is not a side effect of clicking a button. Share links are in the Article 15 export,
+cascade away with the account, and the retention sweep drops rows 28 days past their expiry.
+
+**Verified end to end** against real Postgres: created from the UI, read with no cookies at all as a
+recruiter would, no owner or account or session field in the response, an unauthenticated `DELETE`
+refused while the link still worked, revoked from the owner's screen, and then a 404 byte-identical to a
+token that never existed. Eighteen repository tests cover expiry, revocation, cross-account isolation and
+erasure.
 
 ## v1.0 — "It's a product"
 

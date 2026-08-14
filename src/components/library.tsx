@@ -39,6 +39,15 @@ interface SavedResume {
   resume: Resume
 }
 
+interface ShareLink {
+  token: string
+  label: string
+  expiresAt: string
+  views: number
+  /** Computed on the server so the interface never has to decide what "expired" means. */
+  live: boolean
+}
+
 interface Application {
   id: string
   resumeId: string
@@ -106,6 +115,7 @@ export function Library({
    * offering an account on a deployment that cannot keep one would be a dead end with a button on it.
    */
   const [available, setAvailable] = useState(true)
+  const [links, setLinks] = useState<Array<ShareLink>>([])
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | undefined>()
 
@@ -127,6 +137,17 @@ export function Library({
       }
       setResumes(payload.resumes ?? [])
       setApplications(payload.applications ?? [])
+      try {
+        const shareResponse = await fetch('/api/share')
+        if (shareResponse.ok) {
+          const shares = (await shareResponse.json()) as {
+            links?: Array<ShareLink>
+          }
+          setLinks(shares.links ?? [])
+        }
+      } catch {
+        // A share list that cannot be read is not a reason to interrupt somebody editing their CV.
+      }
       const [first] = payload.resumes ?? []
       if (first !== undefined && savedId === undefined)
         onSavedIdChange(first.id)
@@ -171,6 +192,53 @@ export function Library({
       setBusy(false)
     }
   }, [resume, savedId, refresh, onSavedIdChange])
+
+  /**
+   * Create a link for the CV on screen. Requires it to be saved first, and says so rather than saving
+   * silently: publishing somebody's employment history is not a side effect of clicking Share.
+   */
+  const share = useCallback(async () => {
+    if (savedId === undefined) {
+      setNote('Save this CV first, then you can share it.')
+      return
+    }
+    try {
+      const response = await fetch('/api/share', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ resumeId: savedId }),
+      })
+      if (!response.ok) {
+        setNote('We could not create a link just now.')
+        return
+      }
+      const payload = (await response.json()) as { token?: string }
+      if (typeof payload.token === 'string') {
+        const url = `${window.location.origin}/s/${payload.token}`
+        void navigator.clipboard?.writeText(url)
+        setNote('Link copied. It closes itself in two weeks.')
+      }
+      await refresh()
+    } catch {
+      setNote('We could not reach the server.')
+    }
+  }, [savedId, refresh])
+
+  const revoke = useCallback(
+    async (token: string) => {
+      try {
+        await fetch('/api/share', {
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ token }),
+        })
+        await refresh()
+      } catch {
+        setNote('We could not close that link just now.')
+      }
+    },
+    [refresh],
+  )
 
   const markSent = useCallback(
     async (variantId: string) => {
@@ -356,6 +424,63 @@ export function Library({
           </ul>
         </div>
       )}
+
+      {/*
+        Share links. The copy names the expiry in the same breath as the action, because this is the one
+        feature here that makes a CV readable without a password and the recipient is not the user.
+      */}
+      <div className="flex flex-col gap-2 border-t border-hairline pt-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <h3 className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-soft">
+            Share a link
+          </h3>
+          <button
+            type="button"
+            onClick={() => void share()}
+            className="btn btn-quiet px-3.5 py-1.5 text-[12px]"
+          >
+            Copy a link
+          </button>
+        </div>
+        <p className="text-[13px] leading-relaxed text-ink-soft">
+          Anyone with the link can read this CV — no password. Every link closes
+          itself after two weeks, and you can close one sooner.
+        </p>
+        {links.length > 0 && (
+          <ul className="flex flex-col">
+            {links.map((link) => (
+              <li
+                key={link.token}
+                className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-hairline py-2 last:border-b-0"
+              >
+                <span className="flex min-w-0 flex-col">
+                  <span className="tally text-[12px] text-ink">
+                    {/* Six characters: enough to tell two links apart, not enough to be a credential. */}
+                    …{link.token.slice(-6)}
+                  </span>
+                  <span className="text-meta text-ink-soft">
+                    {link.live
+                      ? `open until ${new Date(link.expiresAt).toLocaleDateString()}`
+                      : 'closed'}
+                    {link.views > 0
+                      ? ` · opened ${link.views} ${link.views === 1 ? 'time' : 'times'}`
+                      : ' · not opened yet'}
+                  </span>
+                </span>
+                {link.live && (
+                  <button
+                    type="button"
+                    onClick={() => void revoke(link.token)}
+                    className="btn btn-quiet shrink-0 px-3 py-1 text-[12px]"
+                  >
+                    Close it
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       <a
         href="/privacy"

@@ -33,6 +33,7 @@ import { RETENTION_DAYS } from './retention-policy'
 import {
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -263,6 +264,61 @@ export const accessLog = pgTable(
   },
   (table) => [index('access_log_subject_idx').on(table.subjectUserId)],
 )
+
+/**
+ * A public share link — v0.9, and the most dangerous row in this schema.
+ *
+ * Every other table here is reachable only with a session. This one makes a CV readable by anybody
+ * holding a URL, which is the whole point and also the whole risk. Three properties are structural
+ * rather than conventional, because a convention is what fails on the Friday somebody is in a hurry:
+ *
+ * **`expiresAt` is `notNull`.** There is no such thing as a share without an expiry. A column that
+ * allowed null would make "forever" one forgotten parameter away, and a CV readable forever is a CV
+ * leaked. The default is short (`SHARE_DAYS`) and the API caps what a caller may ask for.
+ *
+ * **The token is the primary key and nothing else.** A `uuid` from `gen_random_uuid()` is 122 random
+ * bits, so the URL is the credential and enumeration is not a threat. Sequential ids here would have
+ * made every CV ever shared readable by counting.
+ *
+ * **`revokedAt` rather than a delete.** Revoking has to be instant and auditable: the row stays so the
+ * access log can still explain what a visitor saw last week, and `deleteEverything` removes it with
+ * everything else when the account goes.
+ *
+ * The document is **referenced, not copied**. A share shows what the CV says now, so revoking is not the
+ * only way to stop showing an old mistake — correcting the CV is. The alternative, a frozen snapshot per
+ * link, would mean a candidate who fixed a typo still had the typo in circulation with no way to tell.
+ */
+export const shares = pgTable(
+  'shares',
+  {
+    /** The token. This *is* the URL, so it is random and never sequential. */
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
+    /** Exactly one of these is set — the base CV, or one tailored variant. */
+    resumeId: uuid('resume_id').references(() => resumes.id, {
+      onDelete: 'cascade',
+    }),
+    variantId: uuid('variant_id').references(() => variants.id, {
+      onDelete: 'cascade',
+    }),
+    /** What the recipient is told they are looking at. Never the candidate's name. */
+    label: text('label').notNull().default(''),
+    /** Not nullable, and that is the point. See the note above. */
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    /** Counted, never logged per visit: a visit log would be a record of who looked at a CV. */
+    views: integer('views').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    deleteAfter: retention(),
+  },
+  (table) => [index('shares_user_idx').on(table.userId)],
+)
+
+export type ShareRow = typeof shares.$inferSelect
 
 export { RETENTION_DAYS }
 

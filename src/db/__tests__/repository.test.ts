@@ -222,4 +222,117 @@ describe.skipIf(URL_ENV === '')('persistence, against a real Postgres', () => {
       await sql`SELECT document FROM variants WHERE id = ${variantId}`
     expect(after.document).toEqual(before.document)
   })
+
+  describe('a share link is the one public thing, so its limits are structural', () => {
+    it('creates a link with an expiry, and reads the document back through it', async () => {
+      const userId = await seedUser('share-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      const { token, expiresAt } = await repo.createShare({ userId, resumeId })
+
+      expect(expiresAt.getTime()).toBeGreaterThan(Date.now())
+      const shared = await repo.readShare(token)
+      expect(shared?.resume.basics.fullName).toBe('Tom Whitfield')
+    })
+
+    it('clamps a request for a longer window instead of honouring it', async () => {
+      /**
+       * The pressure on this parameter is always toward longer, so the ceiling lives in the store rather
+       * than in whoever remembered to validate. Ten years becomes ninety days.
+       */
+      const userId = await seedUser('share-clamp-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      const { expiresAt } = await repo.createShare({
+        userId,
+        resumeId,
+        days: 3650,
+      })
+
+      const days = (expiresAt.getTime() - Date.now()) / 86_400_000
+      expect(days).toBeLessThanOrEqual(91)
+      expect(days).toBeGreaterThan(89)
+    })
+
+    it('refuses an expired link', async () => {
+      const userId = await seedUser('share-expired-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      const { token } = await repo.createShare({ userId, resumeId })
+      // Reach past the API to age it: what is being tested is that `readShare` checks, not that a clock works.
+      await sql`UPDATE shares SET expires_at = now() - interval '1 day' WHERE id = ${token}`
+
+      expect(await repo.readShare(token)).toBeUndefined()
+    })
+
+    it('refuses a revoked link immediately, and keeps the row', async () => {
+      const userId = await seedUser('share-revoked-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      const { token } = await repo.createShare({ userId, resumeId })
+
+      expect(await repo.revokeShare({ userId, token })).toBe(true)
+      expect(await repo.readShare(token)).toBeUndefined()
+      // The row survives, so the access log can still explain what a visitor saw last week.
+      const [row] = await sql`SELECT revoked_at FROM shares WHERE id = ${token}`
+      expect(row.revoked_at).not.toBeNull()
+    })
+
+    it('will not let a stranger revoke somebody else’s link', async () => {
+      const owner = await seedUser('share-owner-')
+      const stranger = await seedUser('share-stranger-')
+      const resumeId = await repo.saveResume({ userId: owner, resume: RESUME })
+      const { token } = await repo.createShare({ userId: owner, resumeId })
+
+      expect(await repo.revokeShare({ userId: stranger, token })).toBe(false)
+      // And the link still works, which is what makes the previous assertion mean something.
+      expect(await repo.readShare(token)).toBeDefined()
+    })
+
+    it('answers an unknown token the same way as a revoked one', async () => {
+      // Distinguishing them would confirm to somebody holding a guessed URL that a CV exists.
+      expect(
+        await repo.readShare('00000000-0000-4000-8000-000000000000'),
+      ).toBeUndefined()
+    })
+
+    it('counts views without recording who', async () => {
+      const userId = await seedUser('share-views-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      const { token } = await repo.createShare({ userId, resumeId })
+
+      await repo.readShare(token)
+      await repo.readShare(token)
+
+      const [link] = (await repo.listShares(userId)).filter(
+        (row) => row.token === token,
+      )
+      expect(link.views).toBe(2)
+      // One audit row per view against the *owner*, flagged as somebody else's access. No visitor identity
+      // exists anywhere — that would be a log of people reading a CV, which is not ours to keep.
+      const rows =
+        await sql`SELECT by_other FROM access_log WHERE action = 'share.viewed' AND subject_user_id = ${userId}`
+      expect(rows.length).toBe(2)
+      expect(rows.every((row) => row.by_other === true)).toBe(true)
+    })
+
+    it('takes the links with the account when it is erased', async () => {
+      const userId = await seedUser('share-erase-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      const { token } = await repo.createShare({ userId, resumeId })
+
+      await repo.deleteEverything(userId)
+
+      const [{ count }] =
+        await sql`SELECT count(*)::int FROM shares WHERE id = ${token}`
+      expect(count).toBe(0)
+      // And the link stops working, which is the property that actually matters to the person erasing.
+      expect(await repo.readShare(token)).toBeUndefined()
+    })
+
+    it('includes share links in the Article 15 export', async () => {
+      const userId = await seedUser('share-export-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      await repo.createShare({ userId, resumeId })
+
+      const dump = await repo.exportEverything(userId)
+      expect(dump?.shareLinks).toHaveLength(1)
+    })
+  })
 })

@@ -17,6 +17,12 @@
  *   • "We never log what your CV says" — `src/lib/log.ts` emits counts and codes only.
  *   • "We keep a log of when it was read" — the `access_log` table, written by `record()` in
  *                                      `src/db/repository.ts` and included in the export.
+ *   • "Every link expires by itself"  — `shares.expiresAt` is `notNull`, `SHARE_DAYS` is the default and
+ *                                      `SHARE_MAX_DAYS` the ceiling, clamped in `createShare`. There is
+ *                                      no code path that creates a share without an expiry.
+ *   • "We do not record who opened it" — `readShare` increments a counter and writes one `share.viewed`
+ *                                      audit row against the *owner*. No visitor, no address, no time
+ *                                      series.
  *
  * One of these was false for a while and it is worth recording how. The sentence about storing a CV for
  * an account holder was written when the schema landed, and the code that would have stored anything was
@@ -182,6 +188,35 @@ function Privacy() {
             account — an audit trail the audited person can erase would not be
             one. Your identity is removed from them, so what is left says that
             <em> a</em> record was read, not whose.
+          </p>
+        </Section>
+
+        {/*
+          Share links get their own section rather than a clause inside another one. It is the only
+          feature here that makes a CV readable without a password, so burying it in a paragraph about
+          storage would be the kind of omission this page exists not to make.
+        */}
+        <Section title="If you share a link">
+          <p>
+            You can create a link that lets anyone read one of your CVs without
+            signing in. While it is open, anyone who has the link can read that
+            CV and download it as a PDF — including someone it was forwarded to.
+          </p>
+          <p>
+            Every link{' '}
+            <strong className="font-semibold text-ink">
+              expires by itself after two weeks
+            </strong>
+            , and you can close one sooner from your account. There is no such
+            thing here as a link that never expires; we did not build one on
+            purpose, because a forgotten link that still works is the way a CV
+            ends up somewhere nobody intended.
+          </p>
+          <p className="text-ink-soft">
+            We count how many times a link has been opened so you can see
+            whether it was used. We do not record who opened it, or when — that
+            would be a log of people reading your CV, which is not ours to keep.
+            Links are never shown to search engines.
           </p>
         </Section>
 

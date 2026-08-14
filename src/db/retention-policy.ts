@@ -10,3 +10,16 @@
  * the privacy notice and enforced by the sweep.
  */
 export const RETENTION_DAYS = 90
+
+/**
+ * How long a public share link lives by default, and the longest one may live — v0.9.
+ *
+ * Fourteen days is chosen from what the thing is for: sending a CV to a recruiter who asked for it, and
+ * a fortnight covers a hiring conversation. It is short on purpose, and the maximum is short on purpose,
+ * because the failure mode of this feature is a link nobody remembers that still works two years later.
+ *
+ * Anyone who needs longer can make a new link. That is a mild inconvenience; a forgotten permanent URL
+ * holding somebody's employment history is not.
+ */
+export const SHARE_DAYS = 14
+export const SHARE_MAX_DAYS = 90
