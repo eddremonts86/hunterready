@@ -175,7 +175,7 @@ changed. See ADR-016's rule: the failure you have observed beats the one you ima
   re-run pays for every bullet again.
 - Model routing per docs/06: extraction and rewriting currently share one provider.
 
-## v0.4 — "It targets a job" · mostly shipped
+## v0.4 — "It targets a job" · shipped
 
 - ✅ Requirement matching with a **three-way** verdict: matched / weak / missing. `weak` is the one
   that earns its keep — a requirement present only in the skills list, or only in a job that ended
@@ -187,10 +187,63 @@ changed. See ADR-016's rule: the failure you have observed beats the one you ima
   moves are reorderings, because a reordering cannot make a CV say something untrue.
 - ✅ Transparent rule-based score with a fix checklist. docs/06's weights unchanged; every point
   traces to a rule you can read.
-- ⬜ Requirement extraction _from pasted prose_ still takes a structured `JobRequirements`. The
-  matching, scoring and tailoring are done and tested; what is missing is the model call that turns
-  an advert into that shape.
-- ⬜ Tailored `basics.summary` from existing material.
+- ✅ Requirement extraction **from pasted prose** (`src/optimize/advert.ts`), with the guard pointed the
+  other way: a model that has read a million adverts knows they usually want "excellent communication
+  skills" and will supply that whether or not this one asked. Every requirement is checked against the
+  advert text, one that is not there is dropped, and the user is shown that it was invented. There is a
+  rule reader too (EN/ES/DA headings), so declining the third-party transfer costs accuracy and not the
+  feature.
+- ✅ Tailored `basics.summary` from existing material (`src/optimize/summary.ts`), carrying **two**
+  guards. `findFabrications` catches invented numbers and names; a second check catches the class the
+  first cannot see — `"Experienced in inventory control"` invents no number and no proper noun, and is
+  a lie if the CV never mentions inventory control. The gap report already knows which requirements have
+  nothing behind them, so the forbidden list is not guesswork.
+
+### The thing that was actually wrong with v0.4
+
+All of the above was written, tested, and **imported by nothing but its own unit tests**. `jd.ts`,
+`score.ts` and `variant-diff.ts` had no path from the interface: there was no way for a user to paste an
+advert, so a feature described here as "mostly shipped" could not be reached at all. It ships now as a
+branch off the check step — not a fourth step everybody walks through, because plenty of people want a
+cleanly typeset PDF and nothing else (ADR-011).
+
+Matching, scoring and tailoring run **in the browser**, because they are pure functions of two plain
+objects. That is a product decision, not a technical one: the requirement list is editable, so every
+edit re-matches and re-scores, and doing that on the server would put a network round trip behind a
+checkbox.
+
+### What the summary guard is worth, measured
+
+Fifteen runs against the real model, same CV and advert, three prompt versions:
+
+| prompt                                               | suggested | unsupported claims shown |
+| ---------------------------------------------------- | --------- | ------------------------ |
+| summary-v1                                           | 3 / 5     | **0**                    |
+| summary-v2 — keep the CV's own words around a figure | 2 / 5     | **0**                    |
+| summary-v3 — v2 plus "do not count things"           | 3 / 5     | **0**                    |
+
+The right-hand column is the one that matters and it never moved. Every refusal was the guard catching
+an invented count — the model adding up a career it was asked only to compress, "across two hospitals"
+from a CV that names two employers — and in every case the candidate kept their own summary.
+
+v2 is recorded even though it measured worse, because the reason is the lesson: it was aimed at a
+**false** positive (the CV said "precepted 14 newly graduated nurses", the model wrote "14 new
+graduates"), and fixing the rarer failure did nothing for the common one. v3 found the common one by
+reading the rejections instead of reasoning about them, and the rule it needed had existed in
+`prompt.ts` since rewrite-v2 and simply had not been carried across. ADR-016, again.
+
+### Two defects this work surfaced elsewhere
+
+- **A tight `max()` on explanatory text rejected the whole payload.** The first genuinely good tailored
+  summary was thrown away because its _rationale_ ran forty characters over a 300-character cap, and the
+  candidate was told the feature was unavailable. `rewrite.ts` had the identical latent defect in
+  production. Neither field ever becomes part of the CV, so a limit on it should clamp, not reject.
+- **The fabrication guard read a number's unit forwards only.** All three of the product's languages
+  write `a team of 14`, so the counted noun is frequently _behind_ the figure — and a recomposed sentence
+  then failed to ground the candidate's own number. Fixed by reading backwards through a linking
+  preposition, which is narrower than it sounds: a plain backwards window picked up the verb and let
+  "Handled a 1,200-strong portfolio" ground "Handled 1200 accounts", the exact fabrication the check
+  exists to catch.
 
 ## v0.5 — "It remembers" · blocked, see ADR-018
 

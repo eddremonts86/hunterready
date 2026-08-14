@@ -30,6 +30,8 @@ import { ReadBackDemo } from '@/components/read-back-demo'
 import { Reveal } from '@/components/reveal'
 import { ReviewForm } from '@/components/review-form'
 import { keyOf, RewriteReview } from '@/components/rewrite-review'
+import { AdvertForm, TargetPanel } from '@/components/target-panel'
+import type { AdvertReadingResult } from '@/components/target-panel'
 import type { BulletRewrite } from '@/optimize/rewrite'
 import { Resume } from '@/schema/resume'
 import type { FieldProvenance } from '@/schema/provenance'
@@ -180,12 +182,18 @@ function StepBar({
   step,
   total,
   onBack,
+  backLabel = 'Start over',
   right,
 }: {
   /** Omitted on the landing page: see below. */
   step?: number
   total?: number
   onBack?: () => void
+  /**
+   * What the arrow does, for a screen reader. Named per screen because it differs: from the check step
+   * it discards the upload, and from the targeting branch it simply goes back to the CV.
+   */
+  backLabel?: string
   right?: React.ReactNode
 }) {
   /*
@@ -208,31 +216,32 @@ function StepBar({
           wordmark with only a link on the right reads as mis-aligned rather than as centred — so it
           goes left, where a landing page's mark belongs.
         */}
-        {showRail ? (
-          <>
-            {/* Always available, never warned about: nothing in this product is destructive. */}
-            {onBack === undefined ? (
-              <span className="w-9" />
-            ) : (
-              <button
-                type="button"
-                onClick={onBack}
-                aria-label="Start over"
-                className="-ml-2 flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-band hover:text-ink"
-              >
-                <Icon name="arrow-left" />
-              </button>
-            )}
-            <Wordmark />
-            <span className="tally rounded-full border border-hairline px-2.5 py-1 text-[12px] font-semibold text-ink-soft">
-              {step}/{total}
-            </span>
-          </>
+        {/*
+          Always available, never warned about: nothing in this product is destructive.
+
+          Drawn in both arrangements. It used to live inside the counter branch, which meant a screen
+          without a step number — the targeting branch — silently lost its only way back and stranded
+          the user there. The back affordance has nothing to do with whether there is a counter.
+        */}
+        {onBack !== undefined ? (
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label={backLabel}
+            className="-ml-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-band hover:text-ink"
+          >
+            <Icon name="arrow-left" />
+          </button>
         ) : (
-          <>
-            <Wordmark />
-            {right}
-          </>
+          showRail && <span className="w-9" />
+        )}
+        <Wordmark />
+        {showRail ? (
+          <span className="tally rounded-full border border-hairline px-2.5 py-1 text-[12px] font-semibold text-ink-soft">
+            {step}/{total}
+          </span>
+        ) : (
+          right
         )}
       </div>
       {showRail && (
@@ -327,6 +336,17 @@ function HunterReady() {
   const [accepted, setAccepted] = useState<Set<string>>(new Set())
   const [templateId, setTemplateId] = useState<TemplateId>('modern-intl')
   const [themeId, setThemeId] = useState<ThemeId>('modern')
+  /**
+   * Targeting is a branch off the check step, not a fourth step everyone walks through.
+   *
+   * Plenty of people want a cleanly typeset PDF of a CV that already parsed correctly, and forcing
+   * them through a job advert to reach it would be the questionnaire this product exists to avoid
+   * (ADR-011: the artifact comes before any question).
+   */
+  const [targeting, setTargeting] = useState(false)
+  const [reading, setReading] = useState<AdvertReadingResult | undefined>()
+  const [targetBusy, setTargetBusy] = useState(false)
+  const [targetError, setTargetError] = useState<string | undefined>()
 
   const upload = useCallback(
     async (file: File) => {
@@ -464,6 +484,46 @@ function HunterReady() {
       current?.filter((item) => keyOf(item) !== keyOf(rewrite)),
     )
   }, [])
+
+  /**
+   * Read one advert. One request, and everything downstream of it runs in the browser.
+   *
+   * `buildGapReport`, `scoreCv` and `applyTailoring` are pure, so the requirement list stays editable
+   * without a round trip per checkbox — see `/api/target` for why that split is a product decision.
+   */
+  const targetJob = useCallback(
+    async (advert: string) => {
+      if (loaded === undefined) return
+      setTargetBusy(true)
+      setTargetError(undefined)
+      try {
+        const response = await fetch('/api/target', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            advert,
+            resume: loaded.resume,
+            processing: consent.choice === 'granted' ? 'provider' : 'local',
+          }),
+        })
+        const payload = (await response.json()) as Record<string, unknown>
+        if (!response.ok) {
+          setTargetError(
+            typeof payload.message === 'string'
+              ? payload.message
+              : 'We could not read that advert just now.',
+          )
+          return
+        }
+        setReading(payload as unknown as AdvertReadingResult)
+      } catch {
+        setTargetError('We could not reach the server. Your CV is untouched.')
+      } finally {
+        setTargetBusy(false)
+      }
+    },
+    [loaded, consent.choice],
+  )
 
   const loadSample = useCallback(async (id: string) => {
     setBusy(true)
@@ -856,9 +916,117 @@ function HunterReady() {
     )
   }
 
-  // ── Step 2: check what we read, and take the print ──────────────────────────────────────
   const template = templates[templateId]
   const theme = getTheme(themeId)
+
+  // ── The branch: targeting one job ────────────────────────────────────────────────────────
+  if (targeting) {
+    return (
+      <div className="flex min-h-screen flex-col bg-band">
+        {/*
+          No step number. Targeting is optional, so numbering it would either invent a fourth step
+          everybody is behind on or claim progress through a flow they may never enter — the same
+          overstatement the honest counter exists to avoid.
+        */}
+        <StepBar
+          right={
+            <span className="text-meta text-ink-soft">Targeting a job</span>
+          }
+          onBack={() => setTargeting(false)}
+          backLabel="Back to your CV"
+        />
+
+        <div className="mx-auto flex w-full max-w-[1560px] flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:h-[calc(100vh-3.5rem)] lg:min-h-0 lg:px-8">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-display text-ink">
+              {reading === undefined
+                ? 'Which job is this for'
+                : 'How you match this job'}
+              <span className="text-signal">.</span>
+            </h1>
+            <p className="max-w-[70ch] text-[14px] leading-relaxed text-ink-soft">
+              {reading === undefined
+                ? 'We read what they are asking for, show you where your CV already answers it, and tell you plainly where it does not. We never add a skill you have not claimed.'
+                : 'Everything here is reversible, and nothing has changed in your CV yet.'}
+            </p>
+          </div>
+
+          <div className="flex flex-1 flex-col gap-5 lg:min-h-0 lg:flex-row">
+            <aside className="flex w-full shrink-0 flex-col gap-4 lg:w-[440px] lg:overflow-y-auto lg:pb-2 lg:pr-1">
+              {reading === undefined ? (
+                <div className="card p-4">
+                  <AdvertForm
+                    busy={targetBusy}
+                    error={targetError}
+                    onSubmit={(advert) => void targetJob(advert)}
+                  />
+                </div>
+              ) : (
+                <>
+                  <TargetPanel
+                    resume={loaded.resume}
+                    reading={reading}
+                    atsVerified={template.atsRating === 'verified'}
+                    onUseVariant={(variant) =>
+                      setLoaded({ ...loaded, resume: variant })
+                    }
+                    onAcceptSummary={(summary) =>
+                      setLoaded({
+                        ...loaded,
+                        resume: {
+                          ...loaded.resume,
+                          basics: { ...loaded.resume.basics, summary },
+                        },
+                      })
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReading(undefined)
+                      setTargetError(undefined)
+                    }}
+                    className="btn btn-quiet self-start px-4 py-2.5 text-[14px]"
+                  >
+                    Target a different job
+                  </button>
+                </>
+              )}
+            </aside>
+
+            {/*
+              The document stays on screen throughout. Reordering is invisible in a list of moves and
+              obvious on the page, so the claim "we only moved things" is checkable while it happens.
+            */}
+            <main className="card flex min-h-[70vh] flex-1 flex-col overflow-hidden lg:min-h-0">
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-hairline px-4 py-2.5">
+                <span className="text-[13px] font-semibold text-ink">
+                  Your CV, as it stands
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    downloadPdf(loaded.resume, templateId, themeId)
+                  }
+                  className="btn btn-quiet px-3.5 py-1.5 text-[13px]"
+                >
+                  <Icon name="download" className="h-4 w-4" />
+                  Download
+                </button>
+              </div>
+              <PaperPreview
+                resume={loaded.resume}
+                theme={theme}
+                Template={template.Component}
+              />
+            </main>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Step 2: check what we read, and take the print ──────────────────────────────────────
   const toCheck = loaded.provenance.filter(needsReview).length
   const readFields = loaded.provenance.length
   // A hint while they edit; the PDF is the authority on pagination.
@@ -974,6 +1142,34 @@ function HunterReady() {
                   {rewriteNote}
                 </p>
               )}
+            </div>
+
+            {/*
+              Targeting sits below wording for the same reason wording sits below the check: each step
+              is only worth doing once the one above it is right. Tailoring a CV we misread aims the
+              wrong document at the job.
+            */}
+            <div className="card flex flex-col gap-3 p-4">
+              <div className="flex flex-col gap-1">
+                <h2 className="text-[15px] font-semibold text-ink">
+                  Applying for something specific?
+                </h2>
+                <p className="text-[13px] leading-relaxed text-ink-soft">
+                  Paste the advert and we will show you which of their
+                  requirements your CV already answers, which are buried, and
+                  which are missing. We never add one you have not claimed.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTargeting(true)}
+                className="btn btn-quiet self-start px-4 py-2.5 text-[14px]"
+              >
+                {reading === undefined
+                  ? 'Target a job advert'
+                  : 'Back to this job'}
+                <Icon name="arrow-right" className="h-4 w-4" />
+              </button>
             </div>
 
             <div className="card flex flex-col gap-5 p-4">
