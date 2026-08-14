@@ -893,9 +893,17 @@ export function TargetPanel({
                 className="field min-h-[260px] resize-y font-sans leading-relaxed"
               />
               {letter.rationale !== '' && (
-                <p className="text-[13px] leading-relaxed text-ink-soft">
-                  {letter.rationale}
-                </p>
+                /*
+                  Folded, not in the reading path. Edd's words: once the CV is fitted and the letter is
+                  asked for, "no me interesan tus explicaciones" — the letter is the deliverable and the
+                  reasoning is a receipt for whoever wants to check it.
+                */
+                <details className="text-[13px] leading-relaxed text-ink-soft">
+                  <summary className="cursor-pointer text-meta text-ink-soft transition-colors hover:text-ink">
+                    Why it claims what it claims
+                  </summary>
+                  <p className="mt-1.5">{letter.rationale}</p>
+                </details>
               )}
               <div className="flex flex-wrap items-center gap-2">
                 {onDownloadLetter !== undefined && (

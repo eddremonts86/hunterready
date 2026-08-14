@@ -1571,15 +1571,18 @@ function HunterReady() {
                     resume={loaded.resume}
                     reading={reading}
                     atsVerified={template.atsRating === 'verified'}
-                    onUseVariant={(variant) =>
+                    onUseVariant={(variant) => {
                       setLoaded({ ...loaded, resume: variant })
-                    }
+                      // Reordering moves the bullets the open suggestions point at — same correctness
+                      // fix as onFitCv: stale coordinates would overwrite the wrong bullet.
+                      setRewrites(undefined)
+                      setAccepted(new Set())
+                    }}
                     onFitCv={(variant, summary) => {
                       /*
-                        The one-click fit: reorderings and the aimed summary applied together, then
-                        straight to the comparison. Seeing the before/after immediately is what makes a
-                        bulk apply an informed decision rather than a leap — the original is intact and
-                        "Just the new one" is the same toggle back.
+                        The one-click fit: reorderings and the aimed summary applied together, with the
+                        comparison switched on so the document pane shows before/after. The original is
+                        intact and "Just the new one" is the same toggle back.
                       */
                       setLoaded({
                         ...loaded,
@@ -1591,8 +1594,25 @@ function HunterReady() {
                           },
                         },
                       })
+                      /*
+                        Everything downstream revalidates, not just the document (Edd: "hay que
+                        revalidar todo").
+
+                        The wording suggestions are DISCARDED, and that is a correctness fix wearing a
+                        UX hat: their {workIndex, highlightIndex} coordinates point at pre-reorder
+                        positions, so accepting one after the fit would overwrite the WRONG bullet.
+                        Stale advice that misfires is worse than asking again.
+
+                        The panel stays on Job on purpose: the gap report, the score and the move list
+                        all recompute against the fitted CV the moment state lands, so the person
+                        watches their own match improve — the move list collapsing to "Nothing worth
+                        moving. Your CV already leads with what this job asks for" IS the revalidation,
+                        visible. The fit estimate and the measured page count re-run on their own.
+                      */
+                      setRewrites(undefined)
+                      setAccepted(new Set())
+                      setRewriteNote(undefined)
                       setComparing(true)
-                      setPanel('check')
                     }}
                     onAcceptSummary={(summary) =>
                       setLoaded({
