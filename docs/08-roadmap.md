@@ -131,7 +131,20 @@ Still to do:
 - A real photographed CV — perspective skew, uneven lighting, shadow. `scanned.pdf` is a clean
   rasterization and cannot fake any of it.
 - A genuine multi-page CV, still owed to Block 4's page-break verifier.
-- No education section is found in the private Spanish CV, and MiniMax sometimes returns no provenance.
+- **Tracked-out section headings** were losing whole sections, and that is fixed
+  (`collapseLetterSpaced` in `src/ingest/sections.ts`). A designed CV sets a heading with heavy
+  letter-spacing and the PDF text layer keeps it as real spaces, so `FORMACIÓN` arrives as
+  `F O R M A C I Ó N` — nine "words" to the four-word guard that exists to stop a prose sentence
+  counting as a section break. Every entry under such a heading was dropped, silently, on exactly the
+  kind of CV somebody paid a designer for. Not a Spanish problem: any language, any tracked heading.
+- **"No education section in the private Spanish CV" is probably not a defect.** Measured rather than
+  assumed: of 103 extracted lines, **zero** contain `formacion`, `educacion`, `estudios` or `academic`
+  in any form. So nothing is being missed by the matcher — the words are not in the extracted text.
+  Either the extraction loses that region entirely, or that CV has no formal education section, and its
+  detected headings (`/ QUIÉN ESCRIBE`, `Sobre mí.`, `Experiencia profesional.`, `WORDPRESS`) look like
+  a portfolio-shaped profile that might not carry one. **Edd can answer this in a sentence**; nobody
+  should hunt it further until he does.
+- MiniMax sometimes returns no provenance.
 
 ## v0.3 — "It improves the CV" · in progress
 
