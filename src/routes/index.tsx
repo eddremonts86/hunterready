@@ -17,7 +17,7 @@
  * Flow: docs/11-flow.md. Upload → Check → Download, all client-side state: the resume never goes
  * anywhere except to /api/render to be typeset (ADR-004).
  */
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import {
   ConsentGate,
@@ -30,12 +30,18 @@ import { PaperPreview } from '@/components/paper-preview'
 import { ReadBackDemo } from '@/components/read-back-demo'
 import { Reveal } from '@/components/reveal'
 import { ReviewForm } from '@/components/review-form'
+import { SavedCvs } from '@/components/saved-cvs'
 import { keyOf, RewriteReview } from '@/components/rewrite-review'
 import { AdvertForm, TargetPanel } from '@/components/target-panel'
 import { BeforeAfter } from '@/components/before-after'
 import { DesignGallery } from '@/components/design-gallery'
 import { ButtonLabel, Spinner } from '@/components/working'
 import { DownloadFailed, saveRendered } from '@/lib/download'
+import {
+  clearWorkingCopy,
+  readWorkingCopy,
+  writeWorkingCopy,
+} from '@/lib/working-copy'
 import type {
   AdvertReadingResult,
   CoverLetterOffer,
@@ -532,6 +538,47 @@ function HunterReady() {
    * targeting panel — and `Library` holding it privately duplicated the base CV on every application.
    */
   const [savedResumeId, setSavedResumeId] = useState<string | undefined>()
+
+  /**
+   * Put the tab's working copy back after a reload.
+   *
+   * Read once on mount rather than as `useState`'s initial value: `sessionStorage` is not available while
+   * the server renders this route, and reading it in an initialiser would throw during hydration.
+   */
+  useEffect(() => {
+    const copy = readWorkingCopy()
+    if (copy === undefined) return
+    setLoaded({
+      resume: copy.resume,
+      original: copy.original,
+      provenance: copy.provenance,
+      warnings: copy.warnings,
+      method: copy.method,
+      ocr: copy.ocr,
+    })
+    if (copy.savedResumeId !== undefined) setSavedResumeId(copy.savedResumeId)
+    // Once, on mount. A dependency on `loaded` would restore over the person's own edits.
+  }, [])
+
+  /**
+   * Keep it in step with every edit.
+   *
+   * Written on each change rather than on an interval or on unload: `beforeunload` is unreliable on mobile
+   * — a tab killed in the background never fires it — and an interval loses whatever happened since the
+   * last tick. A CV is a few tens of kilobytes and this is a synchronous write to the same tab.
+   */
+  useEffect(() => {
+    if (loaded === undefined) return
+    writeWorkingCopy({
+      resume: loaded.resume,
+      original: loaded.original,
+      provenance: loaded.provenance,
+      warnings: loaded.warnings,
+      method: loaded.method,
+      ocr: loaded.ocr,
+      ...(savedResumeId === undefined ? {} : { savedResumeId }),
+    })
+  }, [loaded, savedResumeId])
   const downloads = useDownloads()
   /** Whether the document pane is showing the comparison instead of the current CV. */
   const [comparing, setComparing] = useState(false)
@@ -966,6 +1013,29 @@ function HunterReady() {
                     </li>
                   ))}
                 </ul>
+
+                {/*
+                  The way back to a saved CV, under the upload control rather than above it.
+                
+                  Order matters here: the upload is what a first-time visitor came for and it stays the
+                  first thing (ADR-011, the artifact before any question). This is for the returning one,
+                  and it renders nothing at all for everybody else — no empty state, no invitation, no row
+                  of grey boxes explaining what would be here if they had an account.
+                */}
+                <SavedCvs
+                  onOpen={({ id, resume }) => {
+                    setLoaded({
+                      resume,
+                      // A stored CV is its own starting point: the "before" is the version on the server.
+                      original: resume,
+                      provenance: [],
+                      warnings: [],
+                      method: 'rules',
+                      ocr: false,
+                    })
+                    setSavedResumeId(id)
+                  }}
+                />
               </div>
 
               <div className="rise" style={{ animationDelay: '300ms' }}>
@@ -1383,7 +1453,13 @@ function HunterReady() {
     <div className="flex min-h-screen flex-col bg-band">
       <StepBar
         onBack={() => {
+          /*
+            "Start over" has to clear the saved copy too, or the restore on the next mount would put back
+            the very CV the person just walked away from — a back arrow that undoes itself.
+          */
+          clearWorkingCopy()
           setLoaded(undefined)
+          setSavedResumeId(undefined)
           setError(undefined)
         }}
       />
