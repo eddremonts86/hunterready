@@ -18,7 +18,7 @@
  * anywhere except to /api/render to be typeset (ADR-004).
  */
 import { useCallback, useEffect, useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
   ConsentGate,
   needsConsent,
@@ -42,6 +42,12 @@ import {
   readWorkingCopy,
   writeWorkingCopy,
 } from '@/lib/working-copy'
+import {
+  DEFAULT_PANEL,
+  PANELS,
+  validateWorkspaceSearch,
+} from '@/lib/workspace-search'
+import type { PanelId } from '@/lib/workspace-search'
 import type {
   AdvertReadingResult,
   CoverLetterOffer,
@@ -59,7 +65,11 @@ import { localeOptions, resolveLocale } from '@/render/locale'
 import { templates } from '@/render/templates/registry'
 import type { TemplateId } from '@/render/templates/registry'
 
-export const Route = createFileRoute('/')({ component: HunterReady })
+export const Route = createFileRoute('/')({
+  // Validated in `@/lib/workspace-search`, with its reasoning and its tests.
+  validateSearch: validateWorkspaceSearch,
+  component: HunterReady,
+})
 
 interface Loaded {
   resume: Resume
@@ -440,16 +450,6 @@ function Segmented<T extends string>({
  *
  * `Check` is the default because it is the work of this screen. The other four are things you may do.
  */
-type PanelId = 'check' | 'wording' | 'design' | 'job' | 'account'
-
-const PANELS: ReadonlyArray<{ id: PanelId; label: string }> = [
-  { id: 'check', label: 'Check' },
-  { id: 'wording', label: 'Wording' },
-  { id: 'design', label: 'Design' },
-  { id: 'job', label: 'Job' },
-  { id: 'account', label: 'Account' },
-]
-
 function PanelTabs({
   active,
   onChange,
@@ -504,6 +504,9 @@ function PanelTabs({
 }
 
 function HunterReady() {
+  const search = Route.useSearch()
+  const navigate = useNavigate({ from: Route.fullPath })
+
   const [loaded, setLoaded] = useState<Loaded | undefined>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>()
@@ -540,23 +543,86 @@ function HunterReady() {
   const [savedResumeId, setSavedResumeId] = useState<string | undefined>()
 
   /**
-   * Put the tab's working copy back after a reload.
+   * Open a stored CV.
    *
-   * Read once on mount rather than as `useState`'s initial value: `sessionStorage` is not available while
-   * the server renders this route, and reading it in an initialiser would throw during hydration.
+   * Shared by the library card, the landing-page list and the `?cv=` link, because all three mean the same
+   * thing and one of them getting it subtly different is how a document ends up saving over the wrong row.
+   */
+  const openSaved = useCallback(
+    ({ id, resume }: { id: string; resume: Resume }) => {
+      setLoaded({
+        resume,
+        // A stored CV is its own starting point: the "before" is the version on the server.
+        original: resume,
+        provenance: [],
+        warnings: [],
+        method: 'rules',
+        ocr: false,
+      })
+      setSavedResumeId(id)
+    },
+    [],
+  )
+
+  /**
+   * Put back whatever this tab was working on: the session copy, or the CV the URL names.
+   *
+   * Read on mount rather than as `useState`'s initial value: `sessionStorage` is not available while the
+   * server renders this route, and reading it in an initialiser would throw during hydration.
+   *
+   * **The session copy always wins.** When both exist and they disagree, following the URL would replace
+   * edits made in this tab with a document from the server — the exact loss the session copy was added to
+   * prevent, now caused by a bookmark. So `?cv=` acts only on a cold start. The cost is that opening a
+   * bookmark for CV B while CV A is on screen keeps showing A, which is confusing for a moment; the
+   * alternative silently destroys work, which is not a moment.
    */
   useEffect(() => {
     const copy = readWorkingCopy()
-    if (copy === undefined) return
-    setLoaded({
-      resume: copy.resume,
-      original: copy.original,
-      provenance: copy.provenance,
-      warnings: copy.warnings,
-      method: copy.method,
-      ocr: copy.ocr,
-    })
-    if (copy.savedResumeId !== undefined) setSavedResumeId(copy.savedResumeId)
+    if (copy !== undefined) {
+      setLoaded({
+        resume: copy.resume,
+        original: copy.original,
+        provenance: copy.provenance,
+        warnings: copy.warnings,
+        method: copy.method,
+        ocr: copy.ocr,
+      })
+      if (copy.savedResumeId !== undefined) setSavedResumeId(copy.savedResumeId)
+      return
+    }
+
+    const wanted = search.cv
+    if (wanted === undefined) return
+
+    /*
+      One row, fetched through the list endpoint. `/api/library` answers 404 for a visitor with no account
+      and for an installation with no database, and a link to somebody else's CV finds nothing in the list
+      it is allowed to see — so a stranger following a shared `?cv=` link lands on the landing page rather
+      than on a hint that the id was real.
+    */
+    let cancelled = false
+    void fetch('/api/library')
+      .then(async (response) =>
+        response.ok
+          ? ((await response.json()) as { resumes?: Array<unknown> })
+          : { resumes: [] },
+      )
+      .then((payload) => {
+        if (cancelled) return
+        for (const row of payload.resumes ?? []) {
+          const shape = row as { id?: unknown; resume?: unknown }
+          if (shape.id !== wanted) continue
+          const parsed = Resume.safeParse(shape.resume)
+          if (parsed.success) openSaved({ id: wanted, resume: parsed.data })
+          return
+        }
+      })
+      .catch(() => {
+        // A library that cannot be reached leaves the landing page exactly as it was. Nothing to say.
+      })
+    return () => {
+      cancelled = true
+    }
     // Once, on mount. A dependency on `loaded` would restore over the person's own edits.
   }, [])
 
@@ -579,9 +645,23 @@ function HunterReady() {
       ...(savedResumeId === undefined ? {} : { savedResumeId }),
     })
   }, [loaded, savedResumeId])
+
+  /**
+   * Put the CV's id in the address bar once there is one, so the link exists without anybody asking for it.
+   *
+   * `replace` rather than a push: this annotates where you already are — it is not a navigation the person
+   * made, and a history entry per save would make the back button undo saves in the URL while the row on
+   * the server stayed saved. Guarded on inequality so it fires once per document rather than on every
+   * keystroke, since the persist effect above runs on each edit.
+   */
+  useEffect(() => {
+    if (savedResumeId === undefined || search.cv === savedResumeId) return
+    void navigate({
+      replace: true,
+      search: (prev) => ({ ...prev, cv: savedResumeId }),
+    })
+  }, [savedResumeId, search.cv, navigate])
   const downloads = useDownloads()
-  /** Whether the document pane is showing the comparison instead of the current CV. */
-  const [comparing, setComparing] = useState(false)
   /**
    * Pages as the preview actually laid them out, once it has.
    *
@@ -591,7 +671,41 @@ function HunterReady() {
    * from the strongest evidence available at the time.
    */
   const [measuredPages, setMeasuredPages] = useState<number | undefined>()
-  const [panel, setPanel] = useState<PanelId>('check')
+
+  /**
+   * The panel and the comparison come from the URL, not from `useState`.
+   *
+   * Derived rather than mirrored: there is one source of truth, so the address bar can never disagree with
+   * the screen. A `useState` kept in sync by an effect would be two, and the two drift the moment somebody
+   * presses back.
+   *
+   * The default is left **out** of the URL rather than written into it, so the front door stays `/` instead
+   * of `/?panel=check&compare=false`. Both push a history entry — that is the whole point, since the
+   * complaint was that back left the app rather than the panel.
+   */
+  const panel: PanelId = search.panel ?? DEFAULT_PANEL
+  const setPanel = useCallback(
+    (id: PanelId) => {
+      void navigate({
+        search: (prev) => ({
+          ...prev,
+          panel: id === DEFAULT_PANEL ? undefined : id,
+        }),
+      })
+    },
+    [navigate],
+  )
+
+  /** Whether the document pane is showing the comparison instead of the current CV. */
+  const comparing = search.compare === true
+  const setComparing = useCallback(
+    (next: boolean) => {
+      void navigate({
+        search: (prev) => ({ ...prev, compare: next ? true : undefined }),
+      })
+    },
+    [navigate],
+  )
 
   const upload = useCallback(
     async (file: File) => {
@@ -1022,20 +1136,7 @@ function HunterReady() {
                   and it renders nothing at all for everybody else — no empty state, no invitation, no row
                   of grey boxes explaining what would be here if they had an account.
                 */}
-                <SavedCvs
-                  onOpen={({ id, resume }) => {
-                    setLoaded({
-                      resume,
-                      // A stored CV is its own starting point: the "before" is the version on the server.
-                      original: resume,
-                      provenance: [],
-                      warnings: [],
-                      method: 'rules',
-                      ocr: false,
-                    })
-                    setSavedResumeId(id)
-                  }}
-                />
+                <SavedCvs onOpen={openSaved} />
               </div>
 
               <div className="rise" style={{ animationDelay: '300ms' }}>
@@ -1461,6 +1562,12 @@ function HunterReady() {
           setLoaded(undefined)
           setSavedResumeId(undefined)
           setError(undefined)
+          /*
+            And empty the address bar, or starting over undoes itself on the next reload: `?cv=` would
+            still name the CV that was just put away, and the mount effect would fetch it straight back.
+            The same trap as forgetting `clearWorkingCopy` here, one layer out.
+          */
+          void navigate({ replace: true, search: {} })
         }}
       />
 
@@ -1907,7 +2014,17 @@ function HunterReady() {
               the point where neither is legible. The switch is one click away in either direction, which
               is what makes replacing it safe — every station in this flow is re-enterable.
             */}
-            {comparing ? (
+            {/*
+              `changes.length > 0` as well as `comparing`, because `compare=true` is now something a URL
+              can assert and a URL can be wrong.
+
+              The toggle button lives inside the `changes.length > 0` block above, so a comparison of an
+              unchanged document — a link followed after the edits were saved, say, which makes the current
+              CV its own "before" — would render two identical sheets with no way back but editing the
+              address bar. Ignoring the flag instead is the same rule the search validator follows: an
+              impossible request falls back to the ordinary screen rather than to a dead end.
+            */}
+            {comparing && changes.length > 0 ? (
               <BeforeAfter
                 original={loaded.original}
                 current={loaded.resume}
