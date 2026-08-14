@@ -179,6 +179,40 @@ not inherit the page's spacing rhythm, because it is a different object.
 warned about — PRODUCT.md requires recoverable errors. The back arrow is chrome, not
 a dialog.
 
+## Waiting
+
+**Nothing happens silently.** Every action that leaves the browser says so, in words,
+on the control that started it. `Spinner`, `Working` and `ButtonLabel` in
+`components/working.tsx` are the only three shapes this takes; a fourth one invented
+locally is how six screens ended up with six answers, four of them being "nothing".
+
+**Words, not just a ring.** The label carries the message and the ring carries the
+motion, in that order of importance. A greyed-out button whose text has not changed
+reads as a click that was swallowed.
+
+**Motion is essential here, so it survives reduced motion.** The stylesheet's
+`prefers-reduced-motion` rule stops everything except `data-motion="essential"`,
+which is slowed to 2.4s rather than frozen. A spinner that has stopped turning does
+not read as respect for a preference; it reads as a hung application, to the one
+person who has no other cue.
+
+**Name the shape of the wait, never a duration.** "One pass over every bullet — the
+longer your history, the longer this takes" is true for everybody. "About ten
+seconds" is wrong for most, and a promise that has already expired is how a working
+request starts looking broken.
+
+**Never a percentage we were not given.** None of these operations reports progress,
+so an indeterminate bar or a ring is the honest shape. See the Don't below — this is
+the same rule as the step rail's.
+
+**A loading state is not an empty state.** They look alike and mean opposite things:
+one is "we have not asked yet", the other is "you have nothing". The library showed
+ten saved CVs as "nothing saved yet" for the first moment of every visit.
+
+**Guard the button, do not merely dim it.** Two clicks on a silent Share minted two
+public links to somebody's employment history, and nobody closes a link they do not
+know exists.
+
 ## Elevation & Depth
 
 A card sits forward the way paper on a desk does: a **1px hairline for the edge**,

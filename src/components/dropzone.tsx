@@ -11,6 +11,7 @@
  * band, or a step screen without any of them fighting over which text is the H1.
  */
 import { useCallback, useRef, useState } from 'react'
+import { Spinner } from '@/components/working'
 import { MAX_BYTES } from '@/ingest/detect'
 
 /**
@@ -124,17 +125,9 @@ export function Dropzone({
         >
           {busy ? (
             /* A ring that turns. Honest about "something is happening" without claiming a percentage
-               we do not have — the server does not report progress on an OCR pass. */
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="h-6 w-6 animate-spin"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-            >
-              <path d="M12 3a9 9 0 1 0 9 9" />
-            </svg>
+               we do not have — the server does not report progress on an OCR pass. This was the
+               original of the shared `Spinner`; it now uses it rather than keeping its own copy. */
+            <Spinner className="h-6 w-6" />
           ) : (
             <svg
               viewBox="0 0 24 24"

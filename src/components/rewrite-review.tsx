@@ -19,6 +19,7 @@
  *    failure; it is the tool asking for the number instead of inventing one.
  */
 import { useState } from 'react'
+import { ButtonLabel } from '@/components/working'
 import type { BulletRewrite } from '@/optimize/rewrite'
 
 /**
@@ -122,6 +123,15 @@ export interface RewriteReviewProps {
    * material, which is what lets the guard permit the figure.
    */
   onAnswer?: (answers: Array<string>) => void
+  /**
+   * Whether a pass is running right now.
+   *
+   * Passed in rather than held here because the parent owns the request. Without it this component had
+   * the longest silent wait in the product: "Try again with what I told you" starts a full pass — one
+   * model call per bullet — and the flag that covered the *first* pass was on a button this component
+   * replaces, so the second one showed nothing at all.
+   */
+  busy?: boolean
 }
 
 export function keyOf(rewrite: {
@@ -137,6 +147,7 @@ export function RewriteReview({
   onDismiss,
   accepted,
   onAnswer,
+  busy = false,
 }: RewriteReviewProps) {
   const [showAll, setShowAll] = useState(false)
   const [answers, setAnswers] = useState<Record<string, string>>({})
@@ -249,19 +260,38 @@ export function RewriteReview({
 
       {onAnswer !== undefined &&
         Object.values(answers).some((text) => text.trim() !== '') && (
-          <button
-            type="button"
-            onClick={() =>
-              onAnswer(
-                Object.entries(answers)
-                  .filter(([, text]) => text.trim() !== '')
-                  .map(([question, text]) => `${question} ${text}`),
-              )
-            }
-            className="btn btn-primary px-4 py-2 text-[13px]"
-          >
-            Try again with what I told you
-          </button>
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              aria-busy={busy}
+              onClick={() =>
+                onAnswer(
+                  Object.entries(answers)
+                    .filter(([, text]) => text.trim() !== '')
+                    .map(([question, text]) => `${question} ${text}`),
+                )
+              }
+              className="btn btn-primary px-4 py-2 text-[13px]"
+            >
+              <ButtonLabel
+                busy={busy}
+                idle="Try again with what I told you"
+                working="Reading your bullets again…"
+              />
+            </button>
+            {/*
+              The hint is only shown while it runs, and it names the shape of the wait rather than a
+              duration: one call per bullet means a CV with four jobs waits noticeably longer than one
+              with one, and a fixed "about ten seconds" would be wrong for most people.
+            */}
+            {busy && (
+              <span className="text-meta leading-relaxed text-ink-soft">
+                One pass over every bullet — the longer your history, the longer
+                this takes.
+              </span>
+            )}
+          </div>
         )}
 
       {pending.length > 1 && (

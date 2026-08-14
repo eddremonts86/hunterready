@@ -438,14 +438,30 @@ body {
   border-radius: 4px;
 }
 
-/** Someone who has asked the OS for less motion is not asking to be surprised by our transitions. */
+/**
+ * Someone who has asked the OS for less motion is not asking to be surprised by our transitions.
+ *
+ * With one exception, and it matters: this rule used to freeze the loading indicators too. A ring that
+ * has stopped turning does not read as "reduced motion", it reads as a hung application — and it was
+ * shown to the one visitor who has no other cue that work is still running. WCAG 2.3.3 is about motion
+ * used for decoration; a spinner's movement is its meaning.
+ *
+ * So anything marked `data-motion="essential"` keeps moving, slowly. Everything else still stops:
+ * the drifting background washes, the rise-in on scroll, every transition.
+ */
 @media (prefers-reduced-motion: reduce) {
-  *,
+  *:not([data-motion='essential']),
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  /* Slower than the 1s default: still legible as "working", no longer a spin somebody has to watch. */
+  [data-motion='essential'] {
+    animation-duration: 2.4s !important;
+    animation-iteration-count: infinite !important;
   }
 }

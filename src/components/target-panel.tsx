@@ -29,6 +29,7 @@
  * it is their decision whether to apply anyway.
  */
 import { useMemo, useState } from 'react'
+import { ButtonLabel } from '@/components/working'
 import type { CvScore, Finding } from '@/optimize/score'
 import { scoreCv } from '@/optimize/score'
 import type {
@@ -351,8 +352,14 @@ export function TargetPanel({
    * a requirement the candidate removed should not shape the letter either.
    */
   onDraftLetter?: (requirements: JobRequirements) => Promise<CoverLetterOffer>
-  /** Download the letter on screen, including any edits, as `.docx`. */
-  onDownloadLetter?: (text: string) => void
+  /**
+   * Download the letter on screen, including any edits, as `.docx`.
+   *
+   * Async because it now buffers the file rather than submitting a form — so this panel can say the
+   * document is being built, and can show a failure instead of the page navigating into one. Rejects
+   * with a message fit to display.
+   */
+  onDownloadLetter?: (text: string) => Promise<void>
 }) {
   /**
    * Requirements the candidate has said were never asked for.
@@ -371,6 +378,8 @@ export function TargetPanel({
   const [letterBusy, setLetterBusy] = useState(false)
   /** The letter as edited. Held separately so re-drafting cannot silently discard their wording. */
   const [letterText, setLetterText] = useState('')
+  const [letterSaving, setLetterSaving] = useState(false)
+  const [letterSaveError, setLetterSaveError] = useState<string | undefined>()
 
   const requirements = useMemo<JobRequirements>(() => {
     const keep = (items: Array<string>) =>
@@ -743,7 +752,11 @@ export function TargetPanel({
               }}
               className="btn btn-quiet self-start px-4 py-2.5 text-[14px] disabled:cursor-not-allowed disabled:opacity-45"
             >
-              {letterBusy ? 'Writing…' : 'Write a first draft'}
+              <ButtonLabel
+                busy={letterBusy}
+                idle="Write a first draft"
+                working="Writing…"
+              />
             </button>
           ) : letter.outcome === 'drafted' ? (
             <>
@@ -768,10 +781,28 @@ export function TargetPanel({
                 {onDownloadLetter !== undefined && (
                   <button
                     type="button"
-                    onClick={() => onDownloadLetter(letterText)}
+                    disabled={letterSaving}
+                    aria-busy={letterSaving}
+                    onClick={() => {
+                      setLetterSaving(true)
+                      setLetterSaveError(undefined)
+                      void onDownloadLetter(letterText)
+                        .catch((error: unknown) => {
+                          setLetterSaveError(
+                            error instanceof Error
+                              ? error.message
+                              : 'We could not build that file. Your letter is unchanged.',
+                          )
+                        })
+                        .finally(() => setLetterSaving(false))
+                    }}
                     className="btn btn-quiet px-4 py-2 text-[13px]"
                   >
-                    Download as Word
+                    <ButtonLabel
+                      busy={letterSaving}
+                      idle="Download as Word"
+                      working="Building…"
+                    />
                   </button>
                 )}
                 <button
@@ -794,6 +825,14 @@ export function TargetPanel({
                   Start again
                 </button>
               </div>
+              {letterSaveError !== undefined && (
+                <p
+                  role="status"
+                  className="rounded-field border border-alert/25 bg-alert-wash px-3 py-2 text-[13px] leading-relaxed text-ink"
+                >
+                  {letterSaveError}
+                </p>
+              )}
             </>
           ) : letter.outcome === 'refused' ? (
             /*
@@ -863,11 +902,15 @@ export function TargetPanel({
               }}
               className="btn btn-quiet px-4 py-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-45"
             >
-              {saveState === 'saving'
-                ? 'Saving…'
-                : saveState === 'saved'
-                  ? 'Saved'
-                  : 'Save this application'}
+              {saveState === 'saved' ? (
+                'Saved'
+              ) : (
+                <ButtonLabel
+                  busy={saveState === 'saving'}
+                  idle="Save this application"
+                  working="Saving…"
+                />
+              )}
             </button>
             {saveState === 'failed' && (
               <span role="status" className="text-[13px] text-ink-soft">
