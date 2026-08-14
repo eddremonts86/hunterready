@@ -1,13 +1,13 @@
 -- Runtime roles, created WITHOUT credentials.
 --
--- Copied from builderhunt/drizzle/0002_database_roles.sql, and the reason it is worth copying is the
+-- Copied from builderhunt/drizzle/0002_database_roles.sql, and what makes it worth copying is the
 -- consequence: deployment automation provisions and rotates the LOGIN passwords out of band, so no
--- migration file in git ever contains one, and the web service never holds an identity that can alter
--- the schema.
+-- migration in git ever contains one and the web service never holds an identity that can alter the
+-- schema.
 --
 -- The trap that comes with it: `drizzle-kit migrate` alone leaves the application unable to
--- authenticate, because these roles have no password yet. Run the orchestrator (`pnpm deploy:db`) as
--- the post-deployment command. Builderhunt's runbook records four failed deploys learning that.
+-- authenticate. `scripts/deploy/orchestrate.mjs` is the post-deployment command, and its step 4
+-- exists solely to catch that. Builderhunt's runbook records four failed deploys learning it.
 
 DO $$
 BEGIN
@@ -21,13 +21,10 @@ END
 $$;
 --> statement-breakpoint
 
--- No superuser, no createdb, no createrole, and no BYPASSRLS. The application role is exactly as
--- privileged as it needs to be to serve a request and no more.
 ALTER ROLE hunterready_app      LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
 ALTER ROLE hunterready_readonly LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
 --> statement-breakpoint
 
--- Nothing is granted to PUBLIC. A new table is unreachable until it is granted deliberately.
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC;
@@ -41,13 +38,19 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO hunterready_app;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO hunterready_readonly;
 --> statement-breakpoint
 
+-- Better Auth writes and reads its own four tables through the app role, so it needs the grants
+-- above. It never needs DDL: the schema is ours, applied by migration as the owner.
+--
+-- The readonly role is denied the auth tables outright. A read-only analytics session has no business
+-- seeing session tokens or password hashes, and "readonly" is not the same claim as "harmless".
+REVOKE ALL ON TABLE auth_accounts, auth_sessions, auth_verifications FROM hunterready_readonly;
+--> statement-breakpoint
+
 -- The application may not DELETE from the audit log. An actor who can erase the record of their own
--- access has an audit log in name only, so retention pruning is the owner's job (`pnpm db:retention`).
+-- access has an audit log in name only, so pruning is the owner's job (`pnpm db:retention`).
 REVOKE DELETE ON TABLE access_log FROM hunterready_app;
 --> statement-breakpoint
 
--- Same grants for anything a later migration adds, so a new table is never accidentally unreachable
--- or accidentally world-readable.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO hunterready_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public

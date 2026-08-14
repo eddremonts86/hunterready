@@ -17,7 +17,13 @@
 import { and, eq, lt, sql } from 'drizzle-orm'
 import { Resume } from '@/schema/resume'
 import { db } from './client'
-import { accessLog, RETENTION_DAYS, resumes, users, variants } from './schema'
+import {
+  accessLog,
+  authUsers,
+  RETENTION_DAYS,
+  resumes,
+  variants,
+} from './schema'
 
 export { RETENTION_DAYS }
 
@@ -55,29 +61,18 @@ function parseDocument(raw: unknown, id: string): Resume {
   return parsed.data
 }
 
-export async function findOrCreateUser(email: string): Promise<string> {
-  const normalized = email.trim().toLowerCase()
-  const [existing] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.email, normalized))
-    .limit(1)
-
-  if (existing !== undefined) {
-    // Seen today, so the clock restarts. This is the only place it does.
-    await db
-      .update(users)
-      .set({ lastSeenAt: new Date(), deleteAfter: extended })
-      .where(eq(users.id, existing.id))
-    return existing.id
-  }
-
-  const [created] = await db
-    .insert(users)
-    .values({ email: normalized })
-    .returning({ id: users.id })
-  await record(created.id, 'user.created')
-  return created.id
+/**
+ * Record that this account was used, and push its retention clock forward.
+ *
+ * Creating accounts is Better Auth's job now — this used to be `findOrCreateUser`, which was our own
+ * half of an identity system we no longer own. What remains is the half Better Auth does not do: the
+ * retention policy is ours, and "still using it" is measured here.
+ */
+export async function touchUser(userId: string): Promise<void> {
+  await db
+    .update(authUsers)
+    .set({ lastSeenAt: new Date(), deleteAfter: extended })
+    .where(eq(authUsers.id, userId))
 }
 
 export async function saveResume(input: {
@@ -118,9 +113,9 @@ export async function saveResume(input: {
 
 export async function listResumes(userId: string) {
   await db
-    .update(users)
+    .update(authUsers)
     .set({ lastSeenAt: new Date(), deleteAfter: extended })
-    .where(eq(users.id, userId))
+    .where(eq(authUsers.id, userId))
 
   const rows = await db
     .select({
@@ -195,14 +190,14 @@ export async function listVariants(userId: string) {
 export async function exportEverything(userId: string) {
   const [account] = await db
     .select({
-      id: users.id,
-      email: users.email,
-      createdAt: users.createdAt,
-      lastSeenAt: users.lastSeenAt,
-      deleteAfter: users.deleteAfter,
+      id: authUsers.id,
+      email: authUsers.email,
+      createdAt: authUsers.createdAt,
+      lastSeenAt: authUsers.lastSeenAt,
+      deleteAfter: authUsers.deleteAfter,
     })
-    .from(users)
-    .where(eq(users.id, userId))
+    .from(authUsers)
+    .where(eq(authUsers.id, userId))
     .limit(1)
 
   if (account === undefined) return undefined
@@ -239,17 +234,17 @@ export async function exportEverything(userId: string) {
 export async function deleteEverything(userId: string): Promise<boolean> {
   await record(userId, 'account.deleted')
   const deleted = await db
-    .delete(users)
-    .where(eq(users.id, userId))
-    .returning({ id: users.id })
+    .delete(authUsers)
+    .where(eq(authUsers.id, userId))
+    .returning({ id: authUsers.id })
   return deleted.length > 0
 }
 
 /** Rows past their retention date. Read-only: the sweep itself runs as the owner. */
 export async function countExpired(): Promise<number> {
   const rows = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(lt(users.deleteAfter, new Date()))
+    .select({ id: authUsers.id })
+    .from(authUsers)
+    .where(lt(authUsers.deleteAfter, new Date()))
   return rows.length
 }

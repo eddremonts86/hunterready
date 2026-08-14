@@ -37,7 +37,7 @@ import {
   pgTable,
   text,
   timestamp,
-  uniqueIndex,
+  unique,
   uuid,
 } from 'drizzle-orm/pg-core'
 
@@ -54,38 +54,128 @@ const retention = () =>
     // disagree about what the policy is.
     .default(sql`now() + interval '${sql.raw(String(RETENTION_DAYS))} days'`)
 
-export const users = pgTable(
-  'users',
+/**
+ * Better Auth's four tables, named as in `builderhunt` — the reference app already runs Better Auth
+ * 1.6 with the Drizzle adapter, so this is its answer rather than a new one.
+ *
+ * What is *not* copied: organizations, device fingerprinting, abuse hooks, step-up auth. Those solve
+ * a multi-tenant SaaS's problems. HunterReady is one person and one CV, and inheriting that apparatus
+ * would be complexity with nothing behind it.
+ *
+ * ## One identity table, and this is the load-bearing decision
+ *
+ * `auth_users` *is* the user table. There is no second `users` row keyed to it, which the first draft
+ * of this schema had — and two identity tables means two places to honour an erasure request, which is
+ * exactly the shape of bug a GDPR obligation cannot survive. The retention columns therefore live
+ * here, on Better Auth's own table: they have defaults, so Better Auth inserts without knowing about
+ * them and Postgres fills them in.
+ */
+export const authUsers = pgTable('auth_users', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull().default(''),
+  email: text('email').notNull().unique(),
+  emailVerified: boolean('email_verified').notNull().default(false),
+  image: text('image'),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  /**
+   * The clock retention counts from — bumped on every authenticated request.
+   *
+   * Not `createdAt`: someone iterating on their CV over four months has not abandoned it, and
+   * deleting their work on an anniversary would be the wrong kind of correct.
+   */
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  deleteAfter: retention(),
+})
+
+export const authSessions = pgTable('auth_sessions', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => authUsers.id, {
+      onDelete: 'cascade',
+      onUpdate: 'cascade',
+    }),
+  token: text('token').notNull().unique(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  ipAddress: text('ip_address'),
+  userAgent: text('user_agent'),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+})
+
+export const authAccounts = pgTable(
+  'auth_accounts',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    /**
-     * Stored lowercased and unique. The only personal datum we hold outside a CV, and the only one
-     * we need: there is no name column, because the name is already in the document they uploaded
-     * and duplicating it would mean two places to honour an erasure request.
-     */
-    email: text('email').notNull(),
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUsers.id, {
+        onDelete: 'cascade',
+        onUpdate: 'cascade',
+      }),
+    accountId: text('account_id').notNull(),
+    providerId: text('provider_id').notNull(),
+    accessToken: text('access_token'),
+    refreshToken: text('refresh_token'),
+    accessTokenExpiresAt: timestamp('access_token_expires_at', {
+      withTimezone: true,
+    }),
+    refreshTokenExpiresAt: timestamp('refresh_token_expires_at', {
+      withTimezone: true,
+    }),
+    scope: text('scope'),
+    idToken: text('id_token'),
+    /** Hashed by Better Auth (scrypt). Never a plaintext password, never our own hashing. */
+    password: text('password'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
-    /** Bumped on every authenticated request. The clock retention counts from. */
-    lastSeenAt: timestamp('last_seen_at', { withTimezone: true })
+    updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
-    deleteAfter: retention(),
   },
-  (table) => [uniqueIndex('users_email_key').on(table.email)],
+  (table) => [
+    unique('auth_accounts_provider_account_unique').on(
+      table.accountId,
+      table.providerId,
+    ),
+  ],
 )
+
+export const authVerifications = pgTable('auth_verifications', {
+  id: text('id').primaryKey(),
+  identifier: text('identifier').notNull(),
+  value: text('value').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+})
 
 export const resumes = pgTable(
   'resumes',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id')
+    userId: text('user_id')
       .notNull()
       // Erasure has to be one statement. A dangling CV after a deleted account is the exact failure
       // a GDPR request is meant to make impossible, so the database enforces it rather than a
       // service remembering to.
-      .references(() => users.id, { onDelete: 'cascade' }),
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
     /** Their working CV. One `Resume` document, validated by Zod on read (ADR-001). */
     document: jsonb('document').notNull(),
     /** Carried so a stored document can be migrated forward without guessing which shape it is. */
@@ -116,9 +206,9 @@ export const variants = pgTable(
     resumeId: uuid('resume_id')
       .notNull()
       .references(() => resumes.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
+    userId: text('user_id')
       .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
     document: jsonb('document').notNull(),
     schemaVersion: text('schema_version').notNull(),
     /** Where they applied. Free text, because a company name is not a database key. */
@@ -161,7 +251,7 @@ export const accessLog = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     /** The account whose data was touched. Nullable so a failed lookup is still recorded. */
-    subjectUserId: uuid('subject_user_id').references(() => users.id, {
+    subjectUserId: text('subject_user_id').references(() => authUsers.id, {
       onDelete: 'set null',
     }),
     action: text('action').notNull(),
@@ -176,6 +266,6 @@ export const accessLog = pgTable(
 
 export { RETENTION_DAYS }
 
-export type UserRow = typeof users.$inferSelect
+export type UserRow = typeof authUsers.$inferSelect
 export type ResumeRow = typeof resumes.$inferSelect
 export type VariantRow = typeof variants.$inferSelect
