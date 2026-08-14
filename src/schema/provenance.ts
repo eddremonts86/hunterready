@@ -46,3 +46,67 @@ export const CONFIDENCE_REVIEW_THRESHOLD = 0.7
 export function needsReview(p: FieldProvenance): boolean {
   return p.inferred || p.confidence < CONFIDENCE_REVIEW_THRESHOLD
 }
+
+/* ────────────────────────────────────────────────────────────────────────────────────────────────
+   Keeping the flags attached to the right row
+   ──────────────────────────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * A provenance path is indexed by position — `work.2.role`, `work.0.highlights.1` — which is fine
+ * while the list is the one the extraction produced and wrong the moment somebody edits its shape.
+ *
+ * Delete the second of three jobs and, without this, the flags for the third job stay on `work.2` while
+ * the job itself becomes `work.1`. The visible result is "we were not sure we read this correctly"
+ * pointing at a row the person just typed by hand, and nothing at all on the row that actually needs
+ * checking. That is worse than having no flags: the whole mechanism asks the user to trust that a mark
+ * means something.
+ *
+ * So structural edits remap. Three rules, and the third is the one that carries the honesty:
+ *
+ *   1. Rows before the edit keep their paths.
+ *   2. Rows after it shift by the delta.
+ *   3. A row that was **removed** takes its flags with it, and a row that was **inserted** has none —
+ *      because nothing extracted it. A field the user typed is not a field we are unsure about, and
+ *      inheriting a neighbour's confidence score would be inventing a measurement.
+ */
+export function shiftProvenance(
+  provenance: Array<FieldProvenance>,
+  listPath: string,
+  at: number,
+  delta: 1 | -1,
+): Array<FieldProvenance> {
+  const prefix = `${listPath}.`
+  const out: Array<FieldProvenance> = []
+
+  for (const entry of provenance) {
+    if (!entry.path.startsWith(prefix)) {
+      out.push(entry)
+      continue
+    }
+
+    const rest = entry.path.slice(prefix.length)
+    const [head, ...tail] = rest.split('.')
+    const index = Number(head)
+    // A path segment that is not a number is not an index into this list — leave it exactly alone
+    // rather than guessing, because a wrong guess here is a mislabelled field.
+    if (!Number.isInteger(index)) {
+      out.push(entry)
+      continue
+    }
+
+    if (index < at) {
+      out.push(entry)
+      continue
+    }
+    // Removal: the row at `at` is gone, and so is everything said about it.
+    if (delta === -1 && index === at) continue
+
+    const moved = index + delta
+    out.push({
+      ...entry,
+      path: [`${listPath}.${moved}`, ...tail].join('.'),
+    })
+  }
+
+  return out
+}

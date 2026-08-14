@@ -538,6 +538,21 @@ export function extractByRules(normalizedText: string): FallbackResult {
       ) ?? []
 
   // ── experience ──────────────────────────────────────────────────────────────────────────
+  /**
+   * A running row counter, and the reason it exists is a bug worth naming.
+   *
+   * These notes used to be keyed `work.${entry.index}` — and `entry.index` is the **line number in the
+   * source document**, not the row's position in `resume.work`. A three-job CV emitted `work.36`,
+   * `work.42`, `work.46`. Nothing in the review form matched them, so no field in Experience or
+   * Education was ever marked on the rules path, while `sectionFlagged('work')` *did* match the prefix:
+   * the section header said "needs a look" and every field inside it looked confident. The one
+   * mechanism the product asks people to trust was pointing at nothing.
+   *
+   * It has to be a counter rather than the callback's index because `flatMap` runs per section, and a CV
+   * with "Experience" and "Earlier roles" as two headings would restart from zero and overwrite the
+   * first section's notes.
+   */
+  let workRow = 0
   const work = sections
     .filter((s) => s.kind === 'experience')
     .flatMap((section) =>
@@ -547,12 +562,16 @@ export function extractByRules(normalizedText: string): FallbackResult {
         // The title wins; the metadata line is the fallback for the employer.
         const employer =
           company !== '' ? company : companyFromMeta(entry.dateLine)
-        note(
-          `work.${entry.index}`,
-          RULE_CONFIDENCE,
-          entry.title,
-          employer === '',
-        )
+        const row = workRow++
+        /**
+         * Two notes, because they are two different claims. The role came off the title line and we are
+         * as sure of it as the rules ever are. The employer, when the title did not contain one, was
+         * pulled out of a metadata line — that is a guess, and `inferred` is what says so.
+         */
+        note(`work.${row}.role`, RULE_CONFIDENCE, entry.title)
+        if (employer === '') {
+          note(`work.${row}.company`, RULE_CONFIDENCE, entry.title, true)
+        }
         return {
           company: employer,
           role,
@@ -568,6 +587,8 @@ export function extractByRules(normalizedText: string): FallbackResult {
     )
 
   // ── education ───────────────────────────────────────────────────────────────────────────
+  /** Same running-counter reason as `workRow`: a line number is not a row index. */
+  let educationRow = 0
   const education = sections
     .filter((s) => s.kind === 'education')
     .flatMap((section) =>
@@ -597,7 +618,17 @@ export function extractByRules(normalizedText: string): FallbackResult {
               ? undefined
               : role
 
-        note(`education.${entry.index}`, RULE_CONFIDENCE, entry.title, true)
+        /**
+         * Marked on the institution, and marked `inferred`, because which line is the school and which
+         * is the qualification is genuinely a guess here — see the date-first case above. The field the
+         * flag lands on is now the field the person is being asked to check.
+         */
+        note(
+          `education.${educationRow++}.institution`,
+          RULE_CONFIDENCE,
+          entry.title,
+          true,
+        )
         return {
           institution,
           degree,
@@ -609,6 +640,13 @@ export function extractByRules(normalizedText: string): FallbackResult {
     )
 
   // ── skills ──────────────────────────────────────────────────────────────────────────────
+  /**
+   * Row counter again, and here the old path had no index at all: every skills note was keyed `skills`,
+   * which matches no field in the form — `skills.0.category` is what it looks up. So a section the rules
+   * were *strongly* confident about and one they had to guess at were recorded identically, and neither
+   * was ever shown.
+   */
+  let skillRow = 0
   const skillSections = sections.filter((s) => s.kind === 'skills')
   const skills: Array<{ category: string; items: Array<string> }> =
     skillSections.flatMap((section) => {
@@ -631,7 +669,11 @@ export function extractByRules(normalizedText: string): FallbackResult {
         )
 
       if (categorised.length > 0) {
-        note('skills', STRONG_CONFIDENCE, section.title)
+        // A `Category: a, b, c` line is the shape we read best, so the confidence is the strong one and
+        // it belongs to each group it produced — not to the section as a whole.
+        for (const group of categorised) {
+          note(`skills.${skillRow++}.items`, STRONG_CONFIDENCE, group.category)
+        }
         return categorised
       }
 
@@ -643,7 +685,14 @@ export function extractByRules(normalizedText: string): FallbackResult {
           .filter((item) => item !== '' && item.length < 60),
       )
       if (items.length === 0) return []
-      note('skills', RULE_CONFIDENCE, section.title, true)
+      // A flat list under a heading: the heading became the group name, which is a guess about how this
+      // person groups their own trade. `inferred` is the honest label for that.
+      note(
+        `skills.${skillRow++}.category`,
+        RULE_CONFIDENCE,
+        section.title,
+        true,
+      )
       return [{ category: section.title, items }]
     })
 
@@ -766,7 +815,21 @@ export function extractByRules(normalizedText: string): FallbackResult {
     }))
 
   if (inferredSkillGroups.length > 0) {
-    note('skills', RULE_CONFIDENCE, inferredSkillGroups[0]?.category, true)
+    /**
+     * These were not under a skills heading at all — a section we reclassified because it *looked* like
+     * one. That is the least certain claim this function makes about skills, and it is now marked on
+     * every group it produced rather than once, unindexed, on behalf of the first.
+     *
+     * `skills.length` before the push is where these land in the final array.
+     */
+    for (const [offset, group] of inferredSkillGroups.entries()) {
+      note(
+        `skills.${skills.length + offset}.category`,
+        RULE_CONFIDENCE,
+        group.category,
+        true,
+      )
+    }
     skills.push(...inferredSkillGroups)
   }
 

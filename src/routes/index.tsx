@@ -1325,7 +1325,18 @@ function HunterReady() {
               resume={loaded.resume}
               provenance={loaded.provenance}
               ocr={loaded.ocr}
-              onChange={(resume) => setLoaded({ ...loaded, resume })}
+              /*
+                The provenance comes back on structural edits, and taking it is not optional: adding or
+                removing a row renumbers every index-based path after it, so keeping the old list would
+                leave "we were not sure we read this" pointing at a row the person just typed.
+              */
+              onChange={(resume, provenance) =>
+                setLoaded({
+                  ...loaded,
+                  resume,
+                  ...(provenance === undefined ? {} : { provenance }),
+                })
+              }
             />
 
             {/*
