@@ -84,6 +84,42 @@ export async function touchUser(userId: string): Promise<void> {
     .where(eq(authUsers.id, userId))
 }
 
+/**
+ * The account's plan, or `free` when there is no row.
+ *
+ * A missing user is `free` rather than an error: the caller is deciding whether to spend money on a
+ * third-party call, and "we could not find you" must never resolve to yes (see `lib/entitlements.ts`).
+ */
+export async function getPlan(userId: string): Promise<string> {
+  const [row] = await db
+    .select({ plan: authUsers.plan })
+    .from(authUsers)
+    .where(eq(authUsers.id, userId))
+    .limit(1)
+  return row?.plan ?? 'free'
+}
+
+/**
+ * Move an account between plans. Audited, because it changes what happens to that person's CV.
+ *
+ * There is no payment provider yet, so this is how a plan gets set at all — deliberately a repository
+ * function rather than an endpoint. Granting yourself the paid tier over HTTP is not a feature.
+ */
+export async function setPlan(input: {
+  userId: string
+  plan: string
+}): Promise<boolean> {
+  const changed = await db
+    .update(authUsers)
+    .set({ plan: input.plan })
+    .where(eq(authUsers.id, input.userId))
+    .returning({ id: authUsers.id })
+
+  if (changed.length === 0) return false
+  await record(input.userId, `plan.${input.plan}`, 'account', undefined)
+  return true
+}
+
 export async function saveResume(input: {
   userId: string
   resume: Resume

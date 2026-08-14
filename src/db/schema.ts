@@ -92,6 +92,18 @@ export const authUsers = pgTable('auth_users', {
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
+  /**
+   * What this account is entitled to. `free` or `pro`, and `free` is the default for everybody.
+   *
+   * It exists for one concrete reason rather than as speculative billing plumbing: the third-party
+   * model is a per-CV cost, so it is a paid capability, and everything else runs on our own hardware
+   * (ADR-023). A column rather than a computed guess, because "is this person paying?" has to have one
+   * answer that both the provider resolution and the interface read.
+   *
+   * Deliberately a `text` and not an enum. A Postgres enum needs a migration to add a value, and the
+   * one certainty about tiers is that they change.
+   */
+  plan: text('plan').notNull().default('free'),
   deleteAfter: retention(),
 })
 

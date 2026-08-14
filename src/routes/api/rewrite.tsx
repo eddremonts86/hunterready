@@ -16,6 +16,7 @@ import { rewriteBullets } from '@/optimize/rewrite'
 import { resolveLocalProvider, resolveProvider } from '@/structure/provider'
 import { checkRateLimit, clientKey } from '@/lib/rate-limit'
 import { event, requestId } from '@/lib/log'
+import { mayUseThirdParty } from '@/lib/entitlements'
 
 export const Route = createFileRoute('/api/rewrite')({
   server: {
@@ -59,9 +60,16 @@ export const Route = createFileRoute('/api/rewrite')({
           answers?: unknown
         }
 
-        // Fail-closed: absent is not consent. But "not consented" now routes to the local model
-        // rather than refusing — declining a transfer should cost accuracy, not the feature.
-        const mayUseProvider = payload.processing === 'provider'
+        /**
+         * Two conditions, not one (ADR-023): consent **and** a paid plan. Local otherwise.
+         *
+         * `processing` is the client's answer to the consent gate and is never trusted alone — it is
+         * one half of an `&&` whose other half the client cannot influence.
+         */
+        const mayUseProvider = await mayUseThirdParty(
+          request,
+          payload.processing === 'provider',
+        )
 
         if (
           (mayUseProvider ? resolveProvider() : resolveLocalProvider()) ===
