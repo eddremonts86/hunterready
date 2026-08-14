@@ -172,6 +172,9 @@ export const Route = createFileRoute('/api/target')({
             ...(reading.roleTitle === undefined
               ? {}
               : { roleTitle: reading.roleTitle }),
+            ...(reading.company === undefined
+              ? {}
+              : { company: reading.company }),
             requirements: reading.requirements,
             invented: reading.invented,
             summary,

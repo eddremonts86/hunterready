@@ -245,38 +245,81 @@ reading the rejections instead of reasoning about them, and the rule it needed h
   "Handled a 1,200-strong portfolio" ground "Handled 1200 accounts", the exact fabrication the check
   exists to catch.
 
-## v0.5 — "It remembers" · blocked, see ADR-018
+## v0.5 — "It remembers" · shipped
 
-The blocker is not the missing Convex deployment. **Shipping persistence makes `/privacy` false** —
-it currently says a CV is never written to a disk or a database, and docs/07 requires that copy to
-change in the same PR. Trading the strongest claim this product makes for the ability to remember a
-CV between visits is Edd's decision, not an implementation detail.
+Two contradictory `v0.5` sections used to sit here: one saying the work was blocked on a Convex
+deployment, one planning it on Convex. Both were stale. ADR-019 replaced Convex with Drizzle + Postgres
+(the house stack — there were never any Convex credentials), and ADR-019/ADR-020 record Edd's
+authorisation on 2026-08-14 to store CVs and delete them after 90 days of inactivity.
 
-- ✅ Version history and diffs between variants (`src/optimize/variant-diff.ts`) — pure functions of
-  two documents, so they needed no storage and are ready the moment storage exists.
-- ⬜ Accounts, saved CVs, application tracker — needs a Convex deployment and its credentials.
-- ⬜ Encryption at rest — needs a key-management decision. "Encrypted" with the key in the same env
-  file is a compliance sentence, not a protection.
-- ⬜ 90-day retention default, export, delete-everything, audit log.
+- ✅ **Accounts.** Better Auth 1.6 with the Drizzle adapter, matching `builderhunt` (ADR-020). One
+  identity table: `auth_users` _is_ the user table, because two would mean two places to honour an
+  erasure request.
+- ✅ **Saved base CV, and one variant per application**, with the tracker. `/api/library` and
+  `/api/application`.
+- ✅ **Version history and diffs between variants** (`src/optimize/variant-diff.ts`) — pure functions of
+  two documents, so they needed no storage and were written before it existed.
+- ✅ **GDPR controls**: export, delete-everything, 90-day retention from `lastSeenAt`, and an access log
+  that survives erasure with its subject nulled.
+- ⬜ **Encryption at rest.** Still open, and still for the reason ADR-018 gave: "encrypted" with the key
+  in the same env file beside the data is a compliance sentence, not a protection. It needs a
+  key-management decision, not code.
 
-## v0.5 — "It remembers" (≈2 weeks)
+### What was actually wrong with v0.5
 
-The first release with a real backend. Persistence and compliance ship together.
+The tables, the repository, the auth configuration, the GDPR endpoints and the retention sweep were all
+built and all verified against a real Postgres. **None of it was reachable.** `saveResume`,
+`listResumes`, `saveVariant` and `listVariants` were imported by nothing but their own tests, and
+`SignIn` was rendered on no screen — so no session could be created, so nothing was ever saved, so
+`/api/account/export` and `/api/account/delete` answered `no_account` to every visitor.
 
-- Accounts (Convex, matching the existing house stack)
-- Saved base CV + one variant per application, with a light application tracker
-- Version history and diffs between variants
-- GDPR controls: export, delete-everything, 90-day retention default
-- Encryption at rest, audit log of record access
+That had a consequence beyond a missing feature. `/privacy` said "if you sign in so we can remember your
+CV between visits, then we do store it", and nothing stored anything. A privacy notice that describes
+handling the code does not perform is wrong even when it **over**-discloses, because it is the document
+somebody reads to decide whether to trust us. Wiring the route is what made the sentence true.
 
-## v1.0 — "It's a product" (≈3 weeks)
+This is the third release in a row where a complete, tested layer shipped with no path from the
+interface — v0.3's `variant-diff`, v0.4's whole targeting feature, and now v0.5's persistence. The
+pattern is worth naming: **a feature is not shipped until a person can reach it**, and a unit test
+proves the opposite of that convincingly enough to hide it. The check that would have caught all three
+is cheap — grep for a module's importers outside `__tests__` — and it is now the first thing done when a
+version is called complete.
 
-- **DOCX export.** Many ATS portals require or prefer `.docx`. A PDF-only tool has
-  a real hole here; this is the highest-value non-obvious item on the roadmap.
-- Cover letter generation from the CV + JD (same anti-fabrication rules)
-- Multi-language output: EN / ES / DA
-- Public share link with an expiry
-- Landing page, pricing, payments
+### Verified with real data, through the interface
+
+Not by injecting rows. A signed-in account created from the sign-in card, then: one CV saved (one row,
+one `resume.created` audit row), one application saved against a real advert with the employer and the
+gap report attached, marked as sent, exported (1 CV, 1 variant, 3 audit rows), and deleted — **zero rows
+in all five tables**, with the audit log surviving and its subject nulled.
+
+One defect found by doing it: saving an application created a _second_ copy of the base CV, because the
+row id lived inside the library component and never reached `/api/application`. Five applications would
+have left six copies of one CV in somebody's library.
+
+## v0.6 — "It exports what portals want"
+
+**DOCX export.** Many ATS portals require or prefer `.docx`, so a PDF-only tool has a real hole; this is
+the highest-value non-obvious item on the roadmap. Same `Resume`, same ATS ruleset, and round-trip
+verified the way the PDF path is — the guarantee is the test, not the format.
+
+## v0.7 — "It writes the letter"
+
+Cover letter generation from the CV and the advert, under the same anti-fabrication rules and reusing
+v0.4's advert requirements. Every claim traceable to the CV, guard-checked, accepted by the candidate.
+
+## v0.8 — "It speaks the language"
+
+Multi-language output: EN / ES / DA. The _document_, not just the chrome — section headings, date
+formats and regional conventions per locale. Latin-Extended coverage is already proven in the fonts.
+
+## v0.9 — "It can be shown"
+
+A public share link with an expiry, revocable. Expiry is the default rather than an option: a link that
+never dies is a CV leaked forever.
+
+## v1.0 — "It's a product"
+
+- Pricing and payments
 - Non-Latin script font coverage
 
 ## Deliberately parked

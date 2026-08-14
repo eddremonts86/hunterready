@@ -619,14 +619,19 @@ Still open:
    it empirically. Override now if there is a preference. _Needed by: v0.1 Block 0._
 4. **Anthropic API key / budget.** Which key, and what per-request cost ceiling?
    Check `dev-env/env-config/.env` first per AI-OS rules. _Needed by: v0.1 Block 8._
-5. **Four font families** for the app chrome — grease-pencil display, typewriter mono
-   body, condensed engraved caps labels, seven-segment numerals. DESIGN.md records the
-   character and the banned-defaults list; the actual faces are picked at
-   implementation. Licensing matters for a commercial product. _Needed by: v0.1 Block 3b._
-6. **Error-state color.** DESIGN.md's One Cone Rule forbids a second accent hue.
-   Resolution should come from the world's own material (safelight red is a real
-   darkroom light) rather than an invented red. _Needed by: v0.1 Block 12._
-7. **Pricing model and tiers.** Now that this is a real product, this shapes v0.5
-   onward. _Needed by: v0.5._
+5. ~~**Four font families** for the app chrome — grease-pencil display, typewriter mono
+   body, condensed engraved caps labels, seven-segment numerals.~~ **Closed by the v0.6
+   world change.** Both this and the question below described the Darkroom Safelight Bay,
+   which Edd replaced with Plain Sight. There is now **one** chrome family —
+   `Figtree Variable`, SIL Open Font License, so the commercial-licensing concern is
+   answered too — in four weights.
+6. ~~**Error-state color.** DESIGN.md's One Cone Rule forbids a second accent hue.~~
+   **Closed with the same change.** The One Cone Rule went with the darkroom. Plain Sight
+   has one accent (Signal Blue `#1B3BD8`) plus three status hues chosen on measured
+   contrast: `--color-alert` `#c02424`, `--color-caution` `#9a5b12`,
+   `--color-affirm` `#0c7a52`. Kept in the list rather than deleted, because a question
+   that was answered by replacing its premise is worth seeing once.
+7. **Pricing model and tiers.** Now that this is a real product, this shapes what a paid
+   tier contains. _Needed by: v1.0 — v0.5 shipped without it._
 8. **Name and domain.** "HunterReady" — `.dev`/`.app`/`.com` availability and
    trademark not checked. _Needed by: v1.0._

@@ -39,9 +39,10 @@ import type { JobRequirements } from './jd'
 import { stripRequirementFraming } from './jd'
 import { resolveLocalProvider, resolveProvider } from '@/structure/provider'
 import { unwrapToolInput } from '@/structure/tool-input'
+import { errorEvent } from '@/lib/log'
 
 /** Bump on any prompt change. Same discipline as `REWRITE_PROMPT_VERSION`. */
-export const ADVERT_PROMPT_VERSION = 'advert-v1'
+export const ADVERT_PROMPT_VERSION = 'advert-v2'
 
 const MAX_TOKENS = 2048
 
@@ -64,12 +65,19 @@ const AdvertPayload = z.object({
   keywords: z.array(z.string().min(1).max(80)).max(40).default([]),
   /** Shown to the candidate as the advert's own words for the job, never written into the CV. */
   roleTitle: z.string().max(160).optional(),
+  /**
+   * Who is hiring. Not used for matching — it exists so a saved application can answer "what did I
+   * send to Herlev Hospital?", which is the question the tracker is for.
+   */
+  company: z.string().max(160).optional(),
 })
 
 export interface AdvertReading {
   requirements: JobRequirements
   /** The advert's own name for the job. Used as a label; never becomes a claim on the CV. */
   roleTitle?: string
+  /** The employer, for the application tracker. A label, never a claim on the CV. */
+  company?: string
   /**
    * How this was read.
    *
@@ -570,6 +578,7 @@ WHAT YOU RETURN
 - keywords: the exact terms a screening system would search this advert for. These may repeat
   hardSkills; that is expected.
 - roleTitle: the advert's own name for the job.
+- company: who is hiring, if the advert names them.
 
 THE ONE RULE — AND IT IS CHECKED IN CODE
 Every item must come from THIS advert. Do not add what job adverts usually want. If it does not
@@ -613,11 +622,30 @@ export async function readAdvert(
   const advert = request.advert.slice(0, MAX_ADVERT_CHARS)
   const fallback = readAdvertWithRules(advert)
 
-  const provider =
-    request.useProvider === false ? resolveLocalProvider() : resolveProvider()
-  if (provider === undefined) {
+  /**
+   * Falling back to rules is correct and it must never be silent.
+   *
+   * `source: 'rules'` is the honest answer to the user either way, but four different things produce
+   * it — nothing configured, a call that threw, an answer with no tool call, a shape we could not read
+   * — and they need different responses from us. Without this, a change that broke the model path was
+   * indistinguishable from a provider hiccup, and the only symptom was a slightly worse requirement
+   * list. `code` is already allowlisted in `log.ts` and every value here is a fixed word.
+   */
+  const viaRules = (
+    code: 'no_provider' | 'call_failed' | 'no_tool_use' | 'bad_shape',
+    detail?: string,
+  ): AdvertReading => {
+    if (code !== 'no_provider') {
+      errorEvent('advert.fell_back', {
+        code: detail === undefined ? code : `${code}:${detail}`,
+      })
+    }
     return { ...fallback, source: 'rules', invented: [] }
   }
+
+  const provider =
+    request.useProvider === false ? resolveLocalProvider() : resolveProvider()
+  if (provider === undefined) return viaRules('no_provider')
 
   let response: Anthropic.Message
   try {
@@ -645,8 +673,13 @@ export async function readAdvert(
       },
       { signal: request.signal },
     )
-  } catch {
-    return { ...fallback, source: 'rules', invented: [] }
+  } catch (error) {
+    // The status is a number and the SDK's own code is a fixed token — neither can carry advert text.
+    const status =
+      typeof error === 'object' && error !== null && 'status' in error
+        ? String(error.status)
+        : 'none'
+    return viaRules('call_failed', status)
   }
 
   // MiniMax has been observed sending `content: null` against a type that says array.
@@ -654,11 +687,18 @@ export async function readAdvert(
   const toolUse = blocks.find(
     (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use',
   )
-  if (toolUse === undefined)
-    return { ...fallback, source: 'rules', invented: [] }
+  if (toolUse === undefined) return viaRules('no_tool_use')
 
   const parsed = AdvertPayload.safeParse(unwrapToolInput(toolUse.input))
-  if (!parsed.success) return { ...fallback, source: 'rules', invented: [] }
+  if (!parsed.success) {
+    return viaRules(
+      'bad_shape',
+      parsed.error.issues
+        .slice(0, 3)
+        .map((issue) => `${issue.path.join('.') || 'root'}.${issue.code}`)
+        .join('|'),
+    )
+  }
 
   const advertTokens = normalize(advert).split(' ')
   const invented: Array<string> = []
@@ -697,6 +737,18 @@ export async function readAdvert(
     parsed.data.roleTitle.trim() === ''
       ? {}
       : { roleTitle: parsed.data.roleTitle.trim() }),
+    /**
+     * The employer, kept only if the advert actually names them.
+     *
+     * Guarded like everything else here. It is a label rather than a requirement, so a wrong one costs
+     * less — but an application row reading "sent to Herlev Hospital" when it was not is a false memory
+     * about the candidate's own job hunt, and those are the memories they will rely on.
+     */
+    ...(parsed.data.company === undefined ||
+    parsed.data.company.trim() === '' ||
+    !groundedInAdvert(parsed.data.company, advertTokens)
+      ? {}
+      : { company: parsed.data.company.trim() }),
     source: 'model',
     invented: dedupe(invented),
   }

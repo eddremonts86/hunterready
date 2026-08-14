@@ -168,4 +168,58 @@ describe.skipIf(URL_ENV === '')('persistence, against a real Postgres', () => {
     expect(Array.isArray(dump?.accessLog)).toBe(true)
     expect(dump?.retentionPolicy).toMatch(/90 days/)
   })
+  it('moves an application between draft and sent, and only its owner may', async () => {
+    const owner = await seedUser('status-')
+    const stranger = await seedUser('status-other-')
+    const resumeId = await repo.saveResume({ userId: owner, resume: RESUME })
+    const variantId = await repo.saveVariant({
+      userId: owner,
+      resumeId,
+      resume: RESUME,
+      role: 'Account Manager',
+      company: 'Northgate Supplies',
+    })
+
+    expect(
+      await repo.setApplicationStatus({
+        userId: owner,
+        variantId,
+        status: 'sent',
+      }),
+    ).toBe(true)
+
+    const [row] = await sql`SELECT status FROM variants WHERE id = ${variantId}`
+    expect(row.status).toBe('sent')
+
+    // The ownership test is in the SQL predicate rather than an `if` above it, so this cannot pass by
+    // somebody remembering to write the check.
+    expect(
+      await repo.setApplicationStatus({
+        userId: stranger,
+        variantId,
+        status: 'draft',
+      }),
+    ).toBe(false)
+    const [unchanged] =
+      await sql`SELECT status FROM variants WHERE id = ${variantId}`
+    expect(unchanged.status).toBe('sent')
+  })
+
+  it('leaves the stored document alone when the status changes', async () => {
+    // The whole point of keeping a variant is that it is what was sent. A tracker that lets you edit
+    // history is not a record of anything, so `setApplicationStatus` touches one column.
+    const userId = await seedUser('immutable-')
+    const resumeId = await repo.saveResume({ userId, resume: RESUME })
+    const variantId = await repo.saveVariant({
+      userId,
+      resumeId,
+      resume: RESUME,
+    })
+    const [before] =
+      await sql`SELECT document FROM variants WHERE id = ${variantId}`
+    await repo.setApplicationStatus({ userId, variantId, status: 'sent' })
+    const [after] =
+      await sql`SELECT document FROM variants WHERE id = ${variantId}`
+    expect(after.document).toEqual(before.document)
+  })
 })

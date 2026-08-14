@@ -15,6 +15,15 @@
  *   • "Your phone number and address are removed" — `src/structure/redact.ts`.
  *   • "You can say no"               — the consent gate, and `useProvider: false` in extraction.
  *   • "We never log what your CV says" — `src/lib/log.ts` emits counts and codes only.
+ *   • "We keep a log of when it was read" — the `access_log` table, written by `record()` in
+ *                                      `src/db/repository.ts` and included in the export.
+ *
+ * One of these was false for a while and it is worth recording how. The sentence about storing a CV for
+ * an account holder was written when the schema landed, and the code that would have stored anything was
+ * unreachable: `SignIn` was on no screen, so no session existed, so nothing was saved. The page
+ * over-disclosed rather than under-disclosed, which is the less dangerous direction and still wrong —
+ * this is the document somebody uses to decide whether to trust us, and a claim it makes has to be one
+ * the code performs.
  *
  * If one of those stops being true, this page changes in the same commit. A privacy notice that
  * drifts from the code is worse than none, because it is a promise the user relies on.
@@ -154,6 +163,25 @@ function Privacy() {
             Counts and outcomes: that a file was uploaded, its size, how many
             jobs we found, how long it took, and whether anything failed. Never
             what your CV says, never your name, never the filename.
+          </p>
+          {/*
+            The access log is a thing we hold, so it is named here rather than left to be discovered in
+            an export. It is also the one record that deliberately outlives an erasure — a log that can
+            be deleted by the person it logs is not an audit trail — so saying that plainly, along with
+            the fact that nothing identifying stays in it, is the only honest way to keep it.
+          */}
+          <p>
+            If you have an account we also keep a log of when your stored CV was
+            read, changed or exported, and whether it was you or us who did it.
+            That is there so nobody can look at your data without leaving a
+            trace, including us. It records the action and the time, never the
+            content.
+          </p>
+          <p className="text-ink-soft">
+            Those log entries are the one thing that survives deleting your
+            account — an audit trail the audited person can erase would not be
+            one. Your identity is removed from them, so what is left says that
+            <em> a</em> record was read, not whose.
           </p>
         </Section>
 

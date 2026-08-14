@@ -164,6 +164,39 @@ export async function saveVariant(input: {
   return created.id
 }
 
+/**
+ * Move one application between `draft` and `sent`.
+ *
+ * The only mutable field on a variant, and deliberately: the *document* a variant holds must never
+ * change, because the entire point of storing it is that it is what was sent. Editing a variant in
+ * place would destroy the only record of what a recruiter is holding.
+ *
+ * Returns whether a row was actually changed, so a caller can answer 404 rather than pretend. The
+ * ownership test is in the predicate, not in an `if` above it — see `saveResume`.
+ */
+export async function setApplicationStatus(input: {
+  userId: string
+  variantId: string
+  status: 'draft' | 'sent'
+}): Promise<boolean> {
+  const changed = await db
+    .update(variants)
+    .set({ status: input.status, deleteAfter: extended })
+    .where(
+      and(eq(variants.id, input.variantId), eq(variants.userId, input.userId)),
+    )
+    .returning({ id: variants.id })
+
+  if (changed.length === 0) return false
+  await record(
+    input.userId,
+    `variant.${input.status}`,
+    'variant',
+    input.variantId,
+  )
+  return true
+}
+
 export async function listVariants(userId: string) {
   const rows = await db
     .select()
