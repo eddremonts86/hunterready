@@ -25,6 +25,7 @@ import {
   useProcessingConsent,
 } from '@/components/consent-gate'
 import { Dropzone, useFilePicker } from '@/components/dropzone'
+import { Library } from '@/components/library'
 import { PaperPreview } from '@/components/paper-preview'
 import { ReadBackDemo } from '@/components/read-back-demo'
 import { Reveal } from '@/components/reveal'
@@ -347,6 +348,19 @@ function HunterReady() {
   const [reading, setReading] = useState<AdvertReadingResult | undefined>()
   const [targetBusy, setTargetBusy] = useState(false)
   const [targetError, setTargetError] = useState<string | undefined>()
+  /**
+   * The advert text, kept after the request so an application row can store what it was aimed at.
+   *
+   * A gap report is only interpretable against the requirements it was computed from, and "why is my
+   * CV in this order?" is unanswerable months later without the advert beside it.
+   */
+  const [advertText, setAdvertText] = useState<string | undefined>()
+  /**
+   * Which stored row the CV on screen came from, so saving an application attaches to it rather than
+   * creating another base. It lives here because two screens need it — the library card and the
+   * targeting panel — and `Library` holding it privately duplicated the base CV on every application.
+   */
+  const [savedResumeId, setSavedResumeId] = useState<string | undefined>()
 
   const upload = useCallback(
     async (file: File) => {
@@ -496,6 +510,7 @@ function HunterReady() {
       if (loaded === undefined) return
       setTargetBusy(true)
       setTargetError(undefined)
+      setAdvertText(advert)
       try {
         const response = await fetch('/api/target', {
           method: 'POST',
@@ -979,6 +994,40 @@ function HunterReady() {
                         },
                       })
                     }
+                    /*
+                      Resolves to `false` rather than throwing when there is no account: the endpoint
+                      answers 404 for both "not signed in" and "this installation stores nothing", and
+                      neither is an error worth an alarm on a screen about a job advert.
+                    */
+                    onSaveApplication={async ({
+                      variant,
+                      role,
+                      company,
+                      gap,
+                    }) => {
+                      try {
+                        const response = await fetch('/api/application', {
+                          method: 'POST',
+                          headers: { 'content-type': 'application/json' },
+                          body: JSON.stringify({
+                            resume: variant,
+                            // The row this CV already occupies, when it has one. Without it the
+                            // endpoint has to create a base, and every saved application left another
+                            // copy of the same CV in the library.
+                            ...(savedResumeId === undefined
+                              ? { baseResume: loaded.resume }
+                              : { resumeId: savedResumeId }),
+                            role,
+                            company,
+                            advert: advertText,
+                            gapReport: gap,
+                          }),
+                        })
+                        return response.ok
+                      } catch {
+                        return false
+                      }
+                    }}
                   />
                   <button
                     type="button"
@@ -1143,6 +1192,18 @@ function HunterReady() {
                 </p>
               )}
             </div>
+
+            {/*
+              The account, offered after the CV exists and never before it (ADR-004, ADR-011: the
+              artifact comes before any question). It renders nothing at all on an installation with no
+              database, so a deployment that cannot keep an account never offers one.
+            */}
+            <Library
+              resume={loaded.resume}
+              onLoad={(resume) => setLoaded({ ...loaded, resume })}
+              savedId={savedResumeId}
+              onSavedIdChange={setSavedResumeId}
+            />
 
             {/*
               Targeting sits below wording for the same reason wording sits below the check: each step

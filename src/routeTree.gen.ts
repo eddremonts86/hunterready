@@ -11,8 +11,10 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as ApiApplicationRouteImport } from './routes/api/application'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiIngestRouteImport } from './routes/api/ingest'
+import { Route as ApiLibraryRouteImport } from './routes/api/library'
 import { Route as ApiProcessingRouteImport } from './routes/api/processing'
 import { Route as ApiRenderRouteImport } from './routes/api/render'
 import { Route as ApiResumeRouteImport } from './routes/api/resume'
@@ -32,6 +34,11 @@ const PrivacyRoute = PrivacyRouteImport.update({
   path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiApplicationRoute = ApiApplicationRouteImport.update({
+  id: '/api/application',
+  path: '/api/application',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiHealthRoute = ApiHealthRouteImport.update({
   id: '/api/health',
   path: '/api/health',
@@ -40,6 +47,11 @@ const ApiHealthRoute = ApiHealthRouteImport.update({
 const ApiIngestRoute = ApiIngestRouteImport.update({
   id: '/api/ingest',
   path: '/api/ingest',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiLibraryRoute = ApiLibraryRouteImport.update({
+  id: '/api/library',
+  path: '/api/library',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiProcessingRoute = ApiProcessingRouteImport.update({
@@ -86,8 +98,10 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/privacy': typeof PrivacyRoute
+  '/api/application': typeof ApiApplicationRoute
   '/api/health': typeof ApiHealthRoute
   '/api/ingest': typeof ApiIngestRoute
+  '/api/library': typeof ApiLibraryRoute
   '/api/processing': typeof ApiProcessingRoute
   '/api/render': typeof ApiRenderRoute
   '/api/resume': typeof ApiResumeRoute
@@ -100,8 +114,10 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/privacy': typeof PrivacyRoute
+  '/api/application': typeof ApiApplicationRoute
   '/api/health': typeof ApiHealthRoute
   '/api/ingest': typeof ApiIngestRoute
+  '/api/library': typeof ApiLibraryRoute
   '/api/processing': typeof ApiProcessingRoute
   '/api/render': typeof ApiRenderRoute
   '/api/resume': typeof ApiResumeRoute
@@ -115,8 +131,10 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/privacy': typeof PrivacyRoute
+  '/api/application': typeof ApiApplicationRoute
   '/api/health': typeof ApiHealthRoute
   '/api/ingest': typeof ApiIngestRoute
+  '/api/library': typeof ApiLibraryRoute
   '/api/processing': typeof ApiProcessingRoute
   '/api/render': typeof ApiRenderRoute
   '/api/resume': typeof ApiResumeRoute
@@ -131,8 +149,10 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/privacy'
+    | '/api/application'
     | '/api/health'
     | '/api/ingest'
+    | '/api/library'
     | '/api/processing'
     | '/api/render'
     | '/api/resume'
@@ -145,8 +165,10 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/privacy'
+    | '/api/application'
     | '/api/health'
     | '/api/ingest'
+    | '/api/library'
     | '/api/processing'
     | '/api/render'
     | '/api/resume'
@@ -159,8 +181,10 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/privacy'
+    | '/api/application'
     | '/api/health'
     | '/api/ingest'
+    | '/api/library'
     | '/api/processing'
     | '/api/render'
     | '/api/resume'
@@ -174,8 +198,10 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   PrivacyRoute: typeof PrivacyRoute
+  ApiApplicationRoute: typeof ApiApplicationRoute
   ApiHealthRoute: typeof ApiHealthRoute
   ApiIngestRoute: typeof ApiIngestRoute
+  ApiLibraryRoute: typeof ApiLibraryRoute
   ApiProcessingRoute: typeof ApiProcessingRoute
   ApiRenderRoute: typeof ApiRenderRoute
   ApiResumeRoute: typeof ApiResumeRoute
@@ -202,6 +228,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/application': {
+      id: '/api/application'
+      path: '/api/application'
+      fullPath: '/api/application'
+      preLoaderRoute: typeof ApiApplicationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/health': {
       id: '/api/health'
       path: '/api/health'
@@ -214,6 +247,13 @@ declare module '@tanstack/react-router' {
       path: '/api/ingest'
       fullPath: '/api/ingest'
       preLoaderRoute: typeof ApiIngestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/library': {
+      id: '/api/library'
+      path: '/api/library'
+      fullPath: '/api/library'
+      preLoaderRoute: typeof ApiLibraryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/processing': {
@@ -278,8 +318,10 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   PrivacyRoute: PrivacyRoute,
+  ApiApplicationRoute: ApiApplicationRoute,
   ApiHealthRoute: ApiHealthRoute,
   ApiIngestRoute: ApiIngestRoute,
+  ApiLibraryRoute: ApiLibraryRoute,
   ApiProcessingRoute: ApiProcessingRoute,
   ApiRenderRoute: ApiRenderRoute,
   ApiResumeRoute: ApiResumeRoute,

@@ -53,6 +53,8 @@ export interface SummaryOffer {
 export interface AdvertReadingResult {
   source: 'model' | 'rules'
   roleTitle?: string
+  /** The employer, for the application tracker. A label, never a claim on the CV. */
+  company?: string
   requirements: JobRequirements
   invented: Array<string>
   summary: SummaryOffer
@@ -309,6 +311,7 @@ export function TargetPanel({
   atsVerified,
   onUseVariant,
   onAcceptSummary,
+  onSaveApplication,
 }: {
   resume: Resume
   reading: AdvertReadingResult
@@ -316,6 +319,20 @@ export function TargetPanel({
   atsVerified: boolean
   onUseVariant: (variant: Resume) => void
   onAcceptSummary: (summary: string) => void
+  /**
+   * Store this variant against the job it was tailored for. Absent when there is no account, which is
+   * the common case — the feature is offered, never required.
+   *
+   * The tailored document is passed rather than the one on screen, because that is the artifact this
+   * row exists to reproduce months later. The gap report goes with it: reordering is only interpretable
+   * against the requirements it was computed from.
+   */
+  onSaveApplication?: (input: {
+    variant: Resume
+    role?: string
+    company?: string
+    gap: GapReport
+  }) => Promise<boolean>
 }) {
   /**
    * Requirements the candidate has said were never asked for.
@@ -327,6 +344,9 @@ export function TargetPanel({
   const [added, setAdded] = useState<Array<string>>([])
   const [draft, setDraft] = useState('')
   const [summaryUsed, setSummaryUsed] = useState(false)
+  const [saveState, setSaveState] = useState<
+    'idle' | 'saving' | 'saved' | 'failed'
+  >('idle')
 
   const requirements = useMemo<JobRequirements>(() => {
     const keep = (items: Array<string>) =>
@@ -663,6 +683,57 @@ export function TargetPanel({
           </>
         )}
       </div>
+
+      {/*
+        ── Keep it ───────────────────────────────────────────────────────────────────────
+        Only when there is an account. The question it answers is the one a recruiter asks five weeks
+        later: "what did you send us?" — by which time the candidate has tailored the CV four more
+        times and has no copy of the version in front of the person on the phone.
+      */}
+      {onSaveApplication !== undefined && (
+        <div className="card flex flex-col gap-3 p-4">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-[15px] font-semibold text-ink">
+              Keep this application
+            </h2>
+            <p className="text-[13px] leading-relaxed text-ink-soft">
+              Stores this version of your CV with the advert it was aimed at, so
+              you can see exactly what you sent if they call back.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={saveState === 'saving' || saveState === 'saved'}
+              onClick={() => {
+                setSaveState('saving')
+                void onSaveApplication({
+                  variant: tailored.resume,
+                  ...(reading.roleTitle === undefined
+                    ? {}
+                    : { role: reading.roleTitle }),
+                  ...(reading.company === undefined
+                    ? {}
+                    : { company: reading.company }),
+                  gap,
+                }).then((ok) => setSaveState(ok ? 'saved' : 'failed'))
+              }}
+              className="btn btn-quiet px-4 py-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              {saveState === 'saving'
+                ? 'Saving…'
+                : saveState === 'saved'
+                  ? 'Saved'
+                  : 'Save this application'}
+            </button>
+            {saveState === 'failed' && (
+              <span role="status" className="text-[13px] text-ink-soft">
+                We could not save it just now.
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── The checklist ───────────────────────────────────────────────────────────────── */}
       <div className="card flex flex-col gap-3 p-4">
