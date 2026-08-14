@@ -29,9 +29,11 @@ import type { Resume } from '@/schema/resume'
 import {
   formatLocation,
   formatRange,
+  resolveLocale,
   formatYearMonth,
   joinParts,
 } from '../format'
+import { strings } from '../locale'
 
 /**
  * The gutter that carries the section name.
@@ -140,6 +142,10 @@ function Bullets({
 
 function Body({ resume, theme }: { resume: Resume; theme: PdfcnTheme }) {
   const { basics } = resume
+  // The document's language, from the CV's own `locale` (v0.8). Headings and dates only — see
+  // `src/render/locale.ts` for why the candidate's own words are never translated.
+  const locale = resolveLocale(resume.locale)
+  const local = strings(locale)
   const contact = joinParts([
     basics.email,
     basics.phone,
@@ -201,13 +207,13 @@ function Body({ resume, theme }: { resume: Resume; theme: PdfcnTheme }) {
       </div>
 
       {basics.summary === undefined ? null : (
-        <Section title="Summary" theme={theme}>
+        <Section title={local.headings.summary} theme={theme}>
           <div style={{ display: 'flex' }}>{basics.summary}</div>
         </Section>
       )}
 
       {resume.work.length === 0 ? null : (
-        <Section title="Experience" theme={theme}>
+        <Section title={local.headings.work} theme={theme}>
           {resume.work.map((job, index) => (
             <div
               key={index}
@@ -233,7 +239,7 @@ function Body({ resume, theme }: { resume: Resume; theme: PdfcnTheme }) {
                 }}
               >
                 {joinParts([
-                  formatRange(job.startDate, job.endDate),
+                  formatRange(job.startDate, job.endDate, locale),
                   job.location,
                 ])}
               </div>
@@ -249,7 +255,7 @@ function Body({ resume, theme }: { resume: Resume; theme: PdfcnTheme }) {
       )}
 
       {resume.education.length === 0 ? null : (
-        <Section title="Education" theme={theme}>
+        <Section title={local.headings.education} theme={theme}>
           {resume.education.map((entry, index) => (
             <div
               key={index}
@@ -275,7 +281,7 @@ function Body({ resume, theme }: { resume: Resume; theme: PdfcnTheme }) {
                   color: theme.colors.mutedForeground,
                 }}
               >
-                {formatRange(entry.startDate, entry.endDate)}
+                {formatRange(entry.startDate, entry.endDate, locale)}
               </div>
               <Bullets items={entry.highlights} theme={theme} />
             </div>
@@ -284,7 +290,7 @@ function Body({ resume, theme }: { resume: Resume; theme: PdfcnTheme }) {
       )}
 
       {resume.skills.length === 0 ? null : (
-        <Section title="Skills" theme={theme}>
+        <Section title={local.headings.skills} theme={theme}>
           {resume.skills.map((group, index) => (
             <div key={index} style={{ display: 'flex' }}>
               {/* No rating bars or dots: they extract as noise and say nothing (rule 8). */}
@@ -295,7 +301,7 @@ function Body({ resume, theme }: { resume: Resume; theme: PdfcnTheme }) {
       )}
 
       {resume.certifications.length === 0 ? null : (
-        <Section title="Certifications" theme={theme}>
+        <Section title={local.headings.certifications} theme={theme}>
           {resume.certifications.map((cert, index) => (
             <div key={index} style={{ display: 'flex' }}>
               {joinParts([
@@ -310,7 +316,7 @@ function Body({ resume, theme }: { resume: Resume; theme: PdfcnTheme }) {
       )}
 
       {resume.languages.length === 0 ? null : (
-        <Section title="Languages" theme={theme}>
+        <Section title={local.headings.languages} theme={theme}>
           <div style={{ display: 'flex' }}>
             {resume.languages
               .map((language) =>

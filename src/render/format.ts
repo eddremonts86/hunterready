@@ -1,32 +1,26 @@
 /**
  * Date and text formatting for documents.
  *
- * The ATS ruleset (docs/05-pdf-rendering.md) mandates `MMM YYYY – MMM YYYY` with `Present`
- * for current roles, consistently everywhere. Real parsers key on that shape; a CV that
- * mixes `01/2019`, `Jan 2019` and `2019-01` loses date ranges.
+ * The ATS ruleset (docs/05-pdf-rendering.md) mandates `MMM YYYY – MMM YYYY` with the local word for
+ * "present" on current roles, consistently everywhere. Real parsers key on that shape; a CV that mixes
+ * `01/2019`, `Jan 2019` and `2019-01` loses date ranges.
  *
- * English month abbreviations regardless of `resume.locale`: the output document targets
- * recruiters and screeners in EU/US hiring, where English dates parse and localized month
- * names frequently do not. Revisit when v1.0 ships localized output.
+ * **Localized since v0.8.** These functions used to hardcode English months with a comment saying the
+ * output "targets recruiters and screeners in EU/US hiring, where English dates parse". That was wrong
+ * about this product's audience: a Danish nurse applying to a Danish hospital was handed a Danish CV with
+ * `Mar 2019` in it. `locale` defaults to English so every existing caller behaves as before, and the
+ * document passes `resolveLocale(resume.locale)`.
  */
-const MONTHS = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-] as const
+import { resolveLocale, strings } from './locale'
+import type { OutputLocale } from './locale'
 
-/** `"2019-03"` → `"Mar 2019"`; `"2019"` → `"2019"`. */
-export function formatYearMonth(value: string | undefined): string {
+/** `"2019-03"` → `"Mar 2019"` in English, `"mar. 2019"` in Danish; `"2019"` → `"2019"` in both. */
+export function formatYearMonth(
+  value: string | undefined,
+  locale: OutputLocale = 'en',
+): string {
   if (value === undefined || value === '') return ''
+  const MONTHS = strings(locale).months
 
   const parts = value.split('-')
   const year = parts[0]
@@ -47,19 +41,25 @@ export function formatYearMonth(value: string | undefined): string {
   return `${MONTHS[monthIndex]} ${year}`
 }
 
-/** `endDate === null` means current, so it prints `Present` (never an empty dash). */
+/** `endDate === null` means current, so it prints the local word for it (never an empty dash). */
 export function formatRange(
   startDate: string | undefined,
   endDate: string | null,
+  locale: OutputLocale = 'en',
 ): string {
-  const start = formatYearMonth(startDate)
-  const end = endDate === null ? 'Present' : formatYearMonth(endDate)
+  const local = strings(locale)
+  const start = formatYearMonth(startDate, locale)
+  const end =
+    endDate === null ? local.present : formatYearMonth(endDate, locale)
 
   if (start === '' && end === '') return ''
   if (start === '') return end
   if (end === '') return start
-  return `${start} – ${end}`
+  return `${start}${local.rangeSeparator}${end}`
 }
+
+/** The locale a document should be set in, from its own `resume.locale`. Re-exported for convenience. */
+export { resolveLocale }
 
 /** Joins the non-empty parts of a contact line with a visible separator. */
 export function joinParts(
