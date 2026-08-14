@@ -15,6 +15,7 @@ import type { FieldProvenance } from '@/schema/provenance'
 import { applyHeuristics } from './heuristics'
 import { buildUserPrompt, PROMPT_VERSION, SYSTEM_PROMPT } from './prompt'
 import { extractByRules } from './fallback'
+import { detectLocale } from './detect-locale'
 import { resolveLocalProvider, resolveProvider } from './provider'
 import { recoverMissingHighlights } from './recover'
 import { errorEvent } from '@/lib/log'
@@ -91,6 +92,14 @@ function toolSchema(): Record<string, unknown> {
   })
 }
 
+/** Stamp the detected language onto a freshly extracted resume. One place, both paths. */
+function withDetectedLocale<T extends { locale: string }>(
+  resume: T,
+  normalizedText: string,
+): T {
+  return { ...resume, locale: detectLocale(normalizedText) }
+}
+
 export async function extractResume(
   normalizedText: string,
   options: ExtractOptions = {},
@@ -126,7 +135,7 @@ export async function extractResume(
     if (local === undefined) {
       return {
         ok: true,
-        resume,
+        resume: withDetectedLocale(resume, normalizedText),
         provenance,
         promptVersion: `${PROMPT_VERSION}+rules-only`,
         repairs: 0,
@@ -151,7 +160,7 @@ export async function extractResume(
     })
     return {
       ok: true,
-      resume: refined.resume,
+      resume: withDetectedLocale(refined.resume, normalizedText),
       provenance: refined.provenance,
       promptVersion: `${PROMPT_VERSION}+local-refine(${refined.corrections})`,
       repairs: 0,
@@ -169,7 +178,7 @@ export async function extractResume(
     const { resume, provenance } = extractByRules(normalizedText)
     return {
       ok: true,
-      resume,
+      resume: withDetectedLocale(resume, normalizedText),
       provenance,
       promptVersion: `${PROMPT_VERSION}+rules-only`,
       repairs: 0,
@@ -230,7 +239,7 @@ export async function extractResume(
       const { resume, provenance } = extractByRules(normalizedText)
       return {
         ok: true,
-        resume,
+        resume: withDetectedLocale(resume, normalizedText),
         provenance,
         promptVersion: `${PROMPT_VERSION}+rules-fallback`,
         repairs,
@@ -356,7 +365,7 @@ export async function extractResume(
     if (recovered(rules.resume) > recovered(recovery.resume)) {
       return {
         ok: true,
-        resume: rules.resume,
+        resume: withDetectedLocale(rules.resume, normalizedText),
         provenance: rules.provenance,
         promptVersion: `${PROMPT_VERSION}+rules-outperformed`,
         repairs,
@@ -366,7 +375,7 @@ export async function extractResume(
 
     return {
       ok: true,
-      resume: recovery.resume,
+      resume: withDetectedLocale(recovery.resume, normalizedText),
       provenance: [...provenance, ...recovery.provenance],
       promptVersion: PROMPT_VERSION,
       repairs,

@@ -28,7 +28,7 @@
  * the requirement into the CV, and refusing to is the product. The copy says so in the user's words:
  * it is their decision whether to apply anyway.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ButtonLabel } from '@/components/working'
 import type { CvScore, Finding } from '@/optimize/score'
 import { scoreCv } from '@/optimize/score'
@@ -363,6 +363,8 @@ export function TargetPanel({
   onDraftLetter,
   onFitCv,
   letterStages,
+  locale,
+  onTranslateText,
   onDownloadLetter,
 }: {
   resume: Resume
@@ -400,6 +402,10 @@ export function TargetPanel({
   onFitCv: (variant: Resume, summary?: string) => void
   /** The narrated wait while the letter drafts — the server's own stages, polled by the page. */
   letterStages?: Array<{ label: string; detail?: string; done: boolean }>
+  /** The document's language. When it changes and a letter exists, the letter follows it. */
+  locale?: string
+  /** Translate one block of text into the document's language — the page owns the endpoint. */
+  onTranslateText?: (text: string) => Promise<string | undefined>
   /**
    * Download the letter on screen, including any edits, as `.docx`.
    *
@@ -424,6 +430,35 @@ export function TargetPanel({
   >('idle')
   const [letter, setLetter] = useState<CoverLetterOffer | undefined>()
   const [letterBusy, setLetterBusy] = useState(false)
+
+  /**
+   * The letter follows the document's language.
+   *
+   * Edd's rule for the switcher: the whole document, "CV y cover letter (si es generada)". The letter
+   * is client state, so the page cannot reach in — this effect watches the locale and sends the CURRENT
+   * text (edits included) through the same guarded translation the CV went through. Skipped on mount:
+   * only a change translates, so opening the panel never spends a model call.
+   */
+  const lastLocale = useRef(locale)
+  useEffect(() => {
+    if (locale === undefined || lastLocale.current === locale) return
+    lastLocale.current = locale
+    if (
+      letter?.outcome !== 'drafted' ||
+      letterText.trim() === '' ||
+      onTranslateText === undefined
+    )
+      return
+    setLetterBusy(true)
+    void onTranslateText(letterText)
+      .then((translated) => {
+        if (translated !== undefined && translated.trim() !== '') {
+          setLetterText(translated)
+        }
+      })
+      .finally(() => setLetterBusy(false))
+    // letterText deliberately absent: this fires on language change, never on typing.
+  }, [locale, letter, onTranslateText])
   /** The letter as edited. Held separately so re-drafting cannot silently discard their wording. */
   const [letterText, setLetterText] = useState('')
   const [letterSaving, setLetterSaving] = useState(false)

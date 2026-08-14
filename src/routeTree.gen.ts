@@ -17,6 +17,7 @@ import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiIngestRouteImport } from './routes/api/ingest'
 import { Route as ApiLibraryRouteImport } from './routes/api/library'
 import { Route as ApiProcessingRouteImport } from './routes/api/processing'
+import { Route as ApiProgressRouteImport } from './routes/api/progress'
 import { Route as ApiRenderRouteImport } from './routes/api/render'
 import { Route as ApiRenderLetterRouteImport } from './routes/api/render-letter'
 import { Route as ApiResumeRouteImport } from './routes/api/resume'
@@ -24,6 +25,7 @@ import { Route as ApiRewriteRouteImport } from './routes/api/rewrite'
 import { Route as ApiShareRouteImport } from './routes/api/share'
 import { Route as ApiSharedRouteImport } from './routes/api/shared'
 import { Route as ApiTargetRouteImport } from './routes/api/target'
+import { Route as ApiTranslateRouteImport } from './routes/api/translate'
 import { Route as STokenRouteImport } from './routes/s.$token'
 import { Route as ApiAccountDeleteRouteImport } from './routes/api/account/delete'
 import { Route as ApiAccountExportRouteImport } from './routes/api/account/export'
@@ -69,6 +71,11 @@ const ApiProcessingRoute = ApiProcessingRouteImport.update({
   path: '/api/processing',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiProgressRoute = ApiProgressRouteImport.update({
+  id: '/api/progress',
+  path: '/api/progress',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiRenderRoute = ApiRenderRouteImport.update({
   id: '/api/render',
   path: '/api/render',
@@ -104,6 +111,11 @@ const ApiTargetRoute = ApiTargetRouteImport.update({
   path: '/api/target',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTranslateRoute = ApiTranslateRouteImport.update({
+  id: '/api/translate',
+  path: '/api/translate',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const STokenRoute = STokenRouteImport.update({
   id: '/s/$token',
   path: '/s/$token',
@@ -134,6 +146,7 @@ export interface FileRoutesByFullPath {
   '/api/ingest': typeof ApiIngestRoute
   '/api/library': typeof ApiLibraryRoute
   '/api/processing': typeof ApiProcessingRoute
+  '/api/progress': typeof ApiProgressRoute
   '/api/render': typeof ApiRenderRoute
   '/api/render-letter': typeof ApiRenderLetterRoute
   '/api/resume': typeof ApiResumeRoute
@@ -141,6 +154,7 @@ export interface FileRoutesByFullPath {
   '/api/share': typeof ApiShareRoute
   '/api/shared': typeof ApiSharedRoute
   '/api/target': typeof ApiTargetRoute
+  '/api/translate': typeof ApiTranslateRoute
   '/s/$token': typeof STokenRoute
   '/api/account/delete': typeof ApiAccountDeleteRoute
   '/api/account/export': typeof ApiAccountExportRoute
@@ -155,6 +169,7 @@ export interface FileRoutesByTo {
   '/api/ingest': typeof ApiIngestRoute
   '/api/library': typeof ApiLibraryRoute
   '/api/processing': typeof ApiProcessingRoute
+  '/api/progress': typeof ApiProgressRoute
   '/api/render': typeof ApiRenderRoute
   '/api/render-letter': typeof ApiRenderLetterRoute
   '/api/resume': typeof ApiResumeRoute
@@ -162,6 +177,7 @@ export interface FileRoutesByTo {
   '/api/share': typeof ApiShareRoute
   '/api/shared': typeof ApiSharedRoute
   '/api/target': typeof ApiTargetRoute
+  '/api/translate': typeof ApiTranslateRoute
   '/s/$token': typeof STokenRoute
   '/api/account/delete': typeof ApiAccountDeleteRoute
   '/api/account/export': typeof ApiAccountExportRoute
@@ -177,6 +193,7 @@ export interface FileRoutesById {
   '/api/ingest': typeof ApiIngestRoute
   '/api/library': typeof ApiLibraryRoute
   '/api/processing': typeof ApiProcessingRoute
+  '/api/progress': typeof ApiProgressRoute
   '/api/render': typeof ApiRenderRoute
   '/api/render-letter': typeof ApiRenderLetterRoute
   '/api/resume': typeof ApiResumeRoute
@@ -184,6 +201,7 @@ export interface FileRoutesById {
   '/api/share': typeof ApiShareRoute
   '/api/shared': typeof ApiSharedRoute
   '/api/target': typeof ApiTargetRoute
+  '/api/translate': typeof ApiTranslateRoute
   '/s/$token': typeof STokenRoute
   '/api/account/delete': typeof ApiAccountDeleteRoute
   '/api/account/export': typeof ApiAccountExportRoute
@@ -200,6 +218,7 @@ export interface FileRouteTypes {
     | '/api/ingest'
     | '/api/library'
     | '/api/processing'
+    | '/api/progress'
     | '/api/render'
     | '/api/render-letter'
     | '/api/resume'
@@ -207,6 +226,7 @@ export interface FileRouteTypes {
     | '/api/share'
     | '/api/shared'
     | '/api/target'
+    | '/api/translate'
     | '/s/$token'
     | '/api/account/delete'
     | '/api/account/export'
@@ -221,6 +241,7 @@ export interface FileRouteTypes {
     | '/api/ingest'
     | '/api/library'
     | '/api/processing'
+    | '/api/progress'
     | '/api/render'
     | '/api/render-letter'
     | '/api/resume'
@@ -228,6 +249,7 @@ export interface FileRouteTypes {
     | '/api/share'
     | '/api/shared'
     | '/api/target'
+    | '/api/translate'
     | '/s/$token'
     | '/api/account/delete'
     | '/api/account/export'
@@ -242,6 +264,7 @@ export interface FileRouteTypes {
     | '/api/ingest'
     | '/api/library'
     | '/api/processing'
+    | '/api/progress'
     | '/api/render'
     | '/api/render-letter'
     | '/api/resume'
@@ -249,6 +272,7 @@ export interface FileRouteTypes {
     | '/api/share'
     | '/api/shared'
     | '/api/target'
+    | '/api/translate'
     | '/s/$token'
     | '/api/account/delete'
     | '/api/account/export'
@@ -264,6 +288,7 @@ export interface RootRouteChildren {
   ApiIngestRoute: typeof ApiIngestRoute
   ApiLibraryRoute: typeof ApiLibraryRoute
   ApiProcessingRoute: typeof ApiProcessingRoute
+  ApiProgressRoute: typeof ApiProgressRoute
   ApiRenderRoute: typeof ApiRenderRoute
   ApiRenderLetterRoute: typeof ApiRenderLetterRoute
   ApiResumeRoute: typeof ApiResumeRoute
@@ -271,6 +296,7 @@ export interface RootRouteChildren {
   ApiShareRoute: typeof ApiShareRoute
   ApiSharedRoute: typeof ApiSharedRoute
   ApiTargetRoute: typeof ApiTargetRoute
+  ApiTranslateRoute: typeof ApiTranslateRoute
   STokenRoute: typeof STokenRoute
   ApiAccountDeleteRoute: typeof ApiAccountDeleteRoute
   ApiAccountExportRoute: typeof ApiAccountExportRoute
@@ -335,6 +361,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiProcessingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/progress': {
+      id: '/api/progress'
+      path: '/api/progress'
+      fullPath: '/api/progress'
+      preLoaderRoute: typeof ApiProgressRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/render': {
       id: '/api/render'
       path: '/api/render'
@@ -384,6 +417,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTargetRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/translate': {
+      id: '/api/translate'
+      path: '/api/translate'
+      fullPath: '/api/translate'
+      preLoaderRoute: typeof ApiTranslateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/s/$token': {
       id: '/s/$token'
       path: '/s/$token'
@@ -424,6 +464,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiIngestRoute: ApiIngestRoute,
   ApiLibraryRoute: ApiLibraryRoute,
   ApiProcessingRoute: ApiProcessingRoute,
+  ApiProgressRoute: ApiProgressRoute,
   ApiRenderRoute: ApiRenderRoute,
   ApiRenderLetterRoute: ApiRenderLetterRoute,
   ApiResumeRoute: ApiResumeRoute,
@@ -431,6 +472,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiShareRoute: ApiShareRoute,
   ApiSharedRoute: ApiSharedRoute,
   ApiTargetRoute: ApiTargetRoute,
+  ApiTranslateRoute: ApiTranslateRoute,
   STokenRoute: STokenRoute,
   ApiAccountDeleteRoute: ApiAccountDeleteRoute,
   ApiAccountExportRoute: ApiAccountExportRoute,

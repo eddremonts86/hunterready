@@ -63,6 +63,7 @@ import { estimateFit } from '@/render/fit'
 import { getTheme } from '@/render/themes'
 import type { ThemeId } from '@/render/themes'
 import { localeOptions, resolveLocale } from '@/render/locale'
+import type { OutputLocale } from '@/render/locale'
 import { templates } from '@/render/templates/registry'
 import type { TemplateId } from '@/render/templates/registry'
 
@@ -569,6 +570,9 @@ function HunterReady() {
   const [targetBusy, setTargetBusy] = useState(false)
   /** True while a cover letter drafts, so the stage polling runs for it too. */
   const [letterDrafting, setLetterDrafting] = useState(false)
+  /** True while the document translates after a language switch. */
+  const [translating, setTranslating] = useState(false)
+  const [translateNote, setTranslateNote] = useState<string | undefined>()
   const [targetError, setTargetError] = useState<string | undefined>()
   /**
    * The advert text, kept after the request so an application row can store what it was aimed at.
@@ -754,7 +758,7 @@ function HunterReady() {
    * polling — unlike a second streaming response — survives every proxy between a phone and the server.
    */
   useEffect(() => {
-    if (!busy && !targetBusy && !letterDrafting) return
+    if (!busy && !targetBusy && !letterDrafting && !translating) return
     const timer = setInterval(() => {
       const id = progressIdRef.current
       if (id === undefined) return
@@ -779,7 +783,7 @@ function HunterReady() {
         })
     }, 700)
     return () => clearInterval(timer)
-  }, [busy, targetBusy, letterDrafting])
+  }, [busy, targetBusy, letterDrafting, translating])
 
   const upload = useCallback(
     async (file: File) => {
@@ -1044,6 +1048,77 @@ function HunterReady() {
       return next
     })
   }, [rewrites, accepted])
+
+  /**
+   * Switch the document's language — the whole document, not just its furniture.
+   *
+   * v0.8 drew the line at headings and dates ("your own words stay exactly as written"), and its owner
+   * moved it: picking a language now translates the full text, on demand, inside the guards recorded in
+   * src/optimize/translate.ts — numbers verbatim, identity untouched, any dubious field keeps its
+   * original. The locale flips first so headings and dates change even if the model then fails, the
+   * wait narrates itself batch by batch, and the comparison opens after so the person reads exactly
+   * what changed. The pre-switch document sits in `original`, one toggle away.
+   */
+  const switchLanguage = useCallback(
+    async (locale: OutputLocale) => {
+      if (loaded === undefined) return
+      if (resolveLocale(loaded.resume.locale) === locale) return
+      setTranslateNote(undefined)
+      // The furniture immediately; the words in flight.
+      setLoaded({ ...loaded, resume: { ...loaded.resume, locale } })
+      setTranslating(true)
+      progressIdRef.current = crypto.randomUUID()
+      setStages([])
+      try {
+        const response = await fetch('/api/translate', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            resume: { ...loaded.resume, locale },
+            target: locale,
+            processing: consent.choice === 'granted' ? 'provider' : 'local',
+            progress: progressIdRef.current,
+          }),
+        })
+        const payload = (await response.json()) as Record<string, unknown>
+        if (!response.ok) {
+          setTranslateNote(
+            typeof payload.message === 'string'
+              ? payload.message
+              : 'We could not translate just now. Headings and dates changed; your words did not.',
+          )
+          return
+        }
+        const parsed = Resume.safeParse(payload.resume)
+        if (!parsed.success) {
+          setTranslateNote(
+            'The translation came back in a shape we could not trust, so your words were left alone.',
+          )
+          return
+        }
+        setLoaded((current) =>
+          current === undefined ? current : { ...current, resume: parsed.data },
+        )
+        // Suggestions were about the pre-translation text — same staleness as the tailoring actions.
+        setRewrites(undefined)
+        setAccepted(new Set())
+        setComparing(true)
+        const kept = typeof payload.kept === 'number' ? payload.kept : 0
+        if (kept > 0) {
+          setTranslateNote(
+            `${kept} ${kept === 1 ? 'line' : 'lines'} stayed in the original language — the translation did not keep their numbers intact, so we kept your words instead.`,
+          )
+        }
+      } catch {
+        setTranslateNote(
+          'We could not reach the server. Headings and dates changed; your words did not.',
+        )
+      } finally {
+        setTranslating(false)
+      }
+    },
+    [loaded, consent.choice, setComparing],
+  )
 
   const dismissRewrite = useCallback((rewrite: BulletRewrite) => {
     setRewrites((current) =>
@@ -1698,6 +1773,32 @@ function HunterReady() {
                       }
                     }}
                     letterStages={stages}
+                    locale={resolveLocale(loaded.resume.locale)}
+                    onTranslateText={async (text) => {
+                      try {
+                        const response = await fetch('/api/translate', {
+                          method: 'POST',
+                          headers: { 'content-type': 'application/json' },
+                          body: JSON.stringify({
+                            text,
+                            target: resolveLocale(loaded.resume.locale),
+                            processing:
+                              consent.choice === 'granted'
+                                ? 'provider'
+                                : 'local',
+                          }),
+                        })
+                        if (!response.ok) return undefined
+                        const payload = (await response.json()) as {
+                          text?: unknown
+                        }
+                        return typeof payload.text === 'string'
+                          ? payload.text
+                          : undefined
+                      } catch {
+                        return undefined
+                      }
+                    }}
                     /*
                       The *edited* text is what is sent — re-drafting here would quietly throw away
                       their wording.
@@ -2010,6 +2111,69 @@ function HunterReady() {
             */}
               {panel === 'wording' && (
                 <div className="card flex flex-col gap-3 p-4">
+                  {/*
+                    Language, at the head of Wording — moved here from Design at Edd's direction: it is
+                    a decision about *words*, and this is the words panel. Switching now translates the
+                    whole document (src/optimize/translate.ts carries the guards and the history of the
+                    line it moves); the wait narrates itself below, and the comparison opens after.
+                  */}
+                  <div className="flex flex-col gap-2 border-b border-hairline pb-4">
+                    <Segmented
+                      label="Language"
+                      options={localeOptions().map((option) => ({
+                        id: option.id,
+                        label: option.label,
+                        hint: 'The whole document: headings, dates and your own words. We show you the before and after.',
+                      }))}
+                      value={resolveLocale(loaded.resume.locale)}
+                      onChange={(locale) => void switchLanguage(locale)}
+                    />
+                    {translating && stages.length > 0 && (
+                      <ol className="flex flex-col gap-1.5">
+                        {stages.map((stage, index) => (
+                          <li
+                            key={index}
+                            className="flex items-center gap-2 text-[13px]"
+                          >
+                            {stage.done ? (
+                              <svg
+                                aria-hidden
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.4"
+                                strokeLinecap="round"
+                                className="h-3.5 w-3.5 shrink-0 text-affirm"
+                              >
+                                <path d="m5 12.5 4.5 4.5L19 7" />
+                              </svg>
+                            ) : (
+                              <Spinner className="h-3 w-3 shrink-0 text-signal" />
+                            )}
+                            <span
+                              className={
+                                stage.done ? 'text-ink-faint' : 'text-ink-soft'
+                              }
+                            >
+                              {stage.label}
+                              {stage.detail === undefined
+                                ? ''
+                                : ` — ${stage.detail}`}
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                    {translateNote !== undefined && (
+                      <p
+                        role="status"
+                        className="text-[13px] leading-relaxed text-ink-soft"
+                      >
+                        {translateNote}
+                      </p>
+                    )}
+                  </div>
+
                   <div className="flex flex-col gap-1">
                     <h2 className="text-[15px] font-semibold text-ink">
                       Wording
@@ -2304,32 +2468,6 @@ function HunterReady() {
                       setThemeId(design.theme)
                     }}
                   />
-
-                  {/*
-                    The document's language stays a separate control, deliberately.
-
-                    It is not a design choice — it changes the *words* of the furniture (headings, month
-                    names) and a person looking for a look is not looking for that. Folding it into
-                    thirty cards would have multiplied the catalogue by three and hidden a decision about
-                    language inside a decision about type.
-                  */}
-                  <div className="border-t border-hairline pt-3">
-                    <Segmented
-                      label="Language"
-                      options={localeOptions().map((option) => ({
-                        id: option.id,
-                        label: option.label,
-                        hint: 'Headings and dates. Your own words stay exactly as written.',
-                      }))}
-                      value={resolveLocale(loaded.resume.locale)}
-                      onChange={(locale) =>
-                        setLoaded({
-                          ...loaded,
-                          resume: { ...loaded.resume, locale },
-                        })
-                      }
-                    />
-                  </div>
                 </div>
               )}
             </div>
