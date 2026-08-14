@@ -375,8 +375,57 @@ function Body({ resume, theme, convention, order }: BodyProps) {
         fontSize: theme.typography.body.fontSize,
         lineHeight: theme.typography.body.lineHeight,
         color: theme.colors.foreground,
+        // The anchor for the watermark geometry below; harmless when there is none.
+        position: 'relative',
       }}
     >
+      {/*
+        The watermark, first in the tree so every glyph paints over it. Geometry only: takumi draws no
+        SVG images, and a text watermark would dump giant letters into the extraction. It appears once,
+        behind the masthead region, like a letterhead — not tiled per page.
+      */}
+      {style.watermark === 'disc' ? (
+        <div
+          style={{
+            position: 'absolute',
+            top: -30,
+            right: -20,
+            width: 230,
+            height: 230,
+            borderRadius: 230,
+            backgroundColor: style.accent,
+            opacity: 0.07,
+          }}
+        />
+      ) : null}
+      {style.watermark === 'rings' ? (
+        <>
+          <div
+            style={{
+              position: 'absolute',
+              top: -20,
+              right: -10,
+              width: 190,
+              height: 190,
+              borderRadius: 190,
+              border: `10px solid ${style.accent}`,
+              opacity: 0.09,
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              top: 40,
+              right: 60,
+              width: 90,
+              height: 90,
+              borderRadius: 90,
+              border: `7px solid ${style.accent}`,
+              opacity: 0.12,
+            }}
+          />
+        </>
+      ) : null}
       {/*
         The masthead becomes a row when there is a photo, and the photo is the **last** child.
 

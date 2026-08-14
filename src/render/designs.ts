@@ -61,6 +61,7 @@ const STRUCTURE_NAMES: Record<TemplateId, string> = {
   'modern-eu-skills': 'Skills first, European',
   'modern-eu-education': 'Study first, European',
   showcase: 'Showcase',
+  sidebar: 'Sidebar',
 }
 
 const THEME_NAMES: Record<ThemeId, string> = {
@@ -80,6 +81,7 @@ const THEME_NAMES: Record<ThemeId, string> = {
   grotesk: 'Grotesk',
   heritage: 'Heritage',
   brush: 'Brush',
+  onyx: 'Onyx',
 }
 
 /** What each theme is *for*, in one clause, so a gallery of thirty is navigable. */
@@ -102,6 +104,7 @@ const THEME_FOR: Record<ThemeId, string> = {
   grotesk: 'contemporary type with plum accents',
   heritage: 'classical serifs and bronze, centred',
   brush: 'a hand-written name at poster size with coral accents',
+  onyx: 'light type on a dark page, for reading on screens',
 }
 
 function design(structure: TemplateId, theme: ThemeId, tier: Tier): Design {
@@ -195,6 +198,23 @@ export const DESIGNS: ReadonlyArray<Design> = [
   design('showcase', 'editorial', 'paid'),
   design('showcase', 'brush', 'paid'),
   design('showcase', 'heritage', 'paid'),
+
+  /**
+   * ── Paid: the sidebar family and the dark page ────────────────────────────────────────────────
+   *
+   * The two-column layout, on the themes whose columns read as panels — dark graphite, navy, forest,
+   * plum, rose and onyx — and the dark page on the two plain structures. Every sidebar entry wears the
+   * design-first badge and its warning; `atsRatingOf` reads the structure, so the honesty is not
+   * per-entry bookkeeping.
+   */
+  design('sidebar', 'executive', 'paid'),
+  design('sidebar', 'professional', 'paid'),
+  design('sidebar', 'narrow', 'paid'),
+  design('sidebar', 'grotesk', 'paid'),
+  design('sidebar', 'blossom', 'paid'),
+  design('sidebar', 'onyx', 'paid'),
+  design('modern-intl', 'onyx', 'paid'),
+  design('modern-eu', 'onyx', 'paid'),
 ]
 
 export const FREE_DESIGNS = DESIGNS.filter((d) => d.tier === 'free')

@@ -64,5 +64,6 @@ export const blossomTheme: DocTheme = {
     headingInAccent: true,
     bulletsInAccent: true,
     roleInAccent: false,
+    watermark: 'disc',
   },
 }

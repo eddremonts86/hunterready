@@ -66,6 +66,7 @@ export const glacierTheme: DocTheme = {
     headingInAccent: true,
     bulletsInAccent: true,
     roleInAccent: false,
+    watermark: 'disc',
     paper: GLACIER_PAPER,
   },
 }

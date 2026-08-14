@@ -21,6 +21,7 @@ import { executiveTheme } from './executive'
 import { minimalTheme } from './minimal'
 import { modernTheme } from './modern'
 import { narrowTheme } from './narrow'
+import { onyxTheme } from './onyx'
 import { professionalTheme } from './professional'
 import { technicalTheme } from './technical'
 
@@ -53,6 +54,7 @@ export const THEME_IDS = [
   'grotesk',
   'heritage',
   'brush',
+  'onyx',
 ] as const
 export type ThemeId = (typeof THEME_IDS)[number]
 
@@ -75,6 +77,7 @@ export const themes: Record<ThemeId, PdfcnTheme> = {
   grotesk: groteskTheme,
   heritage: heritageTheme,
   brush: brushTheme,
+  onyx: onyxTheme,
 }
 
 /** Shown in the theme picker. Plain language — the audience is not designers. */
@@ -142,6 +145,10 @@ export const themeLabels: Record<ThemeId, { label: string; hint: string }> = {
   brush: {
     label: 'Brush',
     hint: 'Your name hand-written at poster size, coral accents, a warm serif underneath.',
+  },
+  onyx: {
+    label: 'Onyx',
+    hint: 'Light type on a dark page. Striking on screen; printers will thank you for a light one.',
   },
 }
 

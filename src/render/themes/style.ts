@@ -109,6 +109,18 @@ export interface DocumentStyle {
     skills?: string
   }
   /**
+   * Watermark-style page decoration: large pale geometry behind the content.
+   *
+   * Pure drawing — takumi renders no SVG images (the probe returned nothing), so a "marca de agua" here
+   * is built from what it does render: absolutely positioned circles and rings in the accent at single-
+   * digit opacity, painted before the text so everything readable sits on top. Nothing enters the text
+   * layer, which is what separates this from the monogram watermarks Word produces.
+   *
+   *   - `disc`  — one large filled circle bleeding off the top-right corner.
+   *   - `rings` — two concentric ring outlines, top-right.
+   */
+  watermark?: 'disc' | 'rings'
+  /**
    * A third face for the candidate's name only.
    *
    * The one place a display or script face earns its risk: the name is short, set large, and scored by

@@ -756,6 +756,28 @@ line.
 
 ---
 
+## ADR-026 — The sidebar layout exists, honestly rated, with the DOM fighting for the parser
+
+**2026-08-15 · Accepted · Edd's decision**
+
+The two-column CV with a full-height colored panel is what every reference gallery sells and what
+Edd's own CV looks like. docs/05 rule 1 forbids it for _verified_ templates, and that rule stands —
+what changed is that the product now offers the layout under the rating that has existed for it all
+along: **design-first**, with a warning that says the real risk in plain language (a position-sorting
+parser reads a page line by line across both columns).
+
+Honesty is not a licence to make the risk worse. The main column — name, summary, the whole career —
+comes first in the document tree and `row-reverse` puts the sidebar on the visual left, so a
+content-order extractor reads the entire history before the first sidebar item. The template passes
+the full round-trip suite, reading-order assertion included; the badge exists for the parsers the
+suite cannot speak for.
+
+The full-height column is the measured construction from ADR-025 with split margin bands:
+sidebar-colored for the column's width, page-colored for the rest, per page. `onyx` (light type on a
+dark ground) rides the same tinted-paper machinery, and watermarks are pure geometry — takumi renders
+no SVG images, so a "marca de agua" is absolutely-positioned circles and rings at single-digit
+opacity, painted before the text and absent from the text layer.
+
 ## ADR-025 — Character axes: tinted papers, section chips, name faces, ten families
 
 **2026-08-14 · Accepted · Edd's decision**

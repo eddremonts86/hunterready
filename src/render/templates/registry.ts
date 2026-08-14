@@ -8,6 +8,7 @@
 import { createModernTemplate } from './modern-base'
 import type { Convention, SectionOrder } from './modern-base'
 import { ShowcaseTemplate } from './showcase'
+import { SidebarTemplate } from './sidebar'
 
 /**
  * Seven structures, from two axes and one hand-built layout.
@@ -29,6 +30,7 @@ export const TEMPLATE_IDS = [
   'modern-eu-skills',
   'modern-eu-education',
   'showcase',
+  'sidebar',
 ] as const
 export type TemplateId = (typeof TEMPLATE_IDS)[number]
 
@@ -40,6 +42,12 @@ export interface TemplateMeta {
   id: TemplateId
   label: string
   convention: Convention
+  /**
+   * How the page is constructed. `flow` is one column through the ordinary render path; `sidebar` is the
+   * two-column construction, which the renderer must know about because the full-height colored column
+   * is built with measured heights and split margin bands (see render.tsx).
+   */
+  layout?: 'flow' | 'sidebar'
   /** Which section follows the summary. `experience` for anything that does not say otherwise. */
   order: SectionOrder
   /** Plain language — read by job seekers, not designers. */
@@ -132,6 +140,24 @@ export const templates: Record<
    * each section's name in a left gutter beside its content: visually distinct, one unbroken reading
    * order, nothing an extractor sees out of sequence.
    */
+  /**
+   * The two-column layout every competitor sells, rated honestly. It passes the round-trip suite —
+   * reading order included, because the main column comes first in the document's text layer — but a
+   * position-sorting parser reads a page line by line across its full width, and no construction can
+   * save a two-column page from that. `design-first`, with the warning saying exactly that.
+   */
+  sidebar: {
+    id: 'sidebar',
+    label: 'Sidebar',
+    convention: 'eu',
+    order: 'experience',
+    layout: 'sidebar',
+    hint: 'A full-height colored column for your photo, contact and skills, beside the main story.',
+    atsRating: 'design-first',
+    warning:
+      'Some screening systems read a page line by line across both columns, which can scramble the order. Send this version to people, and a single-column one to portals.',
+    Component: SidebarTemplate,
+  },
   showcase: {
     id: 'showcase',
     label: 'Showcase',

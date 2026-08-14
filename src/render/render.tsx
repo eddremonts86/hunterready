@@ -16,6 +16,9 @@ import { DEFAULT_THEME_ID, getTheme } from './themes'
 import { styleOf } from './themes/style'
 import type { ThemeId } from './themes'
 import { DEFAULT_TEMPLATE_ID, getTemplate } from './templates/registry'
+import { SIDEBAR_WIDTH, SidebarBody, sidebarGround } from './templates/sidebar'
+import { Document, Page } from '@/lib/pdf-primitives'
+import { PdfcnThemeProvider } from '@/components/pdf/theme-provider'
 import type { TemplateId } from './templates/registry'
 
 export interface RenderOptions {
@@ -50,7 +53,8 @@ export async function renderResume(
   const { render, measure } = await import('takumi-pdf')
 
   const theme = getTheme(options.themeId ?? DEFAULT_THEME_ID)
-  const { Component } = getTemplate(options.templateId ?? DEFAULT_TEMPLATE_ID)
+  const meta = getTemplate(options.templateId ?? DEFAULT_TEMPLATE_ID)
+  const { Component } = meta
   const { page } = theme.spacing
   const style = styleOf(theme)
   const fonts = await loadThemeFonts(theme)
@@ -85,6 +89,91 @@ export async function renderResume(
       <span className="totalPages" />
     </div>
   )
+
+  /**
+   * The sidebar construction (design-first): a full-height colored column beside the main one.
+   *
+   * The same measured trick as the tinted papers, with one refinement — the vertical margin bands are
+   * **split**: sidebar-colored for the column's width, page-colored for the rest, so the column runs
+   * through the top and bottom edges of every page while the main column keeps its white (or onyx)
+   * ground. Zero side margins; the template's own padding does the horizontal breathing.
+   */
+  if (meta.layout === 'sidebar') {
+    const usable = pageHeight - 40 - 40
+    const columnGround = sidebarGround(style)
+
+    const measured = await measure(
+      <Document title={metadata.title}>
+        <Page>
+          <PdfcnThemeProvider theme={theme}>
+            <SidebarBody resume={resume} theme={theme} />
+          </PdfcnThemeProvider>
+        </Page>
+      </Document>,
+      { size: theme.page.size === 'A4' ? 'a4' : 'letter', fonts },
+    )
+    const pages = Math.max(1, Math.ceil((measured.height + 2) / usable))
+
+    const splitBand = (height: number, withCounter: boolean) => (
+      <div
+        style={{ display: 'flex', flexDirection: 'row', width: '100%', height }}
+      >
+        <div
+          style={{
+            width: SIDEBAR_WIDTH,
+            height,
+            backgroundColor: columnGround,
+          }}
+        />
+        <div
+          style={{
+            display: 'flex',
+            flexGrow: 1,
+            height,
+            backgroundColor: theme.colors.background,
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            paddingRight: 24,
+            fontFamily: theme.typography.body.fontFamily,
+            fontSize: 8,
+            color: theme.colors.mutedForeground,
+          }}
+        >
+          {withCounter ? (
+            <>
+              <span className="pageNumber" />
+              <span>/</span>
+              <span className="totalPages" />
+            </>
+          ) : null}
+        </div>
+      </div>
+    )
+
+    const bytes = await render(
+      <Document title={metadata.title}>
+        <Page>
+          <PdfcnThemeProvider theme={theme}>
+            <SidebarBody
+              resume={resume}
+              theme={theme}
+              fillHeight={pages * usable - 2}
+            />
+          </PdfcnThemeProvider>
+        </Page>
+      </Document>,
+      {
+        size: theme.page.size === 'A4' ? 'a4' : 'letter',
+        landscape: theme.page.orientation === 'landscape',
+        margin: { top: 40, bottom: 40, left: 0, right: 0 },
+        fonts,
+        metadata,
+        header: splitBand(40, false),
+        footer: splitBand(40, true),
+      },
+    )
+    return { bytes, filename: suggestFilename(resume) }
+  }
 
   /**
    * White paper: the ordinary path. takumi owns the margins, the footer band carries the counter.

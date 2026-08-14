@@ -72,6 +72,16 @@ export const STEEL_INK = '#33596E'
 export const UMBER_INK = '#5C4632'
 
 /**
+ * The dark page — light inks on a near-black ground, for the two-tone CVs Edd designs his own in.
+ * Not chrome colors: a cool graphite ledger, not our Ink, and nothing near Signal Blue.
+ */
+export const ONYX_PAPER = '#232A33'
+export const ONYX_TEXT = '#F2F5F8'
+export const ONYX_MUTED = '#9FB0BE'
+export const ONYX_BORDER = '#46525F'
+export const ONYX_ACCENT = '#8FB6D9'
+
+/**
  * Page grounds. The paper itself can be a color (ADR-025) — a whole cream or pale-blue sheet, the way
  * a stationer sells tinted stock. Light enough that ink stays printing-press legible, and that a mono
  * laser renders the ground as a faint grey rather than eating a toner cartridge.
@@ -129,6 +139,11 @@ export const ALLOWED_PRINT_COLORS = [
   STEEL_WASH,
   GLACIER_PAPER,
   PARCHMENT_PAPER,
+  ONYX_PAPER,
+  ONYX_TEXT,
+  ONYX_MUTED,
+  ONYX_BORDER,
+  ONYX_ACCENT,
 ] as const
 
 /**

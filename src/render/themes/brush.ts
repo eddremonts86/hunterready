@@ -65,6 +65,7 @@ export const brushTheme: DocTheme = {
     headingInAccent: true,
     bulletsInAccent: true,
     roleInAccent: false,
+    watermark: 'disc',
     nameFontFamily: FONT_CAVEAT,
   },
 }

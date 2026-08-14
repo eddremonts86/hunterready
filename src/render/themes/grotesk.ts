@@ -64,5 +64,6 @@ export const groteskTheme: DocTheme = {
     headingInAccent: true,
     bulletsInAccent: true,
     roleInAccent: false,
+    watermark: 'rings',
   },
 }
