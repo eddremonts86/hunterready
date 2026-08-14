@@ -542,6 +542,61 @@ the storage, the retention and the erasure are built and tested, and the door is
 
 ---
 
+## ADR-020 — Sign-in is Better Auth, and the hand-rolled session is deleted
+
+**2026-08-14 · Accepted · completes ADR-019**
+
+ADR-019 left persistence built and deliberately unreachable: no way to create a session. Edd chose
+Better Auth, and checking the reference app first turned that from a preference into the house answer —
+`builderhunt` already runs Better Auth 1.6 with `@better-auth/drizzle-adapter`.
+
+### What was deleted, and why that is the point
+
+`src/lib/session.ts` hand-rolled a signed cookie: an HMAC over a user id, compared in constant time.
+It worked. Deleting it was still right. Session rotation, CSRF, cookie flags, password hashing and the
+verification table all have known-correct answers, and every one is a place where a small mistake is
+invisible until it is exploited. Two hundred lines of our own auth is two hundred lines nobody reviews
+again.
+
+### One identity table
+
+The first draft of the v0.5 schema had its own `users` table. Better Auth brings `auth_users`, and
+keeping both would have meant **two places to honour an erasure request** — exactly the shape of bug a
+GDPR obligation cannot survive. So `auth_users` _is_ the user table, `resumes`, `variants` and
+`access_log` reference it, and the retention columns live on it with defaults so Better Auth inserts
+without knowing they exist.
+
+Verified end to end against a real Postgres, with a real account: one row in each of five tables →
+**zero in all five** after one `DELETE`, and the audit row surviving with its subject nulled.
+
+### What is not copied from the reference app
+
+builderhunt's auth configuration runs to hundreds of lines: organizations, device fingerprinting,
+abuse hooks, step-up auth, disposable-email gates. Every one solves a multi-tenant SaaS's problem.
+HunterReady is one person and one CV. Inheriting that would be complexity with nothing behind it, and
+the reference is there to copy from again if teams ever arrive.
+
+### Email and password, not magic links
+
+Magic links are arguably better for a product holding CVs — no password to leak. They need a working
+email sender, which this deployment does not have. So this is the honest available choice rather than
+the ideal one, and `sendResetPassword` is deliberately absent: offering a reset flow that silently
+cannot send an email is worse than not offering one. Minimum length is raised to 10.
+
+### A lesson worth more than the feature
+
+The retention sweep shipped broken. When the schema moved to `auth_users` it still said `users`, and
+because the orchestrator treats a retention failure as **soft** — correctly, so a sweep never blocks a
+release — the deploy went green while the sweep silently did nothing. A sweep matching no rows looks
+identical to a sweep with nothing to do.
+
+The first fix was worse than the bug: a `--check` mode with **its own copy of the queries**, which
+passed while the real ones were still broken. _A check that duplicates the thing it checks does not
+check it._ There is now one list of targets that both paths read, and `--check` was verified to fail
+when a table name is wrong.
+
+---
+
 # Open questions — need Edd's answer
 
 These do **not** block starting v0.1. They are listed at the point where each one

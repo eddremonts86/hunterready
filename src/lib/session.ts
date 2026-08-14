@@ -1,60 +1,42 @@
 /**
- * Who is making this request.
+ * Who is making this request — answered by Better Auth.
  *
- * A deliberately small, signed-cookie session — no password, no OAuth, no third party. What v0.5
- * needs is "the same browser comes back and finds its CV", and the honest minimum for that is a
- * signed identifier. Anything larger would be authentication theatre around a product that stores one
- * document per person.
+ * This module used to hand-roll a signed cookie: an HMAC over a user id, verified in constant time.
+ * It worked, and deleting it was still the right call. Session rotation, CSRF, cookie flags, password
+ * hashing and the verification table are all problems with known-correct answers, and every one of
+ * them is a place where a small mistake is invisible until it is exploited. Better Auth owns them now
+ * and `builderhunt` already runs it, so this is the reference app's answer rather than a second one.
  *
- * The cookie holds a user id and an HMAC of it. It is not encrypted, and does not need to be: a user
- * id is not a secret, and the signature is what stops someone editing the cookie to read another
- * account. `SESSION_SECRET` is what makes the signature mean anything — without it, sessions are
- * disabled outright rather than signed with a default, because a default secret is no secret.
+ * What is left here is the one thing the rest of the code needs: a user id, or nothing.
  */
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { auth } from './auth'
 
-const COOKIE = 'hr_session'
-const MAX_AGE_SECONDS = 60 * 60 * 24 * 30
-
-function secret(): string {
-  return (process.env.SESSION_SECRET ?? '').trim()
-}
-
-function sign(value: string): string {
-  return createHmac('sha256', secret()).update(value).digest('base64url')
-}
-
-/** Constant-time compare, so a forged cookie cannot be brute-forced a byte at a time. */
-function matches(a: string, b: string): boolean {
-  const left = Buffer.from(a)
-  const right = Buffer.from(b)
-  return left.length === right.length && timingSafeEqual(left, right)
-}
-
-export function issueSession(userId: string): string {
-  const value = `${userId}.${sign(userId)}`
-  return `${COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=${MAX_AGE_SECONDS}`
-}
-
-export function clearSession(): string {
-  return `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0`
-}
-
+/**
+ * The signed-in user's id, or undefined.
+ *
+ * Undefined covers every "no" — auth not configured, no cookie, an expired session, a forged token —
+ * on purpose. A caller that could distinguish them would be tempted to treat "expired" differently
+ * from "absent", and the correct behaviour for all of them is identical: this request has no account.
+ */
 export async function currentUserId(
   request: Request,
 ): Promise<string | undefined> {
-  if (secret() === '') return undefined
+  if (auth === undefined) return undefined
+  try {
+    const session = await auth.api.getSession({ headers: request.headers })
+    return session?.user.id
+  } catch {
+    // A database blip must not read as "signed in". Failing closed is the only safe direction here.
+    return undefined
+  }
+}
 
-  const header = request.headers.get('cookie') ?? ''
-  const raw = header
-    .split(';')
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(`${COOKIE}=`))
-  if (raw === undefined) return undefined
-
-  const [userId, signature] = raw.slice(COOKIE.length + 1).split('.')
-  if (userId === undefined || signature === undefined) return undefined
-  // An unsigned or wrongly-signed cookie is treated as absent, never as a hint about who it claims
-  // to be.
-  return matches(sign(userId), signature) ? userId : undefined
+/**
+ * Clears the session cookie, for the one case Better Auth cannot handle itself: the account has just
+ * been deleted, so there is no session left to sign out of. Leaving the cookie would show the next
+ * visitor a signed-in shell with nothing behind it.
+ */
+export function clearSession(): string {
+  const secure = (process.env.BETTER_AUTH_URL ?? '').startsWith('https://')
+  return `better-auth.session_token=; Path=/; HttpOnly; SameSite=Lax;${secure ? ' Secure;' : ''} Max-Age=0`
 }

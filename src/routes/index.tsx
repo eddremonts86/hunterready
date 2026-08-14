@@ -41,7 +41,7 @@ interface Loaded {
   resume: Resume
   provenance: Array<FieldProvenance>
   warnings: Array<string>
-  method: 'llm' | 'rules'
+  method: 'llm' | 'local' | 'rules'
   /** Read off an image. Carried through because it changes what the review step asks of the user. */
   ocr: boolean
 }
@@ -175,7 +175,12 @@ function PrintRoom() {
           provenance:
             (payload.provenance as Array<FieldProvenance> | undefined) ?? [],
           warnings: (payload.warnings as Array<string> | undefined) ?? [],
-          method: payload.method === 'rules' ? 'rules' : 'llm',
+          method:
+            payload.method === 'rules'
+              ? 'rules'
+              : payload.method === 'local'
+                ? 'local'
+                : 'llm',
           ocr: payload.ocr === true,
         })
       } catch {

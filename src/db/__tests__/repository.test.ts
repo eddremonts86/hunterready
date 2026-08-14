@@ -49,6 +49,21 @@ describe.skipIf(URL_ENV === '')('persistence, against a real Postgres', () => {
   let sql: Sql
   const email = `test-${Date.now()}@example.invalid`
 
+  /**
+   * Seeds an account directly, because creating one is Better Auth's job and this suite is about what
+   * the *database* guarantees — cascades, retention clocks, ownership predicates. Driving Better Auth's
+   * HTTP API to get a row would test their code, not ours.
+   */
+  let seeded = 0
+  async function seedUser(suffix = ''): Promise<string> {
+    // A counter, not just the suffix: three tests call this with no suffix, and reusing one address
+    // trips the unique constraint on the second.
+    seeded += 1
+    const id = `u_${Math.random().toString(36).slice(2, 12)}`
+    await sql`INSERT INTO auth_users (id, email) VALUES (${id}, ${`${suffix}${seeded}-${email}`})`
+    return id
+  }
+
   beforeAll(async () => {
     process.env.DATABASE_URL = URL_ENV
     repo = await import('../repository')
@@ -57,19 +72,23 @@ describe.skipIf(URL_ENV === '')('persistence, against a real Postgres', () => {
   })
 
   afterAll(async () => {
-    await sql`DELETE FROM users WHERE email LIKE 'test-%@example.invalid'`
+    await sql`DELETE FROM auth_users WHERE email LIKE '%@example.invalid'`
     await sql.end()
   })
 
-  it('creates a user once and finds them again', async () => {
-    const first = await repo.findOrCreateUser(email)
-    const second = await repo.findOrCreateUser(email.toUpperCase())
-    // Email is normalized, so a different casing is the same person — not a second account.
-    expect(second).toBe(first)
+  it('bumps the retention clock when an account is used', async () => {
+    const userId = await seedUser()
+    await sql`UPDATE auth_users SET delete_after = now() + interval '2 days' WHERE id = ${userId}`
+    await repo.touchUser(userId)
+    const [row] =
+      await sql`SELECT delete_after FROM auth_users WHERE id = ${userId}`
+    const daysLeft =
+      (new Date(row.delete_after as string).getTime() - Date.now()) / 86_400_000
+    expect(daysLeft).toBeGreaterThan(80)
   })
 
   it('stores a CV and reads it back through Zod', async () => {
-    const userId = await repo.findOrCreateUser(email)
+    const userId = await seedUser()
     const resumeId = await repo.saveResume({ userId, resume: RESUME })
     const list = await repo.listResumes(userId)
     const found = list.find((row) => row.id === resumeId)
@@ -77,8 +96,8 @@ describe.skipIf(URL_ENV === '')('persistence, against a real Postgres', () => {
   })
 
   it('refuses to update a CV belonging to somebody else', async () => {
-    const owner = await repo.findOrCreateUser(email)
-    const other = await repo.findOrCreateUser(`other-${email}`)
+    const owner = await seedUser()
+    const other = await seedUser('other-')
     const resumeId = await repo.saveResume({ userId: owner, resume: RESUME })
 
     // The ownership check is in the WHERE clause, so this updates nothing rather than throwing.
@@ -94,10 +113,11 @@ describe.skipIf(URL_ENV === '')('persistence, against a real Postgres', () => {
   })
 
   it('pushes the retention date forward when the CV is used', async () => {
-    const userId = await repo.findOrCreateUser(email)
-    await sql`UPDATE users SET delete_after = now() + interval '2 days' WHERE id = ${userId}`
+    const userId = await seedUser()
+    await sql`UPDATE auth_users SET delete_after = now() + interval '2 days' WHERE id = ${userId}`
     await repo.listResumes(userId)
-    const [row] = await sql`SELECT delete_after FROM users WHERE id = ${userId}`
+    const [row] =
+      await sql`SELECT delete_after FROM auth_users WHERE id = ${userId}`
     const daysLeft =
       (new Date(row.delete_after as string).getTime() - Date.now()) / 86_400_000
     // Back to the full window: someone iterating for months has not abandoned their CV.
@@ -105,7 +125,7 @@ describe.skipIf(URL_ENV === '')('persistence, against a real Postgres', () => {
   })
 
   it('erases everything, and the database enforces it', async () => {
-    const userId = await repo.findOrCreateUser(`erase-${email}`)
+    const userId = await seedUser('erase-')
     const resumeId = await repo.saveResume({ userId, resume: RESUME })
     await repo.saveVariant({
       userId,
@@ -128,7 +148,7 @@ describe.skipIf(URL_ENV === '')('persistence, against a real Postgres', () => {
   })
 
   it('keeps the evidence that a deletion happened', async () => {
-    const userId = await repo.findOrCreateUser(`audit-${email}`)
+    const userId = await seedUser('audit-')
     await repo.deleteEverything(userId)
     // The audit row survives with its subject nulled. Being unable to show that an erasure happened
     // is its own compliance problem.
@@ -138,7 +158,7 @@ describe.skipIf(URL_ENV === '')('persistence, against a real Postgres', () => {
   })
 
   it('exports everything we hold, including who looked at it', async () => {
-    const userId = await repo.findOrCreateUser(`export-${email}`)
+    const userId = await seedUser('export-')
     await repo.saveResume({ userId, resume: RESUME })
     const dump = await repo.exportEverything(userId)
 
