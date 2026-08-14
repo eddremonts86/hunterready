@@ -366,10 +366,26 @@ refused while the link still worked, revoked from the owner's screen, and then a
 token that never existed. Eighteen repository tests cover expiry, revocation, cross-account isolation and
 erasure.
 
-## v1.0 — "It's a product"
+## v1.0 — "It's a product" · one item shipped, two open
 
-- Pricing and payments
-- Non-Latin script font coverage
+- ✅ **Encryption at rest** (`src/db/crypto.ts`, ADR-021) — AES-256-GCM in the existing `jsonb` column, so
+  no migration. Protects a stolen disk, a leaked snapshot, a copied backup, and anyone with database read
+  access but not the application's environment. Does **not** protect someone who has that environment;
+  `/privacy` states the limit in the same paragraph and reads the real state from the server so it cannot
+  claim encryption on an installation with no key. **Losing the key loses every stored CV** — the runbook
+  carries the backup obligation.
+- ⬜ **Pricing and payments.** The numbers are Edd's, and docs/09's open question 7 now lays out three
+  concrete shapes rather than an open field. The architecture already draws the line for one of them: the
+  free stateless path stores nothing (ADR-004), and everything that costs money — model calls, storage —
+  needs an account.
+- ⬜ **Non-Latin script coverage.** Split by measurement, not estimate — see **ADR-022**. Cyrillic and
+  Greek were assessed as cheap and that was wrong: adding the fontsource subsets changes nothing, because
+  takumi-pdf 0.6.4 cannot reach the glyphs in range-subset `woff2` files. A full TTF renders all three
+  scripts fine, so the path is vendoring ~2.4 MB of upstream TTFs — a decision about the deployed image,
+  not a line in a subset list. CJK stays a separate question at 10–16 MB per weight.
+
+  Worth knowing meanwhile: the renderer **fails loudly** with `MissingGlyphs` and the exact codepoints. A
+  Cyrillic CV today errors rather than producing a PDF full of boxes.
 
 ## Deliberately parked
 
