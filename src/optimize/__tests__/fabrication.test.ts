@@ -198,6 +198,55 @@ describe('number equivalence', () => {
   })
 })
 
+describe('a unit that sits before the figure', () => {
+  /**
+   * All three of the product's languages write `a team of 14`, so the noun a figure counts is often
+   * behind it. A forward-only unit window compared whatever happened to follow, and reported the
+   * candidate's own number as invented the moment a sentence was recomposed rather than edited — which
+   * is what the tailored summary does on every run.
+   */
+  const rota = buildGrounding(
+    RESUME,
+    'Ran the shift rota for a team of 14 across two loading bays.',
+  )
+
+  it('grounds the same number and noun under different trailing words', () => {
+    expect(
+      findFabrications('Runs the shift rota for a team of 14.', rota),
+    ).toEqual([])
+  })
+
+  it('still rejects the figure moved onto a different noun', () => {
+    expect(
+      findFabrications('Ran a fleet of 14 across the depot.', rota),
+    ).toContainEqual({ kind: 'number', value: '14' })
+  })
+
+  it('does not let the verb in front of a figure act as its unit', () => {
+    /**
+     * The regression that a plain backwards window caused. `Handled` is a verb, and letting it ground
+     * the number meant "Handled a 1,200-strong portfolio" licensed "Handled 1200 accounts" — the
+     * moved-number fabrication, waved through by the check built to stop it. Reading backwards is
+     * gated on a linking preposition for exactly this reason.
+     */
+    const portfolio = buildGrounding(
+      RESUME,
+      'Handled a 1,200-strong portfolio worth 2M.',
+    )
+    expect(
+      findFabrications('Handled 1200 accounts.', portfolio),
+    ).toContainEqual({ kind: 'number', value: '1200' })
+  })
+
+  it('reads the Spanish and Danish shapes of the same pattern', () => {
+    const es = buildGrounding(RESUME, 'Coordinó un equipo de 14 personas.')
+    expect(findFabrications('Dirigió un equipo de 14.', es)).toEqual([])
+
+    const da = buildGrounding(RESUME, 'Ledede et team på 14 medarbejdere.')
+    expect(findFabrications('Ledede et team på 14.', da)).toEqual([])
+  })
+})
+
 describe('the explanation blames the tool, not the candidate', () => {
   it('says what was added, in plain language', () => {
     const message = describeFabrications(

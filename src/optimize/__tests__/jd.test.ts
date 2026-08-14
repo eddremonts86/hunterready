@@ -176,3 +176,155 @@ describe('tailoring produces a variant, never a mutation', () => {
     )
   })
 })
+
+describe('an advert’s framing does not hide the evidence', () => {
+  /**
+   * Adverts wrap a requirement in words the CV never repeats — "Certification in advanced life
+   * support" where the CV says "Advanced Life Support (ALS)". Matching is containment of the
+   * requirement inside the CV's text, so the wrapper makes the requirement *longer* than its own
+   * evidence and guarantees a miss.
+   *
+   * It produced the worst available answer on a real run: a nurse holding the exact certification the
+   * advert named was told "Not in your CV. Nothing here matches this." For the regulated professions
+   * this product is aimed at, that is the signal the employer screens on first.
+   */
+  const NURSE = Resume.parse({
+    schemaVersion: '1.0',
+    basics: { fullName: 'Marta Sørensen', links: [], personalDetails: [] },
+    work: [
+      {
+        company: 'Rigshospitalet',
+        role: 'Shift Lead Nurse, Intensive Care',
+        startDate: '2019-03',
+        endDate: null,
+        highlights: ['Led nursing handover for a 24-bed unit.'],
+        tech: ['Ventilator management'],
+      },
+    ],
+    education: [],
+    skills: [{ category: 'Clinical', items: ['Triage'] }],
+    projects: [],
+    certifications: [
+      {
+        name: 'Advanced Life Support (ALS)',
+        issuer: 'European Resuscitation Council',
+      },
+      {
+        name: 'Danish nursing authorisation',
+        issuer: 'Styrelsen for Patientsikkerhed',
+      },
+    ],
+    languages: [],
+    awards: [],
+    publications: [],
+    volunteer: [],
+    custom: [],
+  })
+
+  const framed: JobRequirements = {
+    hardSkills: [
+      'Certification in advanced life support',
+      'Danish nursing authorisation',
+      "3 years' experience with ventilator management",
+      'Licence for a forklift',
+    ],
+    softSkills: [],
+    responsibilities: [],
+    keywords: [],
+  }
+
+  const report = buildGapReport(NURSE, framed)
+  const verdict = (name: string) =>
+    report.matches.find((m) => m.requirement === name)
+
+  it('finds a certification the advert asked for by its framed name', () => {
+    expect(verdict('Certification in advanced life support')?.evidence).toBe(
+      'matched',
+    )
+    expect(
+      verdict('Certification in advanced life support')?.found.join(' '),
+    ).toContain('Advanced Life Support')
+  })
+
+  it('sees through a duration clause to the skill behind it', () => {
+    expect(
+      verdict("3 years' experience with ventilator management")?.evidence,
+    ).toBe('matched')
+  })
+
+  it('still reports a requirement that genuinely is not there', () => {
+    // Stripping framing must not turn everything into a match: a forklift licence is nowhere on this CV.
+    expect(verdict('Licence for a forklift')?.evidence).toBe('missing')
+  })
+
+  it('leaves an unframed requirement exactly as it was', () => {
+    expect(verdict('Danish nursing authorisation')?.evidence).toBe('matched')
+  })
+})
+
+describe('ordinary rewording does not hide the evidence either', () => {
+  /**
+   * A CV says what somebody *did*; an advert names the *thing*. Exact-phrase containment therefore
+   * misses constantly: "Precepted 14 newly graduated nurses through their first six months" was no
+   * evidence at all for "Preceptorship of newly graduated nurses".
+   *
+   * The pair of tests below is the whole design. Every claim-bearing word must be present in one line,
+   * which finds the rewording — and still refuses the case that matters, because a CV full of adult
+   * intensive care must never come back as evidence of paediatric experience.
+   */
+  const NURSE = Resume.parse({
+    schemaVersion: '1.0',
+    basics: { fullName: 'Marta Sørensen', links: [], personalDetails: [] },
+    work: [
+      {
+        company: 'Rigshospitalet',
+        role: 'Shift Lead Nurse, Intensive Care',
+        startDate: '2019-03',
+        endDate: null,
+        highlights: [
+          'Precepted 14 newly graduated nurses through their first six months.',
+          'Led nursing handover for a 24-bed intensive care unit.',
+        ],
+        tech: [],
+      },
+    ],
+    education: [],
+    skills: [],
+    projects: [],
+    certifications: [],
+    languages: [],
+    awards: [],
+    publications: [],
+    volunteer: [],
+    custom: [],
+  })
+
+  const report = buildGapReport(NURSE, {
+    hardSkills: [
+      'Preceptorship of newly graduated nurses',
+      'Experience with paediatric intensive care',
+    ],
+    softSkills: [],
+    responsibilities: [],
+    keywords: [],
+  })
+  const verdict = (name: string) =>
+    report.matches.find((m) => m.requirement === name)
+
+  it('finds the requirement the CV states in its own words', () => {
+    expect(verdict('Preceptorship of newly graduated nurses')?.evidence).toBe(
+      'matched',
+    )
+    expect(
+      verdict('Preceptorship of newly graduated nurses')?.found.join(' '),
+    ).toContain('Precepted 14 newly graduated nurses')
+  })
+
+  it('refuses to read adult intensive care as paediatric experience', () => {
+    // The load-bearing assertion. An any-word rule would match on "intensive" and "care" and claim a
+    // speciality this nurse has never worked in — the fabrication the missing verdict exists to report.
+    expect(verdict('Experience with paediatric intensive care')?.evidence).toBe(
+      'missing',
+    )
+  })
+})

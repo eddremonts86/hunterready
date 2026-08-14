@@ -17,6 +17,7 @@ import { Route as ApiProcessingRouteImport } from './routes/api/processing'
 import { Route as ApiRenderRouteImport } from './routes/api/render'
 import { Route as ApiResumeRouteImport } from './routes/api/resume'
 import { Route as ApiRewriteRouteImport } from './routes/api/rewrite'
+import { Route as ApiTargetRouteImport } from './routes/api/target'
 import { Route as ApiAccountDeleteRouteImport } from './routes/api/account/delete'
 import { Route as ApiAccountExportRouteImport } from './routes/api/account/export'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -61,6 +62,11 @@ const ApiRewriteRoute = ApiRewriteRouteImport.update({
   path: '/api/rewrite',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTargetRoute = ApiTargetRouteImport.update({
+  id: '/api/target',
+  path: '/api/target',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAccountDeleteRoute = ApiAccountDeleteRouteImport.update({
   id: '/api/account/delete',
   path: '/api/account/delete',
@@ -86,6 +92,7 @@ export interface FileRoutesByFullPath {
   '/api/render': typeof ApiRenderRoute
   '/api/resume': typeof ApiResumeRoute
   '/api/rewrite': typeof ApiRewriteRoute
+  '/api/target': typeof ApiTargetRoute
   '/api/account/delete': typeof ApiAccountDeleteRoute
   '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -99,6 +106,7 @@ export interface FileRoutesByTo {
   '/api/render': typeof ApiRenderRoute
   '/api/resume': typeof ApiResumeRoute
   '/api/rewrite': typeof ApiRewriteRoute
+  '/api/target': typeof ApiTargetRoute
   '/api/account/delete': typeof ApiAccountDeleteRoute
   '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -113,6 +121,7 @@ export interface FileRoutesById {
   '/api/render': typeof ApiRenderRoute
   '/api/resume': typeof ApiResumeRoute
   '/api/rewrite': typeof ApiRewriteRoute
+  '/api/target': typeof ApiTargetRoute
   '/api/account/delete': typeof ApiAccountDeleteRoute
   '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -128,6 +137,7 @@ export interface FileRouteTypes {
     | '/api/render'
     | '/api/resume'
     | '/api/rewrite'
+    | '/api/target'
     | '/api/account/delete'
     | '/api/account/export'
     | '/api/auth/$'
@@ -141,6 +151,7 @@ export interface FileRouteTypes {
     | '/api/render'
     | '/api/resume'
     | '/api/rewrite'
+    | '/api/target'
     | '/api/account/delete'
     | '/api/account/export'
     | '/api/auth/$'
@@ -154,6 +165,7 @@ export interface FileRouteTypes {
     | '/api/render'
     | '/api/resume'
     | '/api/rewrite'
+    | '/api/target'
     | '/api/account/delete'
     | '/api/account/export'
     | '/api/auth/$'
@@ -168,6 +180,7 @@ export interface RootRouteChildren {
   ApiRenderRoute: typeof ApiRenderRoute
   ApiResumeRoute: typeof ApiResumeRoute
   ApiRewriteRoute: typeof ApiRewriteRoute
+  ApiTargetRoute: typeof ApiTargetRoute
   ApiAccountDeleteRoute: typeof ApiAccountDeleteRoute
   ApiAccountExportRoute: typeof ApiAccountExportRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -231,6 +244,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRewriteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/target': {
+      id: '/api/target'
+      path: '/api/target'
+      fullPath: '/api/target'
+      preLoaderRoute: typeof ApiTargetRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/account/delete': {
       id: '/api/account/delete'
       path: '/api/account/delete'
@@ -264,6 +284,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiRenderRoute: ApiRenderRoute,
   ApiResumeRoute: ApiResumeRoute,
   ApiRewriteRoute: ApiRewriteRoute,
+  ApiTargetRoute: ApiTargetRoute,
   ApiAccountDeleteRoute: ApiAccountDeleteRoute,
   ApiAccountExportRoute: ApiAccountExportRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
