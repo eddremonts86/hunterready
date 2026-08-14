@@ -22,9 +22,12 @@ import type { Resume, WorkItem } from '@/schema/resume'
 import {
   formatLocation,
   formatRange,
+  resolveLocale,
   formatYearMonth,
   joinParts,
 } from '../format'
+import { strings } from '../locale'
+import type { OutputLocale } from '../locale'
 
 export type Convention = 'intl' | 'eu'
 
@@ -88,9 +91,17 @@ function Bullet({ text, theme }: { text: string; theme: PdfcnTheme }) {
   )
 }
 
-function Job({ item, theme }: { item: WorkItem; theme: PdfcnTheme }) {
+function Job({
+  item,
+  theme,
+  locale,
+}: {
+  item: WorkItem
+  theme: PdfcnTheme
+  locale: OutputLocale
+}) {
   const meta = joinParts([
-    formatRange(item.startDate, item.endDate),
+    formatRange(item.startDate, item.endDate, locale),
     item.location,
     item.remote === true ? 'Remote' : undefined,
   ])
@@ -135,6 +146,17 @@ function Body({ resume, theme, convention }: BodyProps) {
   const { basics } = resume
   const showPersonalDetails =
     convention === 'eu' && basics.personalDetails.length > 0
+
+  /**
+   * The document's language, from the CV's own `locale` — v0.8.
+   *
+   * Section headings and dates only. The candidate's words are never translated: a mistranslated job
+   * title is a wrong claim about their career, and no guard here could catch it. Rendering a Danish CV
+   * with an English `Experience` heading was the defect — docs/05 clause 6 wants the heading the local
+   * screener has seen a thousand times, which in Denmark is `Erfaring`.
+   */
+  const locale = resolveLocale(resume.locale)
+  const local = strings(locale)
 
   const contact = joinParts([
     basics.email,
@@ -218,16 +240,16 @@ function Body({ resume, theme, convention }: BodyProps) {
 
       {resume.work.length === 0 ? null : (
         <>
-          <SectionHeading title="Experience" theme={theme} />
+          <SectionHeading title={local.headings.work} theme={theme} />
           {resume.work.map((w, i) => (
-            <Job key={i} item={w} theme={theme} />
+            <Job key={i} item={w} theme={theme} locale={locale} />
           ))}
         </>
       )}
 
       {resume.education.length === 0 ? null : (
         <>
-          <SectionHeading title="Education" theme={theme} />
+          <SectionHeading title={local.headings.education} theme={theme} />
           {resume.education.map((e, i) => (
             <div
               key={i}
@@ -252,7 +274,7 @@ function Body({ resume, theme, convention }: BodyProps) {
                 }}
               >
                 {joinParts([
-                  formatRange(e.startDate, e.endDate),
+                  formatRange(e.startDate, e.endDate, locale),
                   e.location,
                   e.grade,
                 ])}
@@ -267,7 +289,7 @@ function Body({ resume, theme, convention }: BodyProps) {
 
       {resume.skills.length === 0 ? null : (
         <>
-          <SectionHeading title="Skills" theme={theme} />
+          <SectionHeading title={local.headings.skills} theme={theme} />
           {resume.skills.map((group, i) => (
             // Comma-separated text, never bars or dots: rating graphics extract as noise.
             <div key={i} style={{ marginTop: 4, breakInside: 'avoid' }}>
@@ -280,7 +302,7 @@ function Body({ resume, theme, convention }: BodyProps) {
 
       {resume.projects.length === 0 ? null : (
         <>
-          <SectionHeading title="Projects" theme={theme} />
+          <SectionHeading title={local.headings.projects} theme={theme} />
           {resume.projects.map((p, i) => (
             <div
               key={i}
@@ -306,7 +328,7 @@ function Body({ resume, theme, convention }: BodyProps) {
 
       {resume.certifications.length === 0 ? null : (
         <>
-          <SectionHeading title="Certifications" theme={theme} />
+          <SectionHeading title={local.headings.certifications} theme={theme} />
           {resume.certifications.map((c, i) => (
             <div key={i} style={{ marginTop: 3, breakInside: 'avoid' }}>
               {joinParts([c.name, c.issuer], ' — ')}
@@ -321,7 +343,7 @@ function Body({ resume, theme, convention }: BodyProps) {
 
       {resume.languages.length === 0 ? null : (
         <>
-          <SectionHeading title="Languages" theme={theme} />
+          <SectionHeading title={local.headings.languages} theme={theme} />
           <div style={{ marginTop: 4 }}>
             {joinParts(
               resume.languages.map((l) => {

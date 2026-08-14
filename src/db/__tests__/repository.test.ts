@@ -168,4 +168,275 @@ describe.skipIf(URL_ENV === '')('persistence, against a real Postgres', () => {
     expect(Array.isArray(dump?.accessLog)).toBe(true)
     expect(dump?.retentionPolicy).toMatch(/90 days/)
   })
+  it('moves an application between draft and sent, and only its owner may', async () => {
+    const owner = await seedUser('status-')
+    const stranger = await seedUser('status-other-')
+    const resumeId = await repo.saveResume({ userId: owner, resume: RESUME })
+    const variantId = await repo.saveVariant({
+      userId: owner,
+      resumeId,
+      resume: RESUME,
+      role: 'Account Manager',
+      company: 'Northgate Supplies',
+    })
+
+    expect(
+      await repo.setApplicationStatus({
+        userId: owner,
+        variantId,
+        status: 'sent',
+      }),
+    ).toBe(true)
+
+    const [row] = await sql`SELECT status FROM variants WHERE id = ${variantId}`
+    expect(row.status).toBe('sent')
+
+    // The ownership test is in the SQL predicate rather than an `if` above it, so this cannot pass by
+    // somebody remembering to write the check.
+    expect(
+      await repo.setApplicationStatus({
+        userId: stranger,
+        variantId,
+        status: 'draft',
+      }),
+    ).toBe(false)
+    const [unchanged] =
+      await sql`SELECT status FROM variants WHERE id = ${variantId}`
+    expect(unchanged.status).toBe('sent')
+  })
+
+  it('leaves the stored document alone when the status changes', async () => {
+    // The whole point of keeping a variant is that it is what was sent. A tracker that lets you edit
+    // history is not a record of anything, so `setApplicationStatus` touches one column.
+    const userId = await seedUser('immutable-')
+    const resumeId = await repo.saveResume({ userId, resume: RESUME })
+    const variantId = await repo.saveVariant({
+      userId,
+      resumeId,
+      resume: RESUME,
+    })
+    const [before] =
+      await sql`SELECT document FROM variants WHERE id = ${variantId}`
+    await repo.setApplicationStatus({ userId, variantId, status: 'sent' })
+    const [after] =
+      await sql`SELECT document FROM variants WHERE id = ${variantId}`
+    expect(after.document).toEqual(before.document)
+  })
+
+  describe('a share link is the one public thing, so its limits are structural', () => {
+    it('creates a link with an expiry, and reads the document back through it', async () => {
+      const userId = await seedUser('share-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      const { token, expiresAt } = await repo.createShare({ userId, resumeId })
+
+      expect(expiresAt.getTime()).toBeGreaterThan(Date.now())
+      const shared = await repo.readShare(token)
+      expect(shared?.resume.basics.fullName).toBe('Tom Whitfield')
+    })
+
+    it('clamps a request for a longer window instead of honouring it', async () => {
+      /**
+       * The pressure on this parameter is always toward longer, so the ceiling lives in the store rather
+       * than in whoever remembered to validate. Ten years becomes ninety days.
+       */
+      const userId = await seedUser('share-clamp-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      const { expiresAt } = await repo.createShare({
+        userId,
+        resumeId,
+        days: 3650,
+      })
+
+      const days = (expiresAt.getTime() - Date.now()) / 86_400_000
+      expect(days).toBeLessThanOrEqual(91)
+      expect(days).toBeGreaterThan(89)
+    })
+
+    it('refuses an expired link', async () => {
+      const userId = await seedUser('share-expired-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      const { token } = await repo.createShare({ userId, resumeId })
+      // Reach past the API to age it: what is being tested is that `readShare` checks, not that a clock works.
+      await sql`UPDATE shares SET expires_at = now() - interval '1 day' WHERE id = ${token}`
+
+      expect(await repo.readShare(token)).toBeUndefined()
+    })
+
+    it('refuses a revoked link immediately, and keeps the row', async () => {
+      const userId = await seedUser('share-revoked-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      const { token } = await repo.createShare({ userId, resumeId })
+
+      expect(await repo.revokeShare({ userId, token })).toBe(true)
+      expect(await repo.readShare(token)).toBeUndefined()
+      // The row survives, so the access log can still explain what a visitor saw last week.
+      const [row] = await sql`SELECT revoked_at FROM shares WHERE id = ${token}`
+      expect(row.revoked_at).not.toBeNull()
+    })
+
+    it('will not let a stranger revoke somebody else’s link', async () => {
+      const owner = await seedUser('share-owner-')
+      const stranger = await seedUser('share-stranger-')
+      const resumeId = await repo.saveResume({ userId: owner, resume: RESUME })
+      const { token } = await repo.createShare({ userId: owner, resumeId })
+
+      expect(await repo.revokeShare({ userId: stranger, token })).toBe(false)
+      // And the link still works, which is what makes the previous assertion mean something.
+      expect(await repo.readShare(token)).toBeDefined()
+    })
+
+    it('answers an unknown token the same way as a revoked one', async () => {
+      // Distinguishing them would confirm to somebody holding a guessed URL that a CV exists.
+      expect(
+        await repo.readShare('00000000-0000-4000-8000-000000000000'),
+      ).toBeUndefined()
+    })
+
+    it('counts views without recording who', async () => {
+      const userId = await seedUser('share-views-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      const { token } = await repo.createShare({ userId, resumeId })
+
+      await repo.readShare(token)
+      await repo.readShare(token)
+
+      const [link] = (await repo.listShares(userId)).filter(
+        (row) => row.token === token,
+      )
+      expect(link.views).toBe(2)
+      // One audit row per view against the *owner*, flagged as somebody else's access. No visitor identity
+      // exists anywhere — that would be a log of people reading a CV, which is not ours to keep.
+      const rows =
+        await sql`SELECT by_other FROM access_log WHERE action = 'share.viewed' AND subject_user_id = ${userId}`
+      expect(rows.length).toBe(2)
+      expect(rows.every((row) => row.by_other === true)).toBe(true)
+    })
+
+    it('takes the links with the account when it is erased', async () => {
+      const userId = await seedUser('share-erase-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      const { token } = await repo.createShare({ userId, resumeId })
+
+      await repo.deleteEverything(userId)
+
+      const [{ count }] =
+        await sql`SELECT count(*)::int FROM shares WHERE id = ${token}`
+      expect(count).toBe(0)
+      // And the link stops working, which is the property that actually matters to the person erasing.
+      expect(await repo.readShare(token)).toBeUndefined()
+    })
+
+    it('includes share links in the Article 15 export', async () => {
+      const userId = await seedUser('share-export-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      await repo.createShare({ userId, resumeId })
+
+      const dump = await repo.exportEverything(userId)
+      expect(dump?.shareLinks).toHaveLength(1)
+    })
+  })
+  describe('what lands in the table is unreadable (ADR-021)', () => {
+    /**
+     * The codec has its own tests; this is the one that proves it is wired into the write path. It reads
+     * the raw column with SQL, deliberately bypassing the repository — the whole claim is about what
+     * somebody with database access but not the application's environment can see.
+     */
+    it('stores a CV as an envelope, with none of its content in the row', async () => {
+      const userId = await seedUser('crypto-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+
+      const [row] =
+        await sql`SELECT document::text AS raw FROM resumes WHERE id = ${resumeId}`
+
+      // `hunterready_readonly` and a leaked `pg_dump` see this and nothing else.
+      expect(row.raw).not.toContain('Whitfield')
+      expect(row.raw).not.toContain('Northgate')
+      // Parsed rather than substring-matched: `jsonb::text` normalizes to `{"v": 1, …}` with a space,
+      // so asserting on the serialized shape tests Postgres's formatter instead of our envelope.
+      expect(JSON.parse(row.raw)).toMatchObject({ v: 1 })
+      expect(Object.keys(JSON.parse(row.raw)).sort()).toEqual([
+        'ct',
+        'iv',
+        'tag',
+        'v',
+      ])
+
+      // And it still reads back through the repository, which is the other half of the claim.
+      const [saved] = (await repo.listResumes(userId)).filter(
+        (item) => item.id === resumeId,
+      )
+      expect(saved.resume.basics.fullName).toBe('Tom Whitfield')
+    })
+
+    it('encrypts a gap report too, because it quotes the CV back', async () => {
+      // `found` arrays are the candidate's own bullets. A gap report is CV content under another name.
+      const userId = await seedUser('crypto-gap-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      const variantId = await repo.saveVariant({
+        userId,
+        resumeId,
+        resume: RESUME,
+        gapReport: {
+          matches: [
+            { requirement: 'SAP', found: ['Grew a book of 40 accounts.'] },
+          ],
+        },
+      })
+
+      const [row] =
+        await sql`SELECT gap_report::text AS raw FROM variants WHERE id = ${variantId}`
+      expect(row.raw).not.toContain('40 accounts')
+      expect(JSON.parse(row.raw)).toMatchObject({ v: 1 })
+    })
+
+    it('leaves the advert readable, because it is public text somebody pasted', async () => {
+      const userId = await seedUser('crypto-advert-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      const variantId = await repo.saveVariant({
+        userId,
+        resumeId,
+        resume: RESUME,
+        jobDescription: 'Requirements\n- SAP EWM',
+      })
+
+      const [row] =
+        await sql`SELECT job_description AS raw FROM variants WHERE id = ${variantId}`
+      expect(row.raw).toContain('SAP EWM')
+    })
+
+    it('hands the Article 15 export plain JSON, not ciphertext', async () => {
+      /**
+       * A right to your data is not a right to a base64 envelope you cannot open. Without the decrypt in
+       * `exportEverything` this download would be technically complete and useless.
+       */
+      const userId = await seedUser('crypto-export-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      await repo.saveVariant({
+        userId,
+        resumeId,
+        resume: RESUME,
+        gapReport: { note: 'a gap report' },
+      })
+
+      const dump = await repo.exportEverything(userId)
+      expect(JSON.stringify(dump)).toContain('Tom Whitfield')
+      // No envelope anywhere in the download.
+      expect(JSON.stringify(dump)).not.toMatch(/"iv":/)
+      expect(JSON.stringify(dump)).not.toMatch(/"tag":/)
+      expect(dump?.variants[0].gapReport).toEqual({ note: 'a gap report' })
+    })
+
+    it('reads a row that was written before the key existed', async () => {
+      // The assertion that makes turning the key on safe rather than an outage.
+      const userId = await seedUser('crypto-legacy-')
+      const resumeId = await repo.saveResume({ userId, resume: RESUME })
+      // Put the row back to plaintext, exactly as it would have been last week.
+      await sql`UPDATE resumes SET document = ${sql.json(RESUME)} WHERE id = ${resumeId}`
+
+      const [saved] = (await repo.listResumes(userId)).filter(
+        (item) => item.id === resumeId,
+      )
+      expect(saved.resume.basics.fullName).toBe('Tom Whitfield')
+    })
+  })
 })

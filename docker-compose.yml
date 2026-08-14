@@ -33,6 +33,10 @@ services:
       DATABASE_MIGRATION_URL: postgres://hunterready_owner:${POSTGRES_PASSWORD}@db:5432/hunterready
       DATABASE_APP_PASSWORD: ${DATABASE_APP_PASSWORD}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      # Encryption at rest for stored CV content (ADR-021). Unset means plaintext, announced once at
+      # startup rather than assumed — and `/privacy` reads the real state so it cannot overstate.
+      # LOSING THIS KEY LOSES EVERY STORED CV. There is no recovery path and there should not be one.
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       # The local model. This is what a user gets when they decline the third-party provider — see
       # `src/structure/provider.ts` for why that is a model on our own hardware and not a regex.

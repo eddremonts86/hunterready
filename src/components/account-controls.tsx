@@ -70,8 +70,8 @@ export function AccountControls() {
   }
 
   return (
-    <div className="rim flex flex-col gap-3 bg-darkroom-brown/60 p-4">
-      <h2 className="stencil text-[11px] text-safelight">Your data</h2>
+    <div className="card flex flex-col gap-4 p-5">
+      <h2 className="text-title text-ink">Your data</h2>
 
       {state === 'confirming' ? (
         <div className="flex flex-col gap-3">
@@ -79,23 +79,28 @@ export function AccountControls() {
             Names what goes, rather than asking "are you sure?". A confirmation that repeats the
             question adds a click and no information.
           */}
-          <p className="text-[12px] leading-relaxed text-tray-enamel">
+          <p className="rounded-field border border-alert/25 bg-alert-wash px-3 py-2.5 text-[14px] leading-relaxed text-ink">
             This deletes your CV, every tailored version you have made, the
             record of where you applied, and the account itself. It happens
             immediately and cannot be undone.
           </p>
+          {/*
+            The only destructive action in the product, so it is the only place a button is allowed
+            to be red — and the safe answer keeps the same visual weight rather than being styled as
+            the obvious one. The information is in the sentence above, not in the colour.
+          */}
           <div className="flex flex-col gap-2 sm:flex-row">
             <button
               type="button"
               onClick={() => void deleteEverything()}
-              className="rim stencil flex-1 px-3 py-2 text-[9px] text-tray-enamel transition-colors hover:bg-amber-shadow/25"
+              className="btn flex-1 bg-alert px-4 py-2.5 text-[14px] text-white hover:bg-alert/90"
             >
               Yes, delete all of it
             </button>
             <button
               type="button"
               onClick={() => setState('idle')}
-              className="rim stencil flex-1 px-3 py-2 text-[9px] text-tray-enamel/70 transition-colors hover:bg-amber-shadow/25 hover:text-tray-enamel"
+              className="btn btn-quiet flex-1 px-4 py-2.5 text-[14px]"
             >
               Keep my data
             </button>
@@ -107,7 +112,7 @@ export function AccountControls() {
             type="button"
             disabled={state === 'working'}
             onClick={() => void exportEverything()}
-            className="rim stencil flex-1 px-3 py-2 text-[9px] text-tray-enamel transition-colors hover:bg-amber-shadow/25 disabled:opacity-50"
+            className="btn btn-quiet flex-1 px-4 py-2.5 text-[14px]"
           >
             Download everything we hold
           </button>
@@ -115,7 +120,7 @@ export function AccountControls() {
             type="button"
             disabled={state === 'working'}
             onClick={() => setState('confirming')}
-            className="rim stencil flex-1 px-3 py-2 text-[9px] text-tray-enamel transition-colors hover:bg-amber-shadow/25 disabled:opacity-50"
+            className="btn btn-quiet flex-1 px-4 py-2.5 text-[14px]"
           >
             Delete everything
           </button>
@@ -123,10 +128,7 @@ export function AccountControls() {
       )}
 
       {state === 'none' && (
-        <p
-          role="status"
-          className="text-[10px] leading-relaxed text-developer-gray"
-        >
+        <p role="status" className="text-meta leading-relaxed text-ink-soft">
           You do not have an account, so there is nothing stored to download or
           delete. Whatever you are working on lives in this browser tab only.
         </p>
@@ -134,7 +136,7 @@ export function AccountControls() {
       {message !== undefined && (
         <p
           role="status"
-          className="text-[10px] leading-relaxed text-tray-enamel/80"
+          className="rounded-field bg-band px-3 py-2 text-[13px] leading-relaxed text-ink"
         >
           {message}
         </p>

@@ -44,6 +44,19 @@ const TARGETS = [
   { key: 'users', table: 'auth_users', where: 'delete_after < now()' },
   { key: 'resumes', table: 'resumes', where: 'delete_after < now()' },
   { key: 'variants', table: 'variants', where: 'delete_after < now()' },
+  /**
+   * Share links, on **two** conditions — the retention clock, and their own expiry.
+   *
+   * An expired link is already refused by `readShare`, so this is not what stops it working. It is what
+   * stops us holding the row: a dead link is a record that this person shared a CV, and there is no
+   * reason to keep that for ninety days after it stopped being usable. Twice the share window is enough
+   * for somebody to notice a link died and ask why.
+   */
+  {
+    key: 'shares',
+    table: 'shares',
+    where: "delete_after < now() OR expires_at < now() - interval '28 days'",
+  },
   {
     key: 'auditRows',
     table: 'access_log',

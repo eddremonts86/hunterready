@@ -96,6 +96,109 @@ const SYNONYMS: Array<Array<string>> = [
   ['spreadsheets', 'excel', 'google sheets'],
 ]
 
+/**
+ * The framing an advert wraps a requirement in, which the CV never repeats.
+ *
+ * Adverts do not write `Advanced Life Support`; they write **"Certification in** advanced life support",
+ * "3 years' **experience with** ventilators", "**Licence for** a forklift". A CV writes the thing itself.
+ * Matching is containment of the requirement inside the CV's text, so every one of those framings makes
+ * a requirement *longer* than the evidence and guarantees a miss.
+ *
+ * That produced the worst possible result on the first real run: a nurse's CV listing
+ * `Advanced Life Support (ALS)` under Certifications was told "Not in your CV. Nothing here matches
+ * this." For the regulated professions this product is aimed at, a certification is not one signal among
+ * many — it is the one the employer screens on first.
+ *
+ * Lives here rather than in `advert.ts` because the requirement list is **editable**: a candidate typing
+ * "Experience with CRRT" into the add box hits exactly the same wall, and so would any hand-written
+ * `JobRequirements`. Stripping at the point of matching covers every source; stripping at the point of
+ * parsing covers one.
+ */
+const FRAMING: Array<RegExp> = [
+  // A leading duration clause: "at least 3 years' experience of …"
+  /^(?:at least\s+|minimum\s+|min\.?\s+|mindst\s+|al menos\s+)?\d+\s*\+?\s*(?:years?|yrs?|anos|ar)['’]?\s*(?:\s*(?:of|de|med|with|i)\b)?\s*/i,
+  /^(?:experience|erfaring|experiencia)\s+(?:with|in|of|med|i|en|con|de)\s+/i,
+  /^(?:knowledge|kendskab|conocimiento[s]?)\s+(?:of|in|til|af|de|en)\s+/i,
+  // The regulated-profession framings, which are the ones that cost the most when missed.
+  /^(?:certification|certificate|certificat|certificado|certifikat)\s+(?:in|of|for|i|en|de)\s+/i,
+  /^(?:qualification|qualified|kvalifikation|titulacion)\s+(?:in|as|of|i|som|en|de)\s+/i,
+  /^(?:licence|license|licencia|kort|bevis)\s+(?:in|for|to|til|de|para)\s+/i,
+  /^(?:training|uddannelse|formacion)\s+(?:in|as|of|i|som|en|de)\s+/i,
+  /^(?:degree|diploma|grado|eksamen)\s+(?:in|of|i|en|de)\s+/i,
+  /^(?:you (?:have|are|must|will)|du (?:har|er)|debes|tienes que)\s+/i,
+]
+
+/**
+ * A requirement reduced to the thing being asked for, or unchanged if it carries no framing.
+ *
+ * Applied repeatedly, because adverts stack it: "3 years' experience of certification in …" is not
+ * elegant English but it is written every day.
+ */
+export function stripRequirementFraming(requirement: string): string {
+  let text = requirement.trim()
+  for (let pass = 0; pass < 3; pass++) {
+    const before = text
+    for (const pattern of FRAMING) text = text.replace(pattern, '')
+    if (text === before) break
+  }
+  return text.trim() === '' ? requirement.trim() : text.trim()
+}
+
+/**
+ * Words that carry no claim, so a requirement sharing only these with a line has matched nothing.
+ *
+ * Short words are already dropped by length, so this only needs the long connectives.
+ */
+const FILLER = new Set([
+  'and',
+  'the',
+  'with',
+  'for',
+  'from',
+  'that',
+  'this',
+  'their',
+  'para',
+  'como',
+  'sobre',
+  'samt',
+  'eller',
+])
+
+function significantWords(phrase: string): Array<string> {
+  return normalize(phrase)
+    .split(' ')
+    .filter((word) => word.length >= 4 && !FILLER.has(word))
+}
+
+/**
+ * Does this line evidence the requirement, allowing for ordinary rewording?
+ *
+ * Containment of the exact phrase is the primary test and it is very brittle in one specific way: a CV
+ * describes what somebody *did*, an advert names the *thing*, and the two are rarely the same string.
+ * A CV saying "Precepted 14 newly graduated nurses through their first six months" was reported as no
+ * evidence at all for "Preceptorship of newly graduated nurses" — telling a nurse to add something she
+ * plainly has, which is the same harm as missing a certification.
+ *
+ * So: **every** claim-bearing word of the requirement must appear in the same line, matched on a
+ * five-character stem. Requiring all of them, in one span, is what keeps this conservative — and the
+ * case that proves it is the one it must keep refusing: "Experience with paediatric intensive care"
+ * against a CV full of intensive care still fails, because nothing in it starts with `paedi`. A looser
+ * any-word rule would have claimed paediatric experience from an adult ICU, which is exactly the
+ * fabrication the missing verdict exists to report instead.
+ *
+ * Only for multi-word requirements. A single word needs no help from a stem match, and giving it one
+ * would loosen the common case to fix the rare one.
+ */
+function everyWordPresent(phrase: string, span: string): boolean {
+  const words = significantWords(phrase)
+  if (words.length < 2) return false
+  const tokens = normalize(span).split(' ')
+  return words.every((word) =>
+    tokens.some((token) => token.startsWith(word.slice(0, 5))),
+  )
+}
+
 /** Every phrase that may stand in for this one, including itself. */
 function equivalents(phrase: string): Array<string> {
   const key = normalize(phrase)
@@ -116,11 +219,20 @@ function equivalents(phrase: string): Array<string> {
  * `missing` — nothing. Reported.
  */
 function locate(requirement: string, resume: Resume): RequirementMatch {
-  const phrases = equivalents(requirement)
+  /**
+   * Both the requirement as written and its framing-stripped core, so `Certification in advanced life
+   * support` finds `Advanced Life Support (ALS)`. The full phrase is kept as well as the core because
+   * a CV that happens to repeat the advert's framing should still match on it.
+   */
+  const core = stripRequirementFraming(requirement)
+  const phrases = [
+    ...new Set([...equivalents(requirement), ...equivalents(core)]),
+  ]
   const hit = (haystack: string | undefined): boolean => {
     if (haystack === undefined || haystack === '') return false
     const text = normalize(haystack)
-    return phrases.some((phrase) => text.includes(phrase))
+    if (phrases.some((phrase) => text.includes(phrase))) return true
+    return everyWordPresent(core, haystack)
   }
 
   const strong: Array<string> = []

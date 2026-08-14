@@ -7,8 +7,20 @@ Read `~/Projects/ai-os/CLAUDE.md` first. This file adds project-specific rules.
 CV optimizer: ingest `.pdf`/`.docx`/`.doc`/`.txt`/`.md` → canonical `Resume` schema
 → user review → verifiably ATS-safe designed PDF via pdfcn + takumi-pdf.
 
-Status: planning. Start at [docs/10-plan-v0.1.md](docs/10-plan-v0.1.md), Block 0.
-Active Spec: [specs/current_spec.md](specs/current_spec.md).
+Status: **v0.1–v0.9 shipped** — ingestion, review, PDF and DOCX export, bullet rewriting, job
+targeting, accounts with GDPR controls, cover letters, EN/ES/DA output and expiring share links.
+See [docs/08-roadmap.md](docs/08-roadmap.md) for what each release contains and what it cost.
+Open: encryption at rest (blocked on a key-management decision, ADR-018), pricing and payments,
+non-Latin script coverage. Active Spec: [specs/current_spec.md](specs/current_spec.md).
+
+**Before calling a version done, check the feature is reachable.** Three releases in a row shipped a
+complete, tested layer that no screen imported — v0.3's `variant-diff`, all of v0.4's targeting, all of
+v0.5's persistence. A passing unit test argues convincingly that a feature works while nobody can get to
+it. The check costs one command:
+
+```bash
+grep -rn "optimize/thing" src --include='*.ts' --include='*.tsx' | grep -v __tests__
+```
 
 ## Before touching code
 
@@ -31,17 +43,24 @@ Active Spec: [specs/current_spec.md](specs/current_spec.md).
 - **No fabrication in AI features.** Numbers, employers, dates, technologies and
   outcomes may never be invented. See [docs/06-ai-optimization.md](docs/06-ai-optimization.md).
 - **No CV content in logs, errors, analytics or telemetry.** Ever. See [docs/07-privacy.md](docs/07-privacy.md).
-- **Amber never touches the print.** DESIGN.md's hardest rule: Safelight Amber
-  (`#FFB100`) and Amber Shadow (`#B36A00`) belong to the app chrome and appear nowhere
-  in a CV preview or an exported PDF. Documents are Print Black / Silver Gray /
-  Developer Gray on Tray Enamel or white. A CV carrying our accent carries our brand
-  into someone else's job application.
+- **The print is not ours.** DESIGN.md's hardest rule: Signal Blue (`#1B3BD8`), every
+  other chrome colour, and the chrome typeface (Figtree) appear nowhere in a CV preview
+  or an exported PDF. Documents use the renderer's own neutral themes and its own faces
+  (Source Sans 3 / Source Serif 4). A CV carrying our accent carries our brand into
+  someone else's job application.
+  _This rule outlived the v0.6 world change unaltered — it was never about amber._
 - **Nothing is irreversible, and nothing warns that it is.** The darkroom world says
   "there is no undo"; this product says the opposite. Variants are test strips.
 - **PDF colors are hex.** The renderer rejects `oklch`. Themes are a hand-maintained
   hex mirror of the app tokens (ADR-003).
 - **Flexbox only** in PDF templates. No CSS grid — Satori-lineage subset.
-- **No `box-shadow` for elevation** anywhere. Depth is amber falloff (DESIGN.md).
+- **Elevation is the two-layer shadow recipe** in DESIGN.md, Ink-tinted, and used only to
+  say "this surface is above that one" — never to make something look important. The old
+  Falloff Rule (no `box-shadow` anywhere, depth as amber falloff) was repealed with the
+  darkroom world in v0.6; it described a dark room lit by one lamp.
+- **Don't revive the darkroom.** Amber, safelight, test strips, stencilled caps,
+  seven-segment numerals and the 4px stamped radius are retired. Reaching for one piece of
+  a replaced world produces a screen belonging to neither.
 - **Never assume a tech career** in copy, fixtures, skill taxonomies or sample content.
 - Secrets come from `dev-env/env-config/.env`. Never hardcode, never echo, never commit.
 

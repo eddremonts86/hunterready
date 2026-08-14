@@ -74,21 +74,31 @@ function Diff({ before, after }: { before: string; after: string }) {
   const { removed, added } = diffWords(before, after)
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-[11px] leading-relaxed text-developer-gray">
+      <p className="text-[13px] leading-relaxed text-ink-soft">
         {removed.map((part, index) => (
           <span
             key={index}
-            className={part.changed ? 'text-silver-gray line-through' : ''}
+            /* The strike carries the meaning, so the colour does not have to — and must not, because
+               this is the candidate's own sentence at 13px and ink-faint is 3.07:1 on white. */
+            className={part.changed ? 'line-through decoration-ink-faint' : ''}
           >
             {part.text}
           </span>
         ))}
       </p>
-      <p className="text-[11px] leading-relaxed text-tray-enamel">
+      {/*
+        The proposal is marked in the accent, not in green. Green would say "approved" about a line
+        nobody has approved yet — the whole point of this panel is that acceptance is a separate act.
+      */}
+      <p className="text-[13px] leading-relaxed text-ink">
         {added.map((part, index) => (
           <span
             key={index}
-            className={part.changed ? 'bg-amber-shadow/40 text-safelight' : ''}
+            className={
+              part.changed
+                ? 'rounded bg-signal-wash px-0.5 font-medium text-signal'
+                : ''
+            }
           >
             {part.text}
           </span>
@@ -140,15 +150,13 @@ export function RewriteReview({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="rim flex items-baseline justify-between bg-darkroom-brown/70 px-3 py-2">
-        <span className="stencil text-[9px] text-safelight/70">
-          Suggestions
-        </span>
-        <span className="flex items-baseline gap-2">
-          <span className="segment text-[18px] text-safelight">
+      <div className="flex items-baseline justify-between gap-3 rounded-field bg-band px-3 py-2">
+        <span className="text-[13px] font-semibold text-ink">Suggestions</span>
+        <span className="flex items-baseline gap-1.5">
+          <span className="tally text-[18px] font-extrabold leading-none text-signal">
             {pending.length}
           </span>
-          <span className="text-[10px] text-developer-gray">
+          <span className="text-meta text-ink-soft">
             {suggestions.length === 0
               ? 'nothing to change'
               : `of ${suggestions.length} left to decide`}
@@ -157,7 +165,7 @@ export function RewriteReview({
       </div>
 
       {suggestions.length === 0 && (
-        <p className="text-[10px] leading-relaxed text-developer-gray">
+        <p className="text-[13px] leading-relaxed text-ink-soft">
           We did not find wording worth changing. That is a good sign — it means
           your bullets already lead with what you did.
         </p>
@@ -168,7 +176,7 @@ export function RewriteReview({
         return (
           <div
             key={keyOf(rewrite)}
-            className="rim flex flex-col gap-3 bg-darkroom-brown/40 p-3"
+            className="flex flex-col gap-3 rounded-choice border border-hairline bg-ground p-3.5"
           >
             <Diff
               before={rewrite.original}
@@ -176,7 +184,7 @@ export function RewriteReview({
             />
 
             {rewrite.rationale !== '' && (
-              <p className="text-[10px] leading-relaxed text-developer-gray">
+              <p className="text-meta leading-relaxed text-ink-soft">
                 {rewrite.rationale}
               </p>
             )}
@@ -187,12 +195,12 @@ export function RewriteReview({
                 are about this sentence and answering one is how the bullet gets its number — from
                 the candidate, which is the entire design.
               */
-              <div className="flex flex-col gap-2 border-l border-l-safelight/40 pl-3">
+              <div className="flex flex-col gap-2.5 border-l-2 border-l-signal-edge pl-3">
                 {rewrite.questions.map((question) => (
-                  <div key={question} className="flex flex-col gap-1">
+                  <div key={question} className="flex flex-col gap-1.5">
                     <label
                       htmlFor={`answer-${keyOf(rewrite)}-${question.slice(0, 12)}`}
-                      className="text-[10px] leading-relaxed text-safelight/80"
+                      className="text-[13px] font-medium leading-relaxed text-ink"
                     >
                       {question}
                     </label>
@@ -206,26 +214,31 @@ export function RewriteReview({
                         })
                       }
                       placeholder="Your answer, in your own words"
-                      className="rim bg-print-black/40 px-2 py-1.5 text-[11px] text-tray-enamel placeholder:text-developer-gray/60"
+                      className="field !py-1.5 !text-[13px]"
                     />
                   </div>
                 ))}
               </div>
             )}
 
-            <div className="flex gap-2">
+            {/*
+              "Use this" is the filled pill and "Keep mine" is the quiet one — the one place in this
+              product where an unequal pair is correct. Both outcomes are fine, but only one of them
+              is an action: keeping your own wording is what happens if you do nothing at all.
+            */}
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 disabled={isAccepted}
                 onClick={() => onAccept(rewrite)}
-                className="rim stencil px-3 py-1.5 text-[9px] text-tray-enamel transition-colors hover:bg-amber-shadow/25 disabled:opacity-40"
+                className="btn btn-primary px-3.5 py-1.5 text-[13px]"
               >
                 {isAccepted ? 'Used' : 'Use this'}
               </button>
               <button
                 type="button"
                 onClick={() => onDismiss(rewrite)}
-                className="rim stencil px-3 py-1.5 text-[9px] text-tray-enamel/60 transition-colors hover:bg-amber-shadow/25 hover:text-tray-enamel"
+                className="btn btn-quiet px-3.5 py-1.5 text-[13px]"
               >
                 Keep mine
               </button>
@@ -245,23 +258,23 @@ export function RewriteReview({
                   .map(([question, text]) => `${question} ${text}`),
               )
             }
-            className="rim stencil px-3 py-2 text-[9px] text-tray-enamel transition-colors hover:bg-amber-shadow/25"
+            className="btn btn-primary px-4 py-2 text-[13px]"
           >
             Try again with what I told you
           </button>
         )}
 
       {pending.length > 1 && (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1.5">
           <button
             type="button"
             onClick={() => pending.forEach(onAccept)}
-            className="rim stencil px-3 py-1.5 text-[9px] text-tray-enamel/70 transition-colors hover:bg-amber-shadow/25 hover:text-tray-enamel"
+            className="btn btn-quiet px-3.5 py-1.5 text-[13px]"
           >
             Use all {pending.length}
           </button>
           {/* Present, never pre-selected (docs/06). The default state is always "decide each one". */}
-          <span className="text-[9px] leading-relaxed text-developer-gray">
+          <span className="text-meta leading-relaxed text-ink-soft">
             You can still change any of them afterwards.
           </span>
         </div>
@@ -271,7 +284,7 @@ export function RewriteReview({
         <button
           type="button"
           onClick={() => setShowAll(!showAll)}
-          className="stencil self-start text-[9px] text-safelight/70 underline underline-offset-4 hover:text-safelight"
+          className="self-start text-meta font-medium text-signal underline decoration-signal/30 underline-offset-4 hover:decoration-signal"
         >
           {showAll ? 'Hide' : 'Show'} the{' '}
           {guarded.length + questionsOnly.length} we did not suggest anything
@@ -284,16 +297,20 @@ export function RewriteReview({
           {guarded.map((rewrite) => (
             <div
               key={keyOf(rewrite)}
-              className="rim flex flex-col gap-1.5 border-l-2 border-l-safelight bg-darkroom-brown/40 p-3"
+              className="flex flex-col gap-2 rounded-choice border border-affirm/25 bg-affirm-wash p-3.5"
             >
-              <p className="text-[11px] leading-relaxed text-tray-enamel">
+              <p className="text-[13px] leading-relaxed text-ink">
                 {rewrite.original}
               </p>
               {/*
                 The one place a user sees the guard work for them. Hiding it would read as "we had no
                 ideas here", which is untrue and much less reassuring than the truth.
+
+                Affirm green, and that is not a mistake: from the candidate's side this is the system
+                protecting them, so it should look like something that went right rather than like a
+                failed suggestion.
               */}
-              <p className="text-[10px] leading-relaxed text-developer-gray">
+              <p className="text-meta leading-relaxed text-ink-soft">
                 We had a suggestion for this one and threw it away: it added{' '}
                 {rewrite.rejected?.map((f) => f.value).join(', ')}, which is not
                 anywhere on your CV. We will not put words in your mouth, so
@@ -305,16 +322,16 @@ export function RewriteReview({
           {questionsOnly.map((rewrite) => (
             <div
               key={keyOf(rewrite)}
-              className="rim flex flex-col gap-1.5 bg-darkroom-brown/40 p-3"
+              className="flex flex-col gap-2 rounded-choice border border-hairline bg-ground p-3.5"
             >
-              <p className="text-[11px] leading-relaxed text-tray-enamel">
+              <p className="text-[13px] leading-relaxed text-ink">
                 {rewrite.original}
               </p>
-              <ul className="flex flex-col gap-1 border-l border-l-safelight/40 pl-3">
+              <ul className="flex flex-col gap-1 border-l-2 border-l-signal-edge pl-3">
                 {rewrite.questions.map((question) => (
                   <li
                     key={question}
-                    className="text-[10px] leading-relaxed text-safelight/80"
+                    className="text-meta leading-relaxed text-ink"
                   >
                     {question}
                   </li>

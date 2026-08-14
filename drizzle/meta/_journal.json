@@ -15,6 +15,13 @@
       "when": 1786693382765,
       "tag": "0001_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786706841680,
+      "tag": "0002_jazzy_layla_miller",
+      "breakpoints": true
     }
   ]
 }

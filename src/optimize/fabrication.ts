@@ -175,10 +175,126 @@ function canonicalNumber(raw: string): string {
  */
 const UNIT_WINDOW = 4
 
+/**
+ * Prepositions that link a counted noun to the figure that counts it: `a team **of** 14`.
+ *
+ * Looking only forwards was wrong, and the tailored summary is what exposed it. All three of the
+ * product's languages routinely put the noun in front of the figure — `a team of 14`,
+ * `un equipo de 14`, `et team på 14` — so a forward-only window compared whatever incidentally
+ * followed. A CV saying "the shift rota for a team of 14 across two loading bays" failed to ground a
+ * summary saying "the shift rota for a team of 14", because `across two loading bays` and
+ * `and holds the forklift` share no word. The candidate's own number came back reported as invented.
+ *
+ * Reading backwards is gated on one of these words sitting immediately before the number, and that
+ * gate is the whole design. A plain two-word backwards window looked equivalent and quietly broke the
+ * guard: it picked up the **verb**, so `Handled a 1,200-strong portfolio` grounded
+ * `Handled 1200 accounts` on the word "handled" — which is exactly the moved-number fabrication this
+ * check exists to catch, and a regression test caught it. A verb is not a unit. Only the noun a
+ * preposition points at is.
+ */
+const UNIT_LINKERS = new Set(
+  [
+    'of', // en
+    'de', // es
+    'på',
+    'af', // da
+  ]
+    // Normalized at construction for the same reason as `UNIT_STOPWORDS`: these are compared against
+    // words that have been through `normalizeWord`, and a list kept in mangled spelling gets it wrong.
+    .map((word) => normalizeWord(word)),
+)
+
+/** How many words before the linker are read as the noun. Two covers `of the team`. */
+const UNIT_WINDOW_BEFORE = 2
+
+/**
+ * Function words that may not serve as a number's unit.
+ *
+ * They are what a backwards window otherwise fills up with, and two numbers both followed by `and the`
+ * would ground each other on nothing. Excluding them makes the check *stricter* than it was in the
+ * forward direction as well, which is the right direction for a guard: `40 and` no longer grounds
+ * `25 and`.
+ */
+const UNIT_STOPWORDS = new Set(
+  [
+    // en
+    'a',
+    'an',
+    'the',
+    'of',
+    'in',
+    'on',
+    'at',
+    'to',
+    'for',
+    'with',
+    'and',
+    'or',
+    'by',
+    'from',
+    'as',
+    'is',
+    'was',
+    'were',
+    'are',
+    'that',
+    'this',
+    'it',
+    'over',
+    'about',
+    'across',
+    'per',
+    // es
+    'de',
+    'del',
+    'la',
+    'el',
+    'los',
+    'las',
+    'un',
+    'una',
+    'en',
+    'con',
+    'por',
+    'para',
+    'y',
+    'que',
+    'su',
+    'sus',
+    // da
+    'og',
+    'til',
+    'med',
+    'af',
+    'som',
+    'på',
+    'den',
+    'det',
+    'en',
+    'et',
+    'ca',
+  ]
+    /**
+     * Normalized at construction, not hand-normalized in the list above.
+     *
+     * The words this is compared against have already been through `normalizeWord`, which strips a
+     * trailing `s`. Writing the entries in their natural spelling and forgetting that cost a real
+     * failure: `across` never matched the `acros` it becomes, so it stayed in the unit of every number
+     * that had it nearby — and grounded "a fleet of 14 across the depot" against "a team of 14 across
+     * two loading bays", which is precisely the moved-number claim this guard exists to reject. A list
+     * that has to be maintained in a mangled spelling will be maintained wrongly.
+     */
+    .map((word) => normalizeWord(word)),
+)
+
 export interface NumberClaim {
   raw: string
   canonical: string
-  /** Normalized words immediately following it — what the number is a count *of*. */
+  /**
+   * Normalized words around it — what the number is a count *of*.
+   *
+   * Both directions, function words removed. See `UNIT_WINDOW_BEFORE` for why it is not forward-only.
+   */
   unit: Array<string>
 }
 
@@ -195,12 +311,38 @@ export interface NumberClaim {
 function numbersIn(text: string): Array<NumberClaim> {
   const found: Array<NumberClaim> = []
 
-  const withUnit = (raw: string, canonical: string, after: string) => {
-    const unit = [...after.matchAll(/[\p{L}][\p{L}'’-]*/gu)]
-      .slice(0, UNIT_WINDOW)
-      .map((m) => normalizeWord(m[0]))
-      .filter((word) => word !== '')
-    found.push({ raw, canonical, unit })
+  const words = (span: string) =>
+    [...span.matchAll(/[\p{L}][\p{L}'’-]*/gu)].map((m) => normalizeWord(m[0]))
+
+  const usable = (list: Array<string>) =>
+    list.filter((word) => word !== '' && !UNIT_STOPWORDS.has(word))
+
+  /**
+   * The noun a `of`-style linker points back at, or nothing.
+   *
+   * Nearest word first. If it is not a linker, this contributes nothing at all — see `UNIT_LINKERS`.
+   */
+  const nounBefore = (before: string): Array<string> => {
+    const reversed = words(before).reverse()
+    const [nearest] = reversed
+    if (nearest === undefined || !UNIT_LINKERS.has(nearest)) return []
+    return usable(reversed.slice(1, 1 + UNIT_WINDOW_BEFORE))
+  }
+
+  const withUnit = (
+    raw: string,
+    canonical: string,
+    before: string,
+    after: string,
+  ) => {
+    found.push({
+      raw,
+      canonical,
+      unit: [
+        ...nounBefore(before),
+        ...usable(words(after).slice(0, UNIT_WINDOW)),
+      ],
+    })
   }
 
   // Digit-led: 40, 1,200, 1.2k, 25%, £2M, 30-person. `\b` after a letter scale, and only a word
@@ -213,6 +355,7 @@ function numbersIn(text: string): Array<NumberClaim> {
     withUnit(
       raw,
       canonicalNumber(raw),
+      text.slice(0, match.index),
       text.slice(match.index + match[0].length),
     )
   }
@@ -224,6 +367,7 @@ function numbersIn(text: string): Array<NumberClaim> {
       withUnit(
         match[0],
         NUMBER_WORDS[word],
+        text.slice(0, match.index),
         text.slice(match.index + match[0].length),
       )
     }

@@ -23,6 +23,14 @@ const STRING_ALLOWLIST = new Set([
   'promptVersion',
   'provider',
   'level',
+  /**
+   * A closed vocabulary — `suggested` / `fabricated` / `unavailable`.
+   *
+   * Named with its suffix on purpose. `outcome` alone would be the kind of generic key somebody later
+   * hangs a message or a filename on, and this allowlist is only as good as the assumption that every
+   * name on it can carry one of a handful of known words and nothing else.
+   */
+  'summaryOutcome',
 ])
 
 function scrub(fields: Record<string, Primitive>): Record<string, Primitive> {

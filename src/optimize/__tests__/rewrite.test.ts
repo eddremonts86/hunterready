@@ -85,6 +85,35 @@ afterEach(() => {
   vi.resetModules()
 })
 
+describe('a wordy explanation does not cost a good suggestion', () => {
+  it('clamps an over-long rationale and question rather than rejecting the rewrite', async () => {
+    /**
+     * The same defect the tailored summary hit: a tight cap on explanatory text rejects the entire
+     * payload, so a suggestion that already passed the fabrication guard is lost because the *reason*
+     * for it ran long — and it surfaces as "unavailable", which reads as a broken feature. Neither
+     * field ever reaches the CV.
+     */
+    const { rewriteBullets } = await withModelReturning({
+      suggestion: 'Managed a book of 40 mid-market retail accounts.',
+      rationale: `Managed is stronger than "responsible for". ${'Going on about it. '.repeat(40)}`,
+      questions: [`How many accounts did you look after? ${'x'.repeat(400)}`],
+      changed: ['verb'],
+    })
+
+    const result = await rewriteBullets({ resume: RESUME, ...FIRST })
+    const [rewrite] = result.rewrites
+
+    expect(rewrite.outcome).toBe('suggested')
+    expect(rewrite.suggestion).toBe(
+      'Managed a book of 40 mid-market retail accounts.',
+    )
+    expect(rewrite.rationale.length).toBeLessThanOrEqual(401)
+    expect(rewrite.rationale).toMatch(/^Managed is stronger/)
+    expect(rewrite.questions[0].length).toBeLessThanOrEqual(241)
+    expect(rewrite.questions[0]).toMatch(/^How many accounts/)
+  })
+})
+
 describe('an honest suggestion reaches the candidate', () => {
   it('returns it with its rationale and the fields the UI needs', async () => {
     const { rewriteBullets } = await withModelReturning({

@@ -175,7 +175,7 @@ changed. See ADR-016's rule: the failure you have observed beats the one you ima
   re-run pays for every bullet again.
 - Model routing per docs/06: extraction and rewriting currently share one provider.
 
-## v0.4 — "It targets a job" · mostly shipped
+## v0.4 — "It targets a job" · shipped
 
 - ✅ Requirement matching with a **three-way** verdict: matched / weak / missing. `weak` is the one
   that earns its keep — a requirement present only in the skills list, or only in a job that ended
@@ -187,43 +187,188 @@ changed. See ADR-016's rule: the failure you have observed beats the one you ima
   moves are reorderings, because a reordering cannot make a CV say something untrue.
 - ✅ Transparent rule-based score with a fix checklist. docs/06's weights unchanged; every point
   traces to a rule you can read.
-- ⬜ Requirement extraction _from pasted prose_ still takes a structured `JobRequirements`. The
-  matching, scoring and tailoring are done and tested; what is missing is the model call that turns
-  an advert into that shape.
-- ⬜ Tailored `basics.summary` from existing material.
+- ✅ Requirement extraction **from pasted prose** (`src/optimize/advert.ts`), with the guard pointed the
+  other way: a model that has read a million adverts knows they usually want "excellent communication
+  skills" and will supply that whether or not this one asked. Every requirement is checked against the
+  advert text, one that is not there is dropped, and the user is shown that it was invented. There is a
+  rule reader too (EN/ES/DA headings), so declining the third-party transfer costs accuracy and not the
+  feature.
+- ✅ Tailored `basics.summary` from existing material (`src/optimize/summary.ts`), carrying **two**
+  guards. `findFabrications` catches invented numbers and names; a second check catches the class the
+  first cannot see — `"Experienced in inventory control"` invents no number and no proper noun, and is
+  a lie if the CV never mentions inventory control. The gap report already knows which requirements have
+  nothing behind them, so the forbidden list is not guesswork.
 
-## v0.5 — "It remembers" · blocked, see ADR-018
+### The thing that was actually wrong with v0.4
 
-The blocker is not the missing Convex deployment. **Shipping persistence makes `/privacy` false** —
-it currently says a CV is never written to a disk or a database, and docs/07 requires that copy to
-change in the same PR. Trading the strongest claim this product makes for the ability to remember a
-CV between visits is Edd's decision, not an implementation detail.
+All of the above was written, tested, and **imported by nothing but its own unit tests**. `jd.ts`,
+`score.ts` and `variant-diff.ts` had no path from the interface: there was no way for a user to paste an
+advert, so a feature described here as "mostly shipped" could not be reached at all. It ships now as a
+branch off the check step — not a fourth step everybody walks through, because plenty of people want a
+cleanly typeset PDF and nothing else (ADR-011).
 
-- ✅ Version history and diffs between variants (`src/optimize/variant-diff.ts`) — pure functions of
-  two documents, so they needed no storage and are ready the moment storage exists.
-- ⬜ Accounts, saved CVs, application tracker — needs a Convex deployment and its credentials.
-- ⬜ Encryption at rest — needs a key-management decision. "Encrypted" with the key in the same env
-  file is a compliance sentence, not a protection.
-- ⬜ 90-day retention default, export, delete-everything, audit log.
+Matching, scoring and tailoring run **in the browser**, because they are pure functions of two plain
+objects. That is a product decision, not a technical one: the requirement list is editable, so every
+edit re-matches and re-scores, and doing that on the server would put a network round trip behind a
+checkbox.
 
-## v0.5 — "It remembers" (≈2 weeks)
+### What the summary guard is worth, measured
 
-The first release with a real backend. Persistence and compliance ship together.
+Fifteen runs against the real model, same CV and advert, three prompt versions:
 
-- Accounts (Convex, matching the existing house stack)
-- Saved base CV + one variant per application, with a light application tracker
-- Version history and diffs between variants
-- GDPR controls: export, delete-everything, 90-day retention default
-- Encryption at rest, audit log of record access
+| prompt                                               | suggested | unsupported claims shown |
+| ---------------------------------------------------- | --------- | ------------------------ |
+| summary-v1                                           | 3 / 5     | **0**                    |
+| summary-v2 — keep the CV's own words around a figure | 2 / 5     | **0**                    |
+| summary-v3 — v2 plus "do not count things"           | 3 / 5     | **0**                    |
 
-## v1.0 — "It's a product" (≈3 weeks)
+The right-hand column is the one that matters and it never moved. Every refusal was the guard catching
+an invented count — the model adding up a career it was asked only to compress, "across two hospitals"
+from a CV that names two employers — and in every case the candidate kept their own summary.
 
-- **DOCX export.** Many ATS portals require or prefer `.docx`. A PDF-only tool has
-  a real hole here; this is the highest-value non-obvious item on the roadmap.
-- Cover letter generation from the CV + JD (same anti-fabrication rules)
-- Multi-language output: EN / ES / DA
-- Public share link with an expiry
-- Landing page, pricing, payments
+v2 is recorded even though it measured worse, because the reason is the lesson: it was aimed at a
+**false** positive (the CV said "precepted 14 newly graduated nurses", the model wrote "14 new
+graduates"), and fixing the rarer failure did nothing for the common one. v3 found the common one by
+reading the rejections instead of reasoning about them, and the rule it needed had existed in
+`prompt.ts` since rewrite-v2 and simply had not been carried across. ADR-016, again.
+
+### Two defects this work surfaced elsewhere
+
+- **A tight `max()` on explanatory text rejected the whole payload.** The first genuinely good tailored
+  summary was thrown away because its _rationale_ ran forty characters over a 300-character cap, and the
+  candidate was told the feature was unavailable. `rewrite.ts` had the identical latent defect in
+  production. Neither field ever becomes part of the CV, so a limit on it should clamp, not reject.
+- **The fabrication guard read a number's unit forwards only.** All three of the product's languages
+  write `a team of 14`, so the counted noun is frequently _behind_ the figure — and a recomposed sentence
+  then failed to ground the candidate's own number. Fixed by reading backwards through a linking
+  preposition, which is narrower than it sounds: a plain backwards window picked up the verb and let
+  "Handled a 1,200-strong portfolio" ground "Handled 1200 accounts", the exact fabrication the check
+  exists to catch.
+
+## v0.5 — "It remembers" · shipped
+
+Two contradictory `v0.5` sections used to sit here: one saying the work was blocked on a Convex
+deployment, one planning it on Convex. Both were stale. ADR-019 replaced Convex with Drizzle + Postgres
+(the house stack — there were never any Convex credentials), and ADR-019/ADR-020 record Edd's
+authorisation on 2026-08-14 to store CVs and delete them after 90 days of inactivity.
+
+- ✅ **Accounts.** Better Auth 1.6 with the Drizzle adapter, matching `builderhunt` (ADR-020). One
+  identity table: `auth_users` _is_ the user table, because two would mean two places to honour an
+  erasure request.
+- ✅ **Saved base CV, and one variant per application**, with the tracker. `/api/library` and
+  `/api/application`.
+- ✅ **Version history and diffs between variants** (`src/optimize/variant-diff.ts`) — pure functions of
+  two documents, so they needed no storage and were written before it existed.
+- ✅ **GDPR controls**: export, delete-everything, 90-day retention from `lastSeenAt`, and an access log
+  that survives erasure with its subject nulled.
+- ⬜ **Encryption at rest.** Still open, and still for the reason ADR-018 gave: "encrypted" with the key
+  in the same env file beside the data is a compliance sentence, not a protection. It needs a
+  key-management decision, not code.
+
+### What was actually wrong with v0.5
+
+The tables, the repository, the auth configuration, the GDPR endpoints and the retention sweep were all
+built and all verified against a real Postgres. **None of it was reachable.** `saveResume`,
+`listResumes`, `saveVariant` and `listVariants` were imported by nothing but their own tests, and
+`SignIn` was rendered on no screen — so no session could be created, so nothing was ever saved, so
+`/api/account/export` and `/api/account/delete` answered `no_account` to every visitor.
+
+That had a consequence beyond a missing feature. `/privacy` said "if you sign in so we can remember your
+CV between visits, then we do store it", and nothing stored anything. A privacy notice that describes
+handling the code does not perform is wrong even when it **over**-discloses, because it is the document
+somebody reads to decide whether to trust us. Wiring the route is what made the sentence true.
+
+This is the third release in a row where a complete, tested layer shipped with no path from the
+interface — v0.3's `variant-diff`, v0.4's whole targeting feature, and now v0.5's persistence. The
+pattern is worth naming: **a feature is not shipped until a person can reach it**, and a unit test
+proves the opposite of that convincingly enough to hide it. The check that would have caught all three
+is cheap — grep for a module's importers outside `__tests__` — and it is now the first thing done when a
+version is called complete.
+
+### Verified with real data, through the interface
+
+Not by injecting rows. A signed-in account created from the sign-in card, then: one CV saved (one row,
+one `resume.created` audit row), one application saved against a real advert with the employer and the
+gap report attached, marked as sent, exported (1 CV, 1 variant, 3 audit rows), and deleted — **zero rows
+in all five tables**, with the audit log surviving and its subject nulled.
+
+One defect found by doing it: saving an application created a _second_ copy of the base CV, because the
+row id lived inside the library component and never reached `/api/application`. Five applications would
+have left six copies of one CV in somebody's library.
+
+## v0.6 — "It exports what portals want" · shipped
+
+**DOCX export** (`src/render/docx/`). Same `Resume`, same ATS ruleset, round-trip verified with mammoth
+the way the PDF path is verified with unpdf — the guarantee is the test, not the format. Hand-written
+OOXML and ZIP rather than a document library, because the guarantee turns on what is _absent_ and a
+library that helpfully emits a table would break it invisibly. No template or theme choice: there is one
+ATS-safe Word layout, and offering a design in the format uploaded to the crudest portals would be
+selling a decision that cannot be honoured. Details and the three defects found in
+[05-pdf-rendering.md](05-pdf-rendering.md#docx-export--v06).
+
+## v0.7 — "It writes the letter" · shipped
+
+Cover letter generation from the CV and the advert (`src/optimize/cover-letter.ts`), reusing v0.4's
+requirements and carrying **three** guards where the summary needed two.
+
+The third is the one specific to the form, and the reason it exists is worth stating: the classic
+cover-letter sentence is flattery — _"I have long admired your work in paediatric oncology"_ — which
+invents nothing about the candidate, passes a CV-only fabrication check cleanly, and is a claim about the
+world they cannot defend. An interviewer asking "what do you know about our paediatric unit?" is asking
+about a sentence a machine wrote.
+
+It needed no new checker. `buildGrounding(resume, advert)` takes an `extraSource`, so the advert joins the
+grounding set: the letter may name the hospital _because the advert names it_, and may not name a
+specialty, an award or a value the advert never mentioned. That is the right grounding set for a letter
+and the wrong one for a CV bullet.
+
+A refusal returns nothing rather than a fallback, because unlike a rewrite there is no original to keep —
+and it says what it caught. The greeting and sign-off are assembled in code, not by the model: a model
+asked for a greeting invents a surname, and "Dear Ms Jensen" to whoever actually opens the envelope is a
+small disaster. The draft is editable and the edit is what downloads, as `.docx` through the v0.6 writer.
+
+**Verified against the real model**: a letter that named the employer from the advert, claimed only the two
+evidenced requirements, and left the missing one alone. Its own rationale showed the retry loop working —
+attempt one used `ICU`, which is in neither document, and attempt two wrote it out.
+
+## v0.8 — "It speaks the language"
+
+Multi-language output: EN / ES / DA. The _document_, not just the chrome — section headings, date
+formats and regional conventions per locale. Latin-Extended coverage is already proven in the fonts.
+
+## v0.9 — "It can be shown" · shipped
+
+A public share link (`shares` table, `/api/share`, `/api/shared`, `/s/$token`) — the only unauthenticated
+read of a CV in this product, so its limits are structural rather than conventional:
+
+- **`expiresAt` is `notNull`.** There is no code path that creates a share without an expiry. Fourteen
+  days by default, ninety at most, and a request for longer is _clamped_ rather than refused — the
+  pressure on this parameter is always toward longer, so the ceiling lives in the store.
+- **The token is the primary key**, a `gen_random_uuid()`. The URL is the credential; a sequential id
+  would have made every CV ever shared readable by counting.
+- **Revoking sets `revokedAt` rather than deleting**, so the access log can still explain what a visitor
+  saw last week — and it takes effect on the next read.
+- **Unknown, revoked, expired and deleted are one answer.** Byte-identical 404s, because telling a
+  visitor that a token _was_ valid confirms the CV exists to somebody holding a guessed URL.
+- **The document is referenced, not snapshotted.** Correcting the CV fixes what a live link shows;
+  a frozen copy per link would leave a typo in circulation with no way to withdraw it.
+- **Views are counted, never logged per visit.** One audit row per view against the _owner_, flagged
+  `by_other`. No visitor identity exists anywhere — that would be a record of people reading a CV.
+- `noindex, nofollow, noarchive` on both the API and the page.
+
+Sharing requires the CV to be saved first and **says so** rather than saving silently: publishing an
+employment history is not a side effect of clicking a button. Share links are in the Article 15 export,
+cascade away with the account, and the retention sweep drops rows 28 days past their expiry.
+
+**Verified end to end** against real Postgres: created from the UI, read with no cookies at all as a
+recruiter would, no owner or account or session field in the response, an unauthenticated `DELETE`
+refused while the link still worked, revoked from the owner's screen, and then a 404 byte-identical to a
+token that never existed. Eighteen repository tests cover expiry, revocation, cross-account isolation and
+erasure.
+
+## v1.0 — "It's a product"
+
+- Pricing and payments
 - Non-Latin script font coverage
 
 ## Deliberately parked

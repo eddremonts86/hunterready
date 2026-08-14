@@ -1,16 +1,23 @@
 /**
- * POST a Resume, get a PDF back. GET renders a fixture, so the preview has something to
+ * POST a Resume, get a document back. GET renders a fixture, so the preview has something to
  * show before ingestion exists (Blocks 6–9).
  *
  * `?template=` and `?theme=` are validated against the registries rather than trusted:
  * an unknown id falls back to the default instead of throwing, because a bad query string
  * should never cost a user their document.
+ *
+ * `?format=docx` returns Word instead of PDF — v0.6. It shares this route rather than taking its own
+ * because the *request* is identical: the same resume, the same download semantics, the same rule that a
+ * bad parameter degrades rather than fails. Only the encoder differs, and `template`/`theme` are
+ * deliberately ignored for `.docx`: there is one ATS-safe Word layout and offering a choice of designs
+ * in the format uploaded to the crudest portals would be selling a decision that cannot be honoured.
  */
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createFileRoute } from '@tanstack/react-router'
 import { Resume } from '@/schema/resume'
 import { renderResume } from '@/render/render'
+import { docxFilename, renderDocx } from '@/render/docx/docx'
 import { isThemeId } from '@/render/themes'
 import type { ThemeId } from '@/render/themes'
 import { isTemplateId } from '@/render/templates/registry'
@@ -48,6 +55,29 @@ function pdfResponse(bytes: Uint8Array, filename: string, download: boolean) {
   })
 }
 
+/**
+ * Always an attachment, unlike the PDF.
+ *
+ * A browser cannot display a `.docx`, so `inline` means "download it anyway, with a worse filename" in
+ * every browser that has been tried. Saying `attachment` outright is the honest header for a format
+ * whose only destination is the disk.
+ */
+function docxResponse(bytes: Uint8Array, filename: string) {
+  return new Response(bytes as unknown as BodyInit, {
+    headers: {
+      'content-type':
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'content-disposition': `attachment; filename="${filename}"`,
+      'cache-control': 'no-store',
+    },
+  })
+}
+
+/** Unknown values fall back to PDF, for the same reason an unknown template does. */
+function wantsDocx(url: URL): boolean {
+  return url.searchParams.get('format') === 'docx'
+}
+
 export const Route = createFileRoute('/api/render')({
   server: {
     handlers: {
@@ -63,6 +93,11 @@ export const Route = createFileRoute('/api/render')({
           'utf8',
         )
         const resume = Resume.parse(JSON.parse(raw))
+
+        if (wantsDocx(url)) {
+          return docxResponse(renderDocx(resume), docxFilename(resume))
+        }
+
         const { bytes, filename } = await renderResume(
           resume,
           readSelection(url),
@@ -100,6 +135,13 @@ export const Route = createFileRoute('/api/render')({
           return Response.json(
             { error: 'invalid_resume', issues: parsed.error.issues },
             { status: 422 },
+          )
+        }
+
+        if (wantsDocx(url)) {
+          return docxResponse(
+            renderDocx(parsed.data),
+            docxFilename(parsed.data),
           )
         }
 

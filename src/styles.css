@@ -1,42 +1,105 @@
 @import 'tailwindcss';
 
-/* App chrome faces — bundled, open-licensed, and NOT on DESIGN.md's banned-defaults list.
-   Courier Prime is a real typewriter face (the exposure-notes voice), Archivo Narrow is the
-   DIN-adjacent condensed of a stencilled tray label, Caveat Brush is the grease pencil. */
-@import '@fontsource/courier-prime/latin-400.css';
-@import '@fontsource/courier-prime/latin-700.css';
-@import '@fontsource/archivo-narrow/latin-400.css';
-@import '@fontsource/archivo-narrow/latin-700.css';
-@import '@fontsource/caveat-brush/latin-400.css';
+/**
+ * Figtree Variable — one family, the whole interface, weights 400–800.
+ *
+ * The reference this world was pinned to uses a single geometric-humanist sans and gets its
+ * hierarchy from weight and size rather than from a second face. That is the right call here for a
+ * reason beyond taste: four faces (DESIGN.md's previous world) meant four things to keep in sync and
+ * four chances for a heading to read as decoration. One face with a real weight range says the same
+ * things with less to go wrong.
+ *
+ * Variable, so 400/500/600/800 cost one file rather than four. Latin-ext is required, not optional:
+ * Spanish and Danish are planned output languages, so æ ø å ñ í é have to render in the chrome too.
+ *
+ * The document faces (Source Sans 3, Source Serif 4) are registered separately by the renderer and
+ * are deliberately NOT this one — see The Print Is Not Ours rule in DESIGN.md.
+ */
+@import '@fontsource-variable/figtree/index.css';
 
 /**
- * The Print Room — app chrome tokens (DESIGN.md).
+ * PLAIN SIGHT — app chrome tokens (DESIGN.md).
  *
- * Two light states with a hard edge between them. Safelight amber for working, white light
- * for inspecting a finished print. Amber never appears inside a document.
+ * White ground, one blue, deep navy ink. Nothing on screen competes with the document, because the
+ * document is the only thing here that belongs to the user. The interface's job is to be so plainly
+ * legible that it disappears, which is also the product's promise: nothing about how your CV will be
+ * read is hidden from you.
  *
- * Fonts resolved in Block 3b, all open-licensed (OFL) and bundled into the repo — nothing
- * here depends on the host having a font installed.
+ * Every color below was contrast-checked against the ground it is used on; the ratio is in the
+ * comment because a token whose contrast nobody measured is a token that will fail an audit later.
  */
 @theme {
-  /* Safelight — the working room */
-  --color-safelight: #ffb100;
-  --color-amber-shadow: #b36a00;
-  --color-darkroom-brown: #2a1b0b;
-  --color-print-black: #0d0d0d;
+  /* ── Ground ─────────────────────────────────────────────────────────── */
+  --color-ground: #ffffff;
+  /* Bands, the segmented-control track, and the surround the paper sheet sits on. Cool, not warm:
+     a warm gray behind a white sheet makes the sheet look blue-tinted. */
+  --color-band: #f4f6fa;
+  --color-hairline: #e2e7f0;
+  --color-hairline-strong: #cfd6e4;
 
-  /* White light — the inspection surface */
-  --color-tray-enamel: #f3e6c4;
-  --color-silver-gray: #bdbdbd;
-  --color-developer-gray: #6e6e6e;
+  /* ── Ink ────────────────────────────────────────────────────────────── */
+  /* 17.3:1 on white. Headings and body both — there is no lighter "body gray" here, because
+     body text set in a mid gray is the single most common way a clean layout becomes unreadable. */
+  --color-ink: #101a33;
+  /* 5.96:1 on white. Secondary copy, hints, captions — passes AA at any size. */
+  --color-ink-soft: #5a6478;
+  /* 3.07:1 on white. STRUCTURAL AND LARGE-FORMAT ONLY: rules, placeholders, disabled labels,
+     the ≥18.66px meta line. Never normal-size body text — it fails AA and that is not negotiable. */
+  --color-ink-faint: #8a93a6;
 
-  /* Resolved in Block 3b — bundled, no host dependency. A true seven-segment face (DSEG7)
-     is a v0.2 upgrade; until then the numerals are Courier Prime with tabular figures, which
-     keeps the counter honest without shipping a sixth family for eleven glyphs. */
-  --font-label: 'Archivo Narrow', ui-sans-serif, sans-serif;
-  --font-note: 'Courier Prime', ui-monospace, monospace;
-  --font-display: 'Caveat Brush', ui-serif, cursive;
-  --font-segment: 'Courier Prime', ui-monospace, monospace;
+  /* ── The one accent ─────────────────────────────────────────────────── */
+  /* 7.84:1 on white, and 7.84:1 for white text on the fill — so it is legal as a link colour AND
+     as a filled button, which is why it can carry the whole interface alone. */
+  --color-signal: #1b3bd8;
+  --color-signal-deep: #142ea8; /* 10.6:1 — hover and pressed */
+  --color-signal-wash: #eef2ff; /* chosen surface */
+  --color-signal-edge: #c3d0fb; /* chosen border */
+
+  /* ── Semantic, and each one earns its place ─────────────────────────── */
+  /* Verified is a real product claim, not decoration: a template that passes the ATS round-trip
+     test is measurably different from one that does not, and the user is entitled to see which. */
+  --color-affirm: #0c7a52; /* 5.42:1 */
+  --color-affirm-wash: #e8f6ef;
+  --color-caution: #9a5b12; /* 5.34:1 — "worth knowing", never a failure */
+  --color-caution-wash: #fdf4e6;
+  --color-alert: #c02424; /* 5.96:1 */
+  --color-alert-wash: #fdeded;
+
+  /* ── Type ───────────────────────────────────────────────────────────── */
+  --font-sans:
+    'Figtree Variable', 'Figtree', ui-sans-serif, system-ui, -apple-system,
+    'Segoe UI', sans-serif;
+
+  /* Display sizes are fluid because the hero headline is the one element that must look
+     deliberate at 375px and at 1600px, and a fixed size can only be right at one of them. */
+  /* Capped at 3.5rem, not the 4.25rem this started at. Measured in the browser: at 68px the hero
+     sentence broke into four lines in its column, orphaning "way" and "it." on lines of their own.
+     A headline that big is only big in a screenshot — on the page it just wraps worse. */
+  --text-hero: clamp(2.25rem, 4.2vw, 3.5rem);
+  --text-hero--line-height: 1.06;
+  --text-hero--letter-spacing: -0.032em;
+  --text-hero--font-weight: 800;
+
+  --text-display: clamp(1.75rem, 3.4vw, 2.375rem);
+  --text-display--line-height: 1.12;
+  --text-display--letter-spacing: -0.024em;
+  --text-display--font-weight: 800;
+
+  --text-title: 1.1875rem;
+  --text-title--line-height: 1.3;
+  --text-title--letter-spacing: -0.014em;
+  --text-title--font-weight: 700;
+
+  --text-lead: 1.0625rem;
+  --text-lead--line-height: 1.6;
+
+  --text-meta: 0.8125rem;
+  --text-meta--line-height: 1.55;
+
+  /* ── Radii ──────────────────────────────────────────────────────────── */
+  --radius-card: 1rem;
+  --radius-choice: 0.875rem;
+  --radius-field: 0.75rem;
 }
 
 * {
@@ -51,49 +114,338 @@ body,
 
 body {
   margin: 0;
-  background: var(--color-print-black);
-  color: var(--color-tray-enamel);
-  font-family: var(--font-note);
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.6;
+  /* The reference's headings are tightly set and optically even; without kerning and ligatures on,
+     a geometric sans at 68px shows visible gaps around A/V/W. */
+  font-kerning: normal;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  /**
+   * Elevation, and the deliberate reversal of the previous world's hardest layout rule.
+   *
+   * "Plain Sight" replaces "The Print Room", which forbade box-shadow outright and expressed depth
+   * as amber falloff — correct for a dark room lit by one lamp, meaningless on a white ground where
+   * there is no lamp. Here a card sits forward the way paper on a desk does: a hairline for the
+   * edge, and a wide, very low-opacity shadow for the contact. Two layers, both tinted with the ink
+   * rather than black, because a neutral-black shadow on a cool white reads as dirt.
+   */
+  .lift {
+    box-shadow:
+      0 1px 2px rgb(16 26 51 / 4%),
+      0 10px 28px -14px rgb(16 26 51 / 12%);
+  }
+
+  .card {
+    background: var(--color-ground);
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-card);
+  }
+
+  /**
+   * The signature form: a fully-rounded control. The previous world used a 4px stamped-metal radius
+   * and stated that "nothing here is pill-shaped"; this one inverts it. The pill is the reference's
+   * most recognisable geometry and it carries a real affordance — a full-width pill reads as one
+   * decisive action in a way a rectangle of the same size does not.
+   */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    font-weight: 600;
+    letter-spacing: -0.008em;
+    white-space: nowrap;
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease,
+      transform 140ms ease;
+  }
+
+  .btn:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background: var(--color-signal);
+    color: #ffffff;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: var(--color-signal-deep);
+  }
+
+  .btn-quiet {
+    background: var(--color-ground);
+    color: var(--color-ink);
+    border: 1px solid var(--color-hairline-strong);
+  }
+
+  .btn-quiet:hover:not(:disabled) {
+    background: var(--color-band);
+    border-color: var(--color-ink-faint);
+  }
+
+  /**
+   * The choice card. One tap target per answer, title over hint, and a chosen state that changes
+   * surface, border AND text colour at once — three signals rather than one, because on a phone in
+   * daylight a border alone is invisible and a colour alone fails for a colour-blind user. The check
+   * mark is the fourth, and it is the only one that survives a greyscale print.
+   */
+  .choice {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    text-align: left;
+    background: var(--color-ground);
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-choice);
+    color: var(--color-ink);
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+
+  .choice:hover:not(:disabled) {
+    border-color: var(--color-hairline-strong);
+    box-shadow:
+      0 1px 2px rgb(16 26 51 / 4%),
+      0 10px 28px -14px rgb(16 26 51 / 12%);
+  }
+
+  .choice[aria-pressed='true'],
+  .choice[data-on='true'] {
+    background: var(--color-signal-wash);
+    border-color: var(--color-signal-edge);
+    color: var(--color-signal);
+  }
+
+  /** Inputs. A 3px wash ring instead of a heavy border on focus: visible, and it does not shift layout. */
+  .field {
+    width: 100%;
+    background: var(--color-ground);
+    border: 1px solid var(--color-hairline-strong);
+    border-radius: var(--radius-field);
+    padding: 0.625rem 0.75rem;
+    font: inherit;
+    font-size: 0.9375rem;
+    color: var(--color-ink);
+    outline: none;
+    transition:
+      border-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+
+  /* ink-soft, not ink-faint: several placeholders here are instructions ("Your answer, in your own
+     words") rather than a repeat of the label, and an instruction at 3:1 is one nobody reads. */
+  .field::placeholder {
+    color: var(--color-ink-soft);
+  }
+
+  .field:focus {
+    border-color: var(--color-signal);
+    box-shadow: 0 0 0 3px var(--color-signal-wash);
+  }
+
+  /** A field the extraction was unsure about. Caution, never alert: we are asking, not accusing. */
+  .field-flagged {
+    border-color: var(--color-caution);
+    background: var(--color-caution-wash);
+  }
+
+  .field-flagged:focus {
+    border-color: var(--color-caution);
+    box-shadow: 0 0 0 3px rgb(154 91 18 / 12%);
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-signal-edge);
+    background: var(--color-signal-wash);
+    color: var(--color-signal);
+    padding: 0.3125rem 0.75rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+
+  /** The step counter and any tally. Tabular, so a changing number does not shift the layout. */
+  .tally {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /**
+   * ── Motion ──────────────────────────────────────────────────────────────────────────────────
+   *
+   * One easing curve for everything that enters: a strong ease-out, so movement arrives quickly and
+   * settles rather than drifting in. Anything that eases *in* on entry reads as slow.
+   *
+   * Every animation here is decorative in the strict sense — remove all of it and the page still
+   * says the same things in the same order. That is the test, and it is what makes the
+   * reduced-motion block at the bottom of this file safe rather than a degradation.
+   */
+  .rise {
+    animation: rise 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /** Scroll reveal. Starts hidden; `data-in` is set by the observer in `components/reveal.tsx`. */
+  .reveal {
+    opacity: 0;
+    transform: translateY(22px);
+    transition:
+      opacity 700ms cubic-bezier(0.16, 1, 0.3, 1),
+      transform 700ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .reveal[data-in='true'] {
+    opacity: 1;
+    transform: none;
+  }
+
+  /**
+   * A card that answers the cursor. 2px of travel and a deeper contact shadow — the same physical
+   * story as `.lift`, just closer to the light. Anything more than a few pixels turns a page of
+   * cards into a trampoline.
+   */
+  .hover-lift {
+    transition:
+      transform 240ms cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 240ms ease,
+      border-color 240ms ease;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    border-color: var(--color-hairline-strong);
+    box-shadow:
+      0 2px 4px rgb(16 26 51 / 5%),
+      0 18px 40px -18px rgb(16 26 51 / 18%);
+  }
+
+  /**
+   * The atmosphere behind the hero: two large, heavily blurred washes of the accent that drift very
+   * slowly. The one piece of pure decoration in the system.
+   *
+   * It reads differently by viewport, and that is measured rather than assumed: on a desktop it is a
+   * faint tint in the upper right, while on a 375px screen a 38rem blob covers most of the hero and
+   * reads as a soft blue wash. Both are wanted — the narrow case is where the page has the least
+   * else going on. It stays under 9% opacity so it never competes with the ink, and
+   * `pointer-events: none` because it must never be in the way of what it sits behind.
+   */
+  .aurora {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .aurora::before,
+  .aurora::after {
+    content: '';
+    position: absolute;
+    border-radius: 999px;
+    filter: blur(80px);
+  }
+
+  .aurora::before {
+    width: 38rem;
+    height: 38rem;
+    top: -14rem;
+    right: -10rem;
+    background: rgb(27 59 216 / 9%);
+    animation: drift 22s ease-in-out infinite alternate;
+  }
+
+  .aurora::after {
+    width: 26rem;
+    height: 26rem;
+    bottom: -12rem;
+    left: -8rem;
+    background: rgb(27 59 216 / 6%);
+    animation: drift 26s ease-in-out infinite alternate-reverse;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-3rem, 2.5rem, 0) scale(1.12);
+  }
 }
 
 /**
- * The tray rim: a 1px inner line inset from the edge, the way an enamel tray's lip reads.
- * DESIGN.md calls this the system's most recognizable geometry with all content removed.
+ * An indeterminate bar, for work whose length we genuinely do not know.
+ *
+ * `/api/ingest` is a single request that reports nothing until it answers, so a percentage on the
+ * reading screen would be an animation impersonating telemetry. A segment that travels says "working"
+ * without claiming to know how much is left, which is the truth.
  */
-.rim {
-  box-shadow: inset 0 0 0 1px var(--color-amber-shadow);
+.indeterminate {
+  animation: indeterminate 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+@keyframes indeterminate {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(340%);
+  }
 }
 
 /**
- * Depth is light, never shadow (The Falloff Rule). A surface sits forward by catching more
- * amber, not by casting a shadow — so there is no box-shadow token in this system, and the
- * one on `.rim` above is a border, not a lift.
+ * Focus, visibly.
+ *
+ * The reference shows no focus ring in any screenshot, which is a screenshot of a mouse session and
+ * not a specification. Keyboard users exist and this flow is a form; a ring is not optional. It is
+ * :focus-visible so it never appears on a mouse click.
  */
-.bench {
-  background: var(--color-darkroom-brown);
-  background-image: radial-gradient(
-    120% 100% at 50% 0%,
-    color-mix(in srgb, var(--color-safelight) 9%, transparent) 0%,
-    transparent 60%
-  );
+:focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
-/** Wet sheen — reserved for the single active surface. Two at once reads as a bug. */
-.wet {
-  border-top: 1px solid
-    color-mix(in srgb, var(--color-safelight) 45%, transparent);
-}
-
-/** Labels are stenciled onto trays and bottles: caps, tracked, small. */
-.stencil {
-  font-family: var(--font-label);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-}
-
-/** Elapsed and counted things only (The Seven-Segment Rule). */
-.segment {
-  font-family: var(--font-segment);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.06em;
+/** Someone who has asked the OS for less motion is not asking to be surprised by our transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

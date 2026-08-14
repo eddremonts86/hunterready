@@ -597,6 +597,81 @@ when a table name is wrong.
 
 ---
 
+## ADR-021 — Encryption at rest, with its limit stated rather than implied
+
+**2026-08-14 · Accepted · closes the last open item of ADR-018**
+
+ADR-018 refused to ship this, and the refusal was correct at the time: _"encrypted with the key in the
+same env file beside the data is a compliance sentence, not a protection."_ Edd accepted the trade on
+2026-08-14 with that sentence in front of him, so what follows is the honest accounting of it.
+
+### What it protects
+
+- a stolen disk, or a leaked volume snapshot
+- a backup copied off the host, or a `pg_dump` that ends up somewhere it should not
+- anybody with read access to the database but not to the application's environment — which includes
+  the `hunterready_readonly` role this schema already creates
+
+### What it does not protect
+
+An attacker who has the application's environment. They have the key. On a single-host Coolify
+deployment there is no arrangement that changes this, and pretending otherwise is the failure mode of
+the phrase "encrypted at rest".
+
+The realistic threat for a deployment this size is the first list. A leaked backup is how this kind of
+data actually escapes, and until today every byte of it was plaintext.
+
+### The shape
+
+AES-256-GCM, a fresh 12-byte IV per write, stored as a JSON envelope **inside the existing `jsonb`
+column** — so no migration and no column type change:
+
+```json
+{ "v": 1, "iv": "…", "ct": "…", "tag": "…" }
+```
+
+GCM rather than CBC because it authenticates: a tampered ciphertext fails to decrypt instead of
+producing plausible garbage that then flows into a `Resume` and out into somebody's CV.
+
+Three decisions inside that are load-bearing:
+
+- **Plaintext rows keep reading.** `decryptJson` returns anything that is not an envelope unchanged.
+  Not laziness — a rolling deploy has both versions of the code live at once, and every row already in
+  the table is plaintext. Without this, switching the key on would make every existing CV unreadable.
+  Rows encrypt on their next write.
+- **A wrong key throws.** Not "return the envelope" (that hands ciphertext to the schema parser) and
+  not "return undefined" (which looks exactly like an empty CV and could be saved back over the real
+  one). The message names the key, because the reflex on a decryption failure is "the data is corrupt"
+  and acting on that reflex is how somebody deletes rows that were fine.
+- **`schemaVersion` stays in the clear.** A future migration has to be able to find rows of a given
+  version without holding the key.
+
+### What is encrypted, and what deliberately is not
+
+| encrypted                                                                                            | left readable                                                   |
+| ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `resumes.document`                                                                                   | `schemaVersion`, `label`                                        |
+| `variants.document`                                                                                  | `company`, `role`, `status`                                     |
+| `variants.gapReport` — it **quotes the CV back**, its `found` arrays are the candidate's own bullets | `variants.jobDescription` — a public job advert somebody pasted |
+
+The gap report is the one worth naming. It is CV content wearing a different name, and it would have
+been easy to miss.
+
+### The cost, which is the whole of the objection that remains
+
+**Losing the key loses every stored CV.** There is no recovery path and there should not be one — a
+recoverable encryption key is a key with a second copy somewhere. That makes backing up the key a real
+operational obligation, and it is written into the deploy runbook rather than left as folklore.
+
+### No key configured
+
+Writes stay plaintext, and the application says which at startup rather than assuming. `/privacy` reads
+`encryptionEnabled()` from the server, so the page **cannot claim encryption on an installation that has
+no key** — the same discipline as naming the provider rather than hardcoding it. An installation that
+believes it is encrypting and is not is worse than one that knows it is not.
+
+---
+
 # Open questions — need Edd's answer
 
 These do **not** block starting v0.1. They are listed at the point where each one
@@ -619,14 +694,19 @@ Still open:
    it empirically. Override now if there is a preference. _Needed by: v0.1 Block 0._
 4. **Anthropic API key / budget.** Which key, and what per-request cost ceiling?
    Check `dev-env/env-config/.env` first per AI-OS rules. _Needed by: v0.1 Block 8._
-5. **Four font families** for the app chrome — grease-pencil display, typewriter mono
-   body, condensed engraved caps labels, seven-segment numerals. DESIGN.md records the
-   character and the banned-defaults list; the actual faces are picked at
-   implementation. Licensing matters for a commercial product. _Needed by: v0.1 Block 3b._
-6. **Error-state color.** DESIGN.md's One Cone Rule forbids a second accent hue.
-   Resolution should come from the world's own material (safelight red is a real
-   darkroom light) rather than an invented red. _Needed by: v0.1 Block 12._
-7. **Pricing model and tiers.** Now that this is a real product, this shapes v0.5
-   onward. _Needed by: v0.5._
+5. ~~**Four font families** for the app chrome — grease-pencil display, typewriter mono
+   body, condensed engraved caps labels, seven-segment numerals.~~ **Closed by the v0.6
+   world change.** Both this and the question below described the Darkroom Safelight Bay,
+   which Edd replaced with Plain Sight. There is now **one** chrome family —
+   `Figtree Variable`, SIL Open Font License, so the commercial-licensing concern is
+   answered too — in four weights.
+6. ~~**Error-state color.** DESIGN.md's One Cone Rule forbids a second accent hue.~~
+   **Closed with the same change.** The One Cone Rule went with the darkroom. Plain Sight
+   has one accent (Signal Blue `#1B3BD8`) plus three status hues chosen on measured
+   contrast: `--color-alert` `#c02424`, `--color-caution` `#9a5b12`,
+   `--color-affirm` `#0c7a52`. Kept in the list rather than deleted, because a question
+   that was answered by replacing its premise is worth seeing once.
+7. **Pricing model and tiers.** Now that this is a real product, this shapes what a paid
+   tier contains. _Needed by: v1.0 — v0.5 shipped without it._
 8. **Name and domain.** "HunterReady" — `.dev`/`.app`/`.com` availability and
    trademark not checked. _Needed by: v1.0._
