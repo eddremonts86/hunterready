@@ -179,6 +179,59 @@ Any failure fails the build. Run it against the v0.1 template before writing UI 
 it is much cheaper to discover a layout constraint now than after four templates
 depend on the same broken pattern.
 
+## DOCX export — v0.6
+
+Many ATS portals require or prefer `.docx`, and several of the worst ones parse it better than they
+parse any PDF, so a PDF-only tool has a real hole. `src/render/docx/` fills it.
+
+**The ruleset above is binding on it**, and almost every clause turns into an absence:
+
+| clause                                      | in the `.docx`                                                                                          |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| single column, reading order = visual order | one flat stream of paragraphs; there is no other order it _can_ be written in                           |
+| no layout tables                            | no `<w:tbl>` anywhere — not for experience, not for education, not for skills                           |
+| contact details as text                     | a plain paragraph; the separator is `·` and never `\|`, which several parsers read as a column boundary |
+| standard headings                           | `Heading1` styles carrying real outline levels, so a parser sees a heading rather than a bold paragraph |
+| `MMM YYYY – MMM YYYY`                       | the same `formatRange` the PDF path uses, so the two formats cannot drift                               |
+| no header/footer information                | no `headerReference` or `footerReference` at all                                                        |
+| document metadata                           | `dc:title` and `dc:creator` in `docProps/core.xml`                                                      |
+
+No template or theme choice. There is one ATS-safe Word layout, and `?format=docx` deliberately ignores
+`template` and `theme` rather than selling a design decision the format cannot honour.
+
+### Hand-written, and why
+
+Both the OOXML and a ~150-line ZIP writer, rather than a document library. The guarantee here turns on
+what is _not_ in the file, and a library that helpfully wraps an experience block in a table would break
+it invisibly. The same trade was already made once in this project, writing a PDF content stream by hand
+for the interleaved fixture. It is only safe because of the test below.
+
+The archive carries no timestamps, so rendering the same CV twice produces byte-identical output — which
+is what lets the suite tell a real change from a passing second.
+
+### The DOCX round-trip test
+
+Identical discipline to the PDF one, in `src/render/docx/__tests__/`. Render → read back with
+**mammoth**, an independent parser already present because ingestion reads `.docx` with it → assert every
+critical field survived, in reading order.
+
+It also asserts the **absences** directly against `word/document.xml`, because a parser cannot report
+what a document does not contain: no `w:tbl`, no `w:txbxContent`, no `w:drawing`, no `w:pict`, no header
+or footer reference.
+
+Two defects it did not catch, both found by opening a rendered document and reading it:
+
+- **`2014-07` in the certifications line**, in a CV whose every other date said `Jul 2014`. `cert.date`
+  is a raw `YYYY-MM` string in the schema and it was passed straight through — the exact mixture clause 7
+  forbids. There is now a test that no date _we produce_ has that shape. Personal details are excluded
+  from it on purpose: `Date of birth: 1988-04-12` is a value the candidate typed, and reformatting it
+  would be editing their document.
+- **`BSc — Nursing — Institution`**, which reads as three separate things. `BSc Nursing` is one phrase.
+
+And one the test did catch, which matters for two of the three languages this product targets: `ø` has no
+NFD decomposition — it is U+00F8, not an accented `o` — so stripping combining marks turned
+`Marta Sørensen` into `Marta-S-rensen-CV.docx`. Same for `æ` and `ß`; there is a transliteration map now.
+
 ## Template plan
 
 | id            | Name                   | Look                                                                             | ATS rating      | Ships |
