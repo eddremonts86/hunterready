@@ -15,7 +15,9 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createFileRoute } from '@tanstack/react-router'
+import { designsUnlocked, entitlementFor } from '@/lib/entitlements'
 import { errorEvent } from '@/lib/log'
+import { DEFAULT_DESIGN_ID, findDesign, tierOf } from '@/render/designs'
 import { Resume } from '@/schema/resume'
 import { renderResume } from '@/render/render'
 import { docxFilename, renderDocx } from '@/render/docx/docx'
@@ -43,6 +45,57 @@ function readSelection(url: URL): {
       template !== null && isTemplateId(template) ? template : undefined,
     themeId: theme !== null && isThemeId(theme) ? theme : undefined,
   }
+}
+
+/**
+ * May this caller have this design?
+ *
+ * **The gate lives here and not in the interface**, and that is the whole point of it. This endpoint is
+ * public — it has to be, because an anonymous visitor is the commonest user and gets a PDF without an
+ * account (ADR-004) — so a padlock drawn on a card in the gallery is decoration. Anybody who reads a query
+ * string can ask for a paid pairing directly.
+ *
+ * `tierOf` fails closed on a pairing nobody catalogued, so a combination that renders perfectly and is
+ * deliberately not offered is treated as paid rather than as an oversight. And the entitlement comes from
+ * `entitlementFor`, which is the same function that decides whether a CV may be sent to a third-party
+ * model — one place deciding what a plan buys, rather than two that can disagree.
+ *
+ * Returns the refusal to send, or `undefined` when the render may go ahead.
+ */
+async function refuseUnlessEntitled(
+  request: Request,
+  templateId: TemplateId | undefined,
+  themeId: ThemeId | undefined,
+): Promise<Response | undefined> {
+  const fallback = findDesign(DEFAULT_DESIGN_ID)
+  const structure = templateId ?? fallback?.structure
+  const theme = themeId ?? fallback?.theme
+  if (structure === undefined || theme === undefined) return undefined
+
+  if (tierOf(structure, theme) === 'free') return undefined
+
+  // The developer switch (see entitlements.ts): a catalogue you cannot try is one you cannot test.
+  if (designsUnlocked()) return undefined
+
+  const { thirdParty, plan } = await entitlementFor(request)
+  if (thirdParty) return undefined
+
+  /**
+   * 402, not 403. "Payment required" is the accurate status for a thing that exists, works, and is not
+   * included in this plan — and it is the one a client can act on by offering an upgrade rather than by
+   * reporting an error. The message names the design so the interface never has to guess which was
+   * refused, and carries no CV content (docs/07).
+   */
+  errorEvent('render.design_locked', { code: `${structure}|${theme}` })
+  return Response.json(
+    {
+      error: 'design_locked',
+      plan,
+      message:
+        'That design is part of the paid plan. Every layout marked free renders exactly the same document, verified by the same test.',
+    },
+    { status: 402 },
+  )
 }
 
 function pdfResponse(bytes: Uint8Array, filename: string, download: boolean) {
@@ -94,15 +147,26 @@ export const Route = createFileRoute('/api/render')({
           'utf8',
         )
         const resume = Resume.parse(JSON.parse(raw))
+        const selection = readSelection(url)
+
+        /**
+         * Gated on the way in, and the fixture route is gated too.
+         *
+         * It is a sample document rather than anybody's CV, which is exactly why it would be the way to
+         * evaluate a paid design for free — render the nurse in every locked pairing and screenshot it.
+         */
+        const refusal = await refuseUnlessEntitled(
+          request,
+          selection.templateId,
+          selection.themeId,
+        )
+        if (refusal !== undefined) return refusal
 
         if (wantsDocx(url)) {
           return docxResponse(renderDocx(resume), docxFilename(resume))
         }
 
-        const { bytes, filename } = await renderResume(
-          resume,
-          readSelection(url),
-        )
+        const { bytes, filename } = await renderResume(resume, selection)
 
         return pdfResponse(
           bytes,
@@ -152,6 +216,14 @@ export const Route = createFileRoute('/api/render')({
           )
         }
 
+        const selection = readSelection(url)
+        const refusal = await refuseUnlessEntitled(
+          request,
+          selection.templateId,
+          selection.themeId,
+        )
+        if (refusal !== undefined) return refusal
+
         /**
          * The render is wrapped, and this is not defensive habit — it is the failure mode this project
          * has actually shipped. The Block 1 WASM bug (ADR-005) threw here in production, and an
@@ -172,10 +244,7 @@ export const Route = createFileRoute('/api/render')({
             )
           }
 
-          const { bytes, filename } = await renderResume(
-            parsed.data,
-            readSelection(url),
-          )
+          const { bytes, filename } = await renderResume(parsed.data, selection)
           return pdfResponse(
             bytes,
             filename,

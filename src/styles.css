@@ -18,6 +18,41 @@
 @import '@fontsource-variable/figtree/index.css';
 
 /**
+ * THE DOCUMENT FACES, FOR THE PREVIEW'S EYES ONLY.
+ *
+ * Every face a document theme can name, loaded so the on-screen preview and the gallery specimens
+ * draw the same glyphs the PDF will. Before this block the browser silently substituted system
+ * fallbacks — Playfair Display, Caveat Brush and Space Grotesk all collapsed into the same generic
+ * serif/sans, and Edd's report was exact: "sigue usando siempre las mismas fuentes". A preview that
+ * approximates the typeface is lying about the one choice a design gallery exists to sell.
+ *
+ * This does not touch The Print Is Not Ours rule, which points the other way: Figtree stays out of
+ * the documents; the documents' faces appearing in the browser is just the preview telling the truth.
+ * The chrome itself must never set text in these families.
+ */
+@import '@fontsource/source-sans-3/400.css';
+@import '@fontsource/source-sans-3/600.css';
+@import '@fontsource/source-sans-3/700.css';
+@import '@fontsource/source-serif-4/400.css';
+@import '@fontsource/source-serif-4/600.css';
+@import '@fontsource/source-serif-4/700.css';
+@import '@fontsource/courier-prime/400.css';
+@import '@fontsource/courier-prime/700.css';
+@import '@fontsource/archivo-narrow/400.css';
+@import '@fontsource/archivo-narrow/700.css';
+@import '@fontsource/caveat-brush/400.css';
+@import '@fontsource/playfair-display/400.css';
+@import '@fontsource/playfair-display/700.css';
+@import '@fontsource/eb-garamond/400.css';
+@import '@fontsource/eb-garamond/700.css';
+@import '@fontsource/space-grotesk/400.css';
+@import '@fontsource/space-grotesk/700.css';
+@import '@fontsource/lora/400.css';
+@import '@fontsource/lora/700.css';
+@import '@fontsource/josefin-sans/400.css';
+@import '@fontsource/josefin-sans/700.css';
+
+/**
  * PLAIN SIGHT — app chrome tokens (DESIGN.md).
  *
  * White ground, one blue, deep navy ink. Nothing on screen competes with the document, because the

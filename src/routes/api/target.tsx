@@ -30,6 +30,7 @@ import {
 import { tailorSummary } from '@/optimize/summary'
 import { resolveLocalProvider, resolveProvider } from '@/structure/provider'
 import { checkRateLimit, clientKey } from '@/lib/rate-limit'
+import { progressEnd, progressReporter } from '@/lib/progress'
 import { event, requestId } from '@/lib/log'
 import { mayUseThirdParty } from '@/lib/entitlements'
 
@@ -73,6 +74,7 @@ export const Route = createFileRoute('/api/target')({
           resume?: unknown
           processing?: unknown
           answers?: unknown
+          progress?: unknown
         }
 
         const advert =
@@ -128,6 +130,15 @@ export const Route = createFileRoute('/api/target')({
          * tailored summary is lost. Refusing the whole request would throw away the working three
          * quarters of the feature to report the missing quarter.
          */
+        /**
+         * The narrated wait, same channel as ingestion (src/lib/progress.ts). Two stages, because the
+         * request makes at most two model calls: reading the advert, then writing the aimed summary.
+         */
+        const progressId =
+          typeof payload.progress === 'string' ? payload.progress : undefined
+        const onProgress = progressReporter(progressId)
+
+        onProgress('Reading what the advert asks for')
         const reading = await readAdvert({
           advert,
           useProvider: mayUseProvider,
@@ -141,7 +152,8 @@ export const Route = createFileRoute('/api/target')({
                 rationale: '',
                 outcome: 'unavailable' as const,
               }
-            : await tailorSummary({
+            : (onProgress('Writing a summary aimed at this job'),
+              await tailorSummary({
                 resume: parsed.data,
                 requirements: reading.requirements,
                 ...(reading.roleTitle === undefined
@@ -154,13 +166,15 @@ export const Route = createFileRoute('/api/target')({
                     )
                   : undefined,
                 signal: request.signal,
-              })
+              }))
 
         /**
          * Counts only. `invented` is the number that matters operationally — a rising share means the
          * prompt or the model has drifted toward supplying requirements nobody asked for, and it is
          * invisible without this. The requirements themselves are never logged.
          */
+        if (progressId !== undefined) progressEnd(progressId)
+
         event('target.done', {
           requestId: id,
           // `method`, not `source`: the field is already allowlisted in `log.ts` and already carries

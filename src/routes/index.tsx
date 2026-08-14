@@ -17,8 +17,8 @@
  * Flow: docs/11-flow.md. Upload → Check → Download, all client-side state: the resume never goes
  * anywhere except to /api/render to be typeset (ADR-004).
  */
-import { useCallback, useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
   ConsentGate,
   needsConsent,
@@ -30,28 +30,48 @@ import { PaperPreview } from '@/components/paper-preview'
 import { ReadBackDemo } from '@/components/read-back-demo'
 import { Reveal } from '@/components/reveal'
 import { ReviewForm } from '@/components/review-form'
+import { SavedCvs } from '@/components/saved-cvs'
 import { keyOf, RewriteReview } from '@/components/rewrite-review'
 import { AdvertForm, TargetPanel } from '@/components/target-panel'
 import { BeforeAfter } from '@/components/before-after'
+import { DesignGallery } from '@/components/design-gallery'
 import { ButtonLabel, Spinner } from '@/components/working'
 import { DownloadFailed, saveRendered } from '@/lib/download'
+import {
+  clearWorkingCopy,
+  readWorkingCopy,
+  writeWorkingCopy,
+} from '@/lib/working-copy'
+import {
+  DEFAULT_PANEL,
+  PANELS,
+  validateWorkspaceSearch,
+} from '@/lib/workspace-search'
+import type { PanelId } from '@/lib/workspace-search'
 import type {
   AdvertReadingResult,
   CoverLetterOffer,
 } from '@/components/target-panel'
 import type { BulletRewrite } from '@/optimize/rewrite'
+import { shiftTarget } from '@/optimize/rewrite-shift'
 import { diffResumes } from '@/optimize/variant-diff'
+import { tierOf } from '@/render/designs'
 import { Resume } from '@/schema/resume'
 import type { FieldProvenance } from '@/schema/provenance'
 import { needsReview } from '@/schema/provenance'
 import { estimateFit } from '@/render/fit'
-import { getTheme, THEME_IDS, themeLabels } from '@/render/themes'
+import { getTheme } from '@/render/themes'
 import type { ThemeId } from '@/render/themes'
 import { localeOptions, resolveLocale } from '@/render/locale'
-import { TEMPLATE_IDS, templates } from '@/render/templates/registry'
+import type { OutputLocale } from '@/render/locale'
+import { templates } from '@/render/templates/registry'
 import type { TemplateId } from '@/render/templates/registry'
 
-export const Route = createFileRoute('/')({ component: HunterReady })
+export const Route = createFileRoute('/')({
+  // Validated in `@/lib/workspace-search`, with its reasoning and its tests.
+  validateSearch: validateWorkspaceSearch,
+  component: HunterReady,
+})
 
 interface Loaded {
   resume: Resume
@@ -211,6 +231,21 @@ function Wordmark({ className = 'text-[17px]' }: { className?: string }) {
  * There is also nothing left to count. The tabs collapsed the flow into one workspace: there is a
  * landing page and there is the CV, and a progression indicator over two screens is furniture.
  */
+/**
+ * The plan, worn in the topbar. Edd's ask verbatim: "debo poder ver en la topbar que tengo el Pro user."
+ *
+ * Only `pro` earns a chip. `free` and `anonymous` show nothing — a "Free" badge is an upsell disguised
+ * as information, and the header is not a sales surface.
+ */
+function PlanChip({ plan }: { plan?: string }) {
+  if (plan !== 'pro') return null
+  return (
+    <span className="inline-flex h-6 items-center rounded-full bg-signal px-2.5 text-[11px] font-bold uppercase tracking-[0.06em] text-white">
+      Pro
+    </span>
+  )
+}
+
 function StepBar({
   onBack,
   backLabel = 'Start over',
@@ -432,16 +467,6 @@ function Segmented<T extends string>({
  *
  * `Check` is the default because it is the work of this screen. The other four are things you may do.
  */
-type PanelId = 'check' | 'wording' | 'design' | 'job' | 'account'
-
-const PANELS: ReadonlyArray<{ id: PanelId; label: string }> = [
-  { id: 'check', label: 'Check' },
-  { id: 'wording', label: 'Wording' },
-  { id: 'design', label: 'Design' },
-  { id: 'job', label: 'Job' },
-  { id: 'account', label: 'Account' },
-]
-
 function PanelTabs({
   active,
   onChange,
@@ -496,12 +521,39 @@ function PanelTabs({
 }
 
 function HunterReady() {
+  const search = Route.useSearch()
+  const navigate = useNavigate({ from: Route.fullPath })
+
   const [loaded, setLoaded] = useState<Loaded | undefined>()
   const [busy, setBusy] = useState(false)
+  /**
+   * The live stage list while a file is being read — polled from /api/progress against an id this
+   * client minted. What turns a five-minute spinner into a narrated wait (task: Edd's complaint that
+   * the user "no tiene puta idea de lo que está pasando").
+   */
+  const [stages, setStages] = useState<
+    Array<{ label: string; detail?: string; done: boolean; at: number }>
+  >([])
+  const progressIdRef = useRef<string | undefined>(undefined)
   const [error, setError] = useState<string | undefined>()
   const consent = useProcessingConsent()
   const [rewrites, setRewrites] = useState<Array<BulletRewrite> | undefined>()
   const [rewriting, setRewriting] = useState(false)
+  /**
+   * The visible checklist of a rewrite pass: every bullet named upfront, ticked green as the model
+   * finishes it. Edd's design, verbatim: "si ya sabes cuáles son los bullets, por qué no los muestras
+   * y vas marcando con un check verde cuando lo ejecutas".
+   */
+  const [rewriteChecklist, setRewriteChecklist] = useState<
+    | Array<{
+        workIndex: number
+        highlightIndex: number
+        company: string
+        text: string
+        status: 'pending' | 'working' | 'done' | 'failed'
+      }>
+    | undefined
+  >()
   const [rewriteNote, setRewriteNote] = useState<string | undefined>()
   const [accepted, setAccepted] = useState<Set<string>>(new Set())
   const [templateId, setTemplateId] = useState<TemplateId>('modern-intl')
@@ -516,6 +568,11 @@ function HunterReady() {
   const [targeting, setTargeting] = useState(false)
   const [reading, setReading] = useState<AdvertReadingResult | undefined>()
   const [targetBusy, setTargetBusy] = useState(false)
+  /** True while a cover letter drafts, so the stage polling runs for it too. */
+  const [letterDrafting, setLetterDrafting] = useState(false)
+  /** True while the document translates after a language switch. */
+  const [translating, setTranslating] = useState(false)
+  const [translateNote, setTranslateNote] = useState<string | undefined>()
   const [targetError, setTargetError] = useState<string | undefined>()
   /**
    * The advert text, kept after the request so an application row can store what it was aimed at.
@@ -530,18 +587,214 @@ function HunterReady() {
    * targeting panel — and `Library` holding it privately duplicated the base CV on every application.
    */
   const [savedResumeId, setSavedResumeId] = useState<string | undefined>()
+
+  /**
+   * Open a stored CV.
+   *
+   * Shared by the library card, the landing-page list and the `?cv=` link, because all three mean the same
+   * thing and one of them getting it subtly different is how a document ends up saving over the wrong row.
+   */
+  const openSaved = useCallback(
+    ({ id, resume }: { id: string; resume: Resume }) => {
+      setLoaded({
+        resume,
+        // A stored CV is its own starting point: the "before" is the version on the server.
+        original: resume,
+        provenance: [],
+        warnings: [],
+        method: 'rules',
+        ocr: false,
+      })
+      setSavedResumeId(id)
+    },
+    [],
+  )
+
+  /**
+   * Put back whatever this tab was working on: the session copy, or the CV the URL names.
+   *
+   * Read on mount rather than as `useState`'s initial value: `sessionStorage` is not available while the
+   * server renders this route, and reading it in an initialiser would throw during hydration.
+   *
+   * **The session copy always wins.** When both exist and they disagree, following the URL would replace
+   * edits made in this tab with a document from the server — the exact loss the session copy was added to
+   * prevent, now caused by a bookmark. So `?cv=` acts only on a cold start. The cost is that opening a
+   * bookmark for CV B while CV A is on screen keeps showing A, which is confusing for a moment; the
+   * alternative silently destroys work, which is not a moment.
+   */
+  useEffect(() => {
+    const copy = readWorkingCopy()
+    if (copy !== undefined) {
+      setLoaded({
+        resume: copy.resume,
+        original: copy.original,
+        provenance: copy.provenance,
+        warnings: copy.warnings,
+        method: copy.method,
+        ocr: copy.ocr,
+      })
+      if (copy.savedResumeId !== undefined) setSavedResumeId(copy.savedResumeId)
+      return
+    }
+
+    const wanted = search.cv
+    if (wanted === undefined) return
+
+    /*
+      One row, fetched through the list endpoint. `/api/library` answers 404 for a visitor with no account
+      and for an installation with no database, and a link to somebody else's CV finds nothing in the list
+      it is allowed to see — so a stranger following a shared `?cv=` link lands on the landing page rather
+      than on a hint that the id was real.
+    */
+    let cancelled = false
+    void fetch('/api/library')
+      .then(async (response) =>
+        response.ok
+          ? ((await response.json()) as { resumes?: Array<unknown> })
+          : { resumes: [] },
+      )
+      .then((payload) => {
+        if (cancelled) return
+        for (const row of payload.resumes ?? []) {
+          const shape = row as { id?: unknown; resume?: unknown }
+          if (shape.id !== wanted) continue
+          const parsed = Resume.safeParse(shape.resume)
+          if (parsed.success) openSaved({ id: wanted, resume: parsed.data })
+          return
+        }
+      })
+      .catch(() => {
+        // A library that cannot be reached leaves the landing page exactly as it was. Nothing to say.
+      })
+    return () => {
+      cancelled = true
+    }
+    // Once, on mount. A dependency on `loaded` would restore over the person's own edits.
+  }, [])
+
+  /**
+   * Keep it in step with every edit.
+   *
+   * Written on each change rather than on an interval or on unload: `beforeunload` is unreliable on mobile
+   * — a tab killed in the background never fires it — and an interval loses whatever happened since the
+   * last tick. A CV is a few tens of kilobytes and this is a synchronous write to the same tab.
+   */
+  useEffect(() => {
+    if (loaded === undefined) return
+    writeWorkingCopy({
+      resume: loaded.resume,
+      original: loaded.original,
+      provenance: loaded.provenance,
+      warnings: loaded.warnings,
+      method: loaded.method,
+      ocr: loaded.ocr,
+      ...(savedResumeId === undefined ? {} : { savedResumeId }),
+    })
+  }, [loaded, savedResumeId])
+
+  /**
+   * Put the CV's id in the address bar once there is one, so the link exists without anybody asking for it.
+   *
+   * `replace` rather than a push: this annotates where you already are — it is not a navigation the person
+   * made, and a history entry per save would make the back button undo saves in the URL while the row on
+   * the server stayed saved. Guarded on inequality so it fires once per document rather than on every
+   * keystroke, since the persist effect above runs on each edit.
+   */
+  useEffect(() => {
+    if (savedResumeId === undefined || search.cv === savedResumeId) return
+    void navigate({
+      replace: true,
+      search: (prev) => ({ ...prev, cv: savedResumeId }),
+    })
+  }, [savedResumeId, search.cv, navigate])
   const downloads = useDownloads()
+  /**
+   * Pages as the preview actually laid them out, once it has.
+   *
+   * Preferred over `estimateFit` when present: the estimator counts characters per line and over-counted
+   * three pages on a document the renderer put on two, while the measured layout matched the PDF exactly.
+   * A label about page count is one a person acts on — they cut a bullet because of it — so it should come
+   * from the strongest evidence available at the time.
+   */
+  const [measuredPages, setMeasuredPages] = useState<number | undefined>()
+
+  /**
+   * The panel and the comparison come from the URL, not from `useState`.
+   *
+   * Derived rather than mirrored: there is one source of truth, so the address bar can never disagree with
+   * the screen. A `useState` kept in sync by an effect would be two, and the two drift the moment somebody
+   * presses back.
+   *
+   * The default is left **out** of the URL rather than written into it, so the front door stays `/` instead
+   * of `/?panel=check&compare=false`. Both push a history entry — that is the whole point, since the
+   * complaint was that back left the app rather than the panel.
+   */
+  const panel: PanelId = search.panel ?? DEFAULT_PANEL
+  const setPanel = useCallback(
+    (id: PanelId) => {
+      void navigate({
+        search: (prev) => ({
+          ...prev,
+          panel: id === DEFAULT_PANEL ? undefined : id,
+        }),
+      })
+    },
+    [navigate],
+  )
+
   /** Whether the document pane is showing the comparison instead of the current CV. */
-  const [comparing, setComparing] = useState(false)
-  const [panel, setPanel] = useState<PanelId>('check')
+  const comparing = search.compare === true
+  const setComparing = useCallback(
+    (next: boolean) => {
+      void navigate({
+        search: (prev) => ({ ...prev, compare: next ? true : undefined }),
+      })
+    },
+    [navigate],
+  )
+
+  /**
+   * Poll the stage list while an upload is in flight. 700ms against an in-memory map is nothing, and
+   * polling — unlike a second streaming response — survives every proxy between a phone and the server.
+   */
+  useEffect(() => {
+    if (!busy && !targetBusy && !letterDrafting && !translating) return
+    const timer = setInterval(() => {
+      const id = progressIdRef.current
+      if (id === undefined) return
+      void fetch(`/api/progress?id=${id}`)
+        .then(async (response) =>
+          response.ok ? ((await response.json()) as { steps?: unknown }) : {},
+        )
+        .then((payload) => {
+          if (Array.isArray(payload.steps)) {
+            setStages(
+              payload.steps as Array<{
+                label: string
+                detail?: string
+                done: boolean
+                at: number
+              }>,
+            )
+          }
+        })
+        .catch(() => {
+          // A failed poll changes nothing: the upload itself is the source of truth.
+        })
+    }, 700)
+    return () => clearInterval(timer)
+  }, [busy, targetBusy, letterDrafting, translating])
 
   const upload = useCallback(
     async (file: File) => {
       setBusy(true)
       setError(undefined)
+      setStages([])
+      progressIdRef.current = crypto.randomUUID()
       try {
         const body = new FormData()
         body.append('file', file)
+        body.append('progress', progressIdRef.current)
         /**
          * The consent decision travels with the file, and the server defaults to *not* sending when
          * the field is absent. Declining has to change what happens, not what is displayed — otherwise
@@ -611,33 +864,109 @@ function HunterReady() {
       if (loaded === undefined) return
       setRewriting(true)
       setRewriteNote(undefined)
-      try {
-        const response = await fetch('/api/rewrite', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            resume: loaded.resume,
-            processing: consent.choice === 'granted' ? 'provider' : 'local',
-            answers,
-          }),
-        })
-        const payload = (await response.json()) as Record<string, unknown>
-        if (!response.ok) {
-          setRewriteNote(
-            typeof payload.message === 'string'
-              ? payload.message
-              : 'We could not look at your wording just now.',
-          )
-          return
-        }
-        setRewrites(
-          (payload.rewrites as Array<BulletRewrite> | undefined) ?? [],
+
+      /**
+       * One request per bullet, and every bullet on a visible checklist before the first call.
+       *
+       * The person sees the whole queue upfront — each bullet named under its employer — and a green
+       * tick lands on each one as the model finishes it. The suggestions stream into the review list
+       * below at the same moments, readable and acceptable while the rest are still cooking. The model
+       * does the same work in the same order; only the silence is gone (Edd: "es difícil esperar cinco
+       * minutos sin saber qué está pasando").
+       *
+       * Per bullet rather than per job because the tick IS the product here: a six-bullet job that
+       * ticks once at the end is a half-minute of stillness. The rewrite cache makes re-runs cheap and
+       * the endpoint's own rate bucket absorbs the extra requests — they multiply HTTP calls, not
+       * model calls.
+       */
+      const queue = loaded.resume.work.flatMap((job, workIndex) =>
+        job.highlights.map((text, highlightIndex) => ({
+          workIndex,
+          highlightIndex,
+          company: job.company,
+          text,
+          status: 'pending' as const,
+        })),
+      )
+      setRewriteChecklist(queue.map((entry) => ({ ...entry })))
+
+      const collected: Array<BulletRewrite> = []
+      let failures = 0
+      // Reset the acceptances, but leave `rewrites` alone until the first result lands: the checklist
+      // is the right screen while nothing has arrived yet.
+      setAccepted(new Set())
+
+      const mark = (
+        at: number,
+        status: 'pending' | 'working' | 'done' | 'failed',
+      ) => {
+        setRewriteChecklist((current) =>
+          current?.map((entry, i) => (i === at ? { ...entry, status } : entry)),
         )
-        setAccepted(new Set())
+      }
+
+      try {
+        for (const [at, target] of queue.entries()) {
+          mark(at, 'working')
+          const response = await fetch('/api/rewrite', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              resume: loaded.resume,
+              processing: consent.choice === 'granted' ? 'provider' : 'local',
+              answers,
+              only: [
+                {
+                  workIndex: target.workIndex,
+                  highlightIndex: target.highlightIndex,
+                },
+              ],
+            }),
+          })
+          const payload = (await response.json()) as Record<string, unknown>
+
+          if (response.status === 429) {
+            // The limiter is telling us to stop, so stop — keep what already arrived.
+            mark(at, 'failed')
+            setRewriteNote(
+              typeof payload.message === 'string'
+                ? payload.message
+                : 'We have to pause the rewrites for a while. What arrived so far is below.',
+            )
+            break
+          }
+          if (!response.ok) {
+            /*
+              One failed bullet does not throw away the rest. Mark it amber, keep going, and say at the
+              end how much was skipped — the pre-split behaviour lost the entire pass to one hiccup.
+            */
+            failures++
+            mark(at, 'failed')
+            continue
+          }
+          const chunk =
+            (payload.rewrites as Array<BulletRewrite> | undefined) ?? []
+          collected.push(...chunk)
+          setRewrites([...collected])
+          mark(at, 'done')
+        }
+
+        if (failures > 0) {
+          setRewriteNote(
+            `We could not look at ${failures} of your bullets just now. The rest are below — run it again later for the missing ones.`,
+          )
+        }
       } catch {
-        setRewriteNote('We could not reach the server. Your CV is untouched.')
+        if (collected.length > 0) {
+          setRewriteNote(
+            'The connection dropped part-way. What arrived so far is below; your CV is untouched.',
+          )
+        } else {
+          setRewriteNote('We could not reach the server. Your CV is untouched.')
+        }
       } finally {
         setRewriting(false)
+        setRewriteChecklist(undefined)
       }
     },
     [loaded, consent.choice],
@@ -651,6 +980,17 @@ function HunterReady() {
     if (rewrite.suggestion === undefined) return
     setLoaded((current) => {
       if (current === undefined) return current
+      /*
+        Belt and braces under the coordinate shifting: apply only when the bullet at these coordinates
+        is still the text the model actually read. If anything slipped past the shift — a code path
+        that forgot to emit its edit — the failure is "nothing happened", never "a different line was
+        overwritten".
+      */
+      const present =
+        current.resume.work[rewrite.workIndex]?.highlights[
+          rewrite.highlightIndex
+        ]
+      if (present !== rewrite.original) return current
       const work = current.resume.work.map((job, jobIndex) =>
         jobIndex === rewrite.workIndex
           ? {
@@ -667,6 +1007,118 @@ function HunterReady() {
     })
     setAccepted((current) => new Set(current).add(keyOf(rewrite)))
   }, [])
+
+  /**
+   * Accept every open suggestion at once — the person asked the product to do it, so it does it.
+   *
+   * One `setLoaded` applying all of them, not a loop of single accepts: each accept maps over the whole
+   * work array, and N sequential state updates for a 25-bullet CV is both slower and harder to undo in
+   * one motion. The anti-fabrication guard already ran per suggestion; the per-bullet diffs stay on
+   * screen after the bulk accept, so nothing is hidden by the shortcut.
+   */
+  const acceptAllRewrites = useCallback(() => {
+    setLoaded((current) => {
+      if (current === undefined || rewrites === undefined) return current
+      const open = rewrites.filter(
+        (entry) =>
+          entry.suggestion !== undefined && !accepted.has(keyOf(entry)),
+      )
+      if (open.length === 0) return current
+      const work = current.resume.work.map((job, jobIndex) => {
+        const mine = open.filter((entry) => entry.workIndex === jobIndex)
+        if (mine.length === 0) return job
+        return {
+          ...job,
+          highlights: job.highlights.map((text, index) => {
+            const hit = mine.find((entry) => entry.highlightIndex === index)
+            // Same guard as the single accept: the suggestion applies only to the text it was about.
+            return hit !== undefined && text === hit.original
+              ? (hit.suggestion ?? text)
+              : text
+          }),
+        }
+      })
+      return { ...current, resume: { ...current.resume, work } }
+    })
+    setAccepted((current) => {
+      const next = new Set(current)
+      for (const entry of rewrites ?? []) {
+        if (entry.suggestion !== undefined) next.add(keyOf(entry))
+      }
+      return next
+    })
+  }, [rewrites, accepted])
+
+  /**
+   * Switch the document's language — the whole document, not just its furniture.
+   *
+   * v0.8 drew the line at headings and dates ("your own words stay exactly as written"), and its owner
+   * moved it: picking a language now translates the full text, on demand, inside the guards recorded in
+   * src/optimize/translate.ts — numbers verbatim, identity untouched, any dubious field keeps its
+   * original. The locale flips first so headings and dates change even if the model then fails, the
+   * wait narrates itself batch by batch, and the comparison opens after so the person reads exactly
+   * what changed. The pre-switch document sits in `original`, one toggle away.
+   */
+  const switchLanguage = useCallback(
+    async (locale: OutputLocale) => {
+      if (loaded === undefined) return
+      if (resolveLocale(loaded.resume.locale) === locale) return
+      setTranslateNote(undefined)
+      // The furniture immediately; the words in flight.
+      setLoaded({ ...loaded, resume: { ...loaded.resume, locale } })
+      setTranslating(true)
+      progressIdRef.current = crypto.randomUUID()
+      setStages([])
+      try {
+        const response = await fetch('/api/translate', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            resume: { ...loaded.resume, locale },
+            target: locale,
+            processing: consent.choice === 'granted' ? 'provider' : 'local',
+            progress: progressIdRef.current,
+          }),
+        })
+        const payload = (await response.json()) as Record<string, unknown>
+        if (!response.ok) {
+          setTranslateNote(
+            typeof payload.message === 'string'
+              ? payload.message
+              : 'We could not translate just now. Headings and dates changed; your words did not.',
+          )
+          return
+        }
+        const parsed = Resume.safeParse(payload.resume)
+        if (!parsed.success) {
+          setTranslateNote(
+            'The translation came back in a shape we could not trust, so your words were left alone.',
+          )
+          return
+        }
+        setLoaded((current) =>
+          current === undefined ? current : { ...current, resume: parsed.data },
+        )
+        // Suggestions were about the pre-translation text — same staleness as the tailoring actions.
+        setRewrites(undefined)
+        setAccepted(new Set())
+        setComparing(true)
+        const kept = typeof payload.kept === 'number' ? payload.kept : 0
+        if (kept > 0) {
+          setTranslateNote(
+            `${kept} ${kept === 1 ? 'line' : 'lines'} stayed in the original language — the translation did not keep their numbers intact, so we kept your words instead.`,
+          )
+        }
+      } catch {
+        setTranslateNote(
+          'We could not reach the server. Headings and dates changed; your words did not.',
+        )
+      } finally {
+        setTranslating(false)
+      }
+    },
+    [loaded, consent.choice, setComparing],
+  )
 
   const dismissRewrite = useCallback((rewrite: BulletRewrite) => {
     setRewrites((current) =>
@@ -686,6 +1138,10 @@ function HunterReady() {
       setTargetBusy(true)
       setTargetError(undefined)
       setAdvertText(advert)
+      // The same narrated-wait channel as the upload: the advert read is one or two model calls,
+      // and on the local model that is long enough to deserve names on its stages.
+      progressIdRef.current = crypto.randomUUID()
+      setStages([])
       try {
         const response = await fetch('/api/target', {
           method: 'POST',
@@ -694,6 +1150,7 @@ function HunterReady() {
             advert,
             resume: loaded.resume,
             processing: consent.choice === 'granted' ? 'provider' : 'local',
+            progress: progressIdRef.current,
           }),
         })
         const payload = (await response.json()) as Record<string, unknown>
@@ -819,6 +1276,47 @@ function HunterReady() {
                   className="indeterminate h-full w-1/3 rounded-full bg-signal"
                 />
               </div>
+
+              {/*
+                The narrated wait. Each stage the server reports appears here as it starts — a tick when
+                it finishes, a spinner and a live page/attempt counter while it runs. The labels come
+                from the pipeline itself (src/lib/progress.ts), so this list cannot drift from what the
+                code actually does the way a hardcoded "step 2 of 4" would.
+              */}
+              {stages.length > 0 && (
+                <ol className="flex w-full max-w-xs flex-col gap-1.5 text-left">
+                  {stages.map((stage, index) => (
+                    <li
+                      key={index}
+                      className="flex items-center gap-2 text-[13px]"
+                    >
+                      {stage.done ? (
+                        <svg
+                          aria-hidden
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.4"
+                          strokeLinecap="round"
+                          className="h-3.5 w-3.5 shrink-0 text-affirm"
+                        >
+                          <path d="m5 12.5 4.5 4.5L19 7" />
+                        </svg>
+                      ) : (
+                        <Spinner className="h-3 w-3 shrink-0 text-signal" />
+                      )}
+                      <span
+                        className={
+                          stage.done ? 'text-ink-faint' : 'text-ink-soft'
+                        }
+                      >
+                        {stage.label}
+                        {stage.detail === undefined ? '' : ` — ${stage.detail}`}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
 
               <p className="text-meta text-ink-soft">
                 Your phone number and street address were removed before the
@@ -955,6 +1453,16 @@ function HunterReady() {
                     </li>
                   ))}
                 </ul>
+
+                {/*
+                  The way back to a saved CV, under the upload control rather than above it.
+                
+                  Order matters here: the upload is what a first-time visitor came for and it stays the
+                  first thing (ADR-011, the artifact before any question). This is for the returning one,
+                  and it renders nothing at all for everybody else — no empty state, no invitation, no row
+                  of grey boxes explaining what would be here if they had an account.
+                */}
+                <SavedCvs onOpen={openSaved} />
               </div>
 
               <div className="rise" style={{ animationDelay: '300ms' }}>
@@ -1143,6 +1651,7 @@ function HunterReady() {
                   <AdvertForm
                     busy={targetBusy}
                     error={targetError}
+                    stages={stages}
                     onSubmit={(advert) => void targetJob(advert)}
                   />
                 </div>
@@ -1152,9 +1661,49 @@ function HunterReady() {
                     resume={loaded.resume}
                     reading={reading}
                     atsVerified={template.atsRating === 'verified'}
-                    onUseVariant={(variant) =>
+                    onUseVariant={(variant) => {
                       setLoaded({ ...loaded, resume: variant })
-                    }
+                      // Reordering moves the bullets the open suggestions point at — same correctness
+                      // fix as onFitCv: stale coordinates would overwrite the wrong bullet.
+                      setRewrites(undefined)
+                      setAccepted(new Set())
+                    }}
+                    onFitCv={(variant, summary) => {
+                      /*
+                        The one-click fit: reorderings and the aimed summary applied together, with the
+                        comparison switched on so the document pane shows before/after. The original is
+                        intact and "Just the new one" is the same toggle back.
+                      */
+                      setLoaded({
+                        ...loaded,
+                        resume: {
+                          ...variant,
+                          basics: {
+                            ...variant.basics,
+                            ...(summary === undefined ? {} : { summary }),
+                          },
+                        },
+                      })
+                      /*
+                        Everything downstream revalidates, not just the document (Edd: "hay que
+                        revalidar todo").
+
+                        The wording suggestions are DISCARDED, and that is a correctness fix wearing a
+                        UX hat: their {workIndex, highlightIndex} coordinates point at pre-reorder
+                        positions, so accepting one after the fit would overwrite the WRONG bullet.
+                        Stale advice that misfires is worse than asking again.
+
+                        The panel stays on Job on purpose: the gap report, the score and the move list
+                        all recompute against the fitted CV the moment state lands, so the person
+                        watches their own match improve — the move list collapsing to "Nothing worth
+                        moving. Your CV already leads with what this job asks for" IS the revalidation,
+                        visible. The fit estimate and the measured page count re-run on their own.
+                      */
+                      setRewrites(undefined)
+                      setAccepted(new Set())
+                      setRewriteNote(undefined)
+                      setComparing(true)
+                    }}
                     onAcceptSummary={(summary) =>
                       setLoaded({
                         ...loaded,
@@ -1176,6 +1725,10 @@ function HunterReady() {
                       removed should not shape the letter either.
                     */
                     onDraftLetter={async (requirements) => {
+                      // The narrated wait, same channel as everything else that makes a person wait.
+                      progressIdRef.current = crypto.randomUUID()
+                      setStages([])
+                      setLetterDrafting(true)
                       try {
                         const response = await fetch('/api/cover-letter', {
                           method: 'POST',
@@ -1186,6 +1739,7 @@ function HunterReady() {
                             requirements,
                             roleTitle: reading.roleTitle,
                             company: reading.company,
+                            progress: progressIdRef.current,
                             processing:
                               consent.choice === 'granted'
                                 ? 'provider'
@@ -1214,6 +1768,35 @@ function HunterReady() {
                           message:
                             'We could not reach the server. Your CV is untouched.',
                         }
+                      } finally {
+                        setLetterDrafting(false)
+                      }
+                    }}
+                    letterStages={stages}
+                    locale={resolveLocale(loaded.resume.locale)}
+                    onTranslateText={async (text) => {
+                      try {
+                        const response = await fetch('/api/translate', {
+                          method: 'POST',
+                          headers: { 'content-type': 'application/json' },
+                          body: JSON.stringify({
+                            text,
+                            target: resolveLocale(loaded.resume.locale),
+                            processing:
+                              consent.choice === 'granted'
+                                ? 'provider'
+                                : 'local',
+                          }),
+                        })
+                        if (!response.ok) return undefined
+                        const payload = (await response.json()) as {
+                          text?: unknown
+                        }
+                        return typeof payload.text === 'string'
+                          ? payload.text
+                          : undefined
+                      } catch {
+                        return undefined
                       }
                     }}
                     /*
@@ -1313,6 +1896,7 @@ function HunterReady() {
                 resume={loaded.resume}
                 theme={theme}
                 Template={template.Component}
+                onPagesMeasured={setMeasuredPages}
               />
             </main>
           </div>
@@ -1347,14 +1931,46 @@ function HunterReady() {
       template.convention === 'eu' &&
       loaded.resume.basics.photoUrl !== undefined,
   })
+  /**
+   * Measured if the preview has measured, estimated until then.
+   *
+   * The estimator counts characters per line and over-counts on an unusual block — it claimed three pages
+   * on a document the renderer put on two, while the preview's measurement of real laid-out boxes matched
+   * the renderer exactly. A page count is a label somebody acts on, so it takes the better evidence as soon
+   * as there is any.
+   */
+  const pages = measuredPages ?? fit.pages
+  /**
+   * Whether the design on screen is one this visitor cannot download.
+   *
+   * Previewing a locked design is deliberately allowed — it is HTML, it costs nothing, and choosing a look
+   * you cannot see first is not a choice. What must not happen is finding out at the download: that is the
+   * surprise-at-the-checkout pattern, where somebody composes a whole CV and is refused at the last step.
+   * So it is said where the choice is made, and on the button that would otherwise fail.
+   */
+  const lockedDesign =
+    tierOf(templateId, themeId) === 'paid' && consent.paidDesigns !== true
 
   return (
     <div className="flex min-h-screen flex-col bg-band">
       <StepBar
         onBack={() => {
+          /*
+            "Start over" has to clear the saved copy too, or the restore on the next mount would put back
+            the very CV the person just walked away from — a back arrow that undoes itself.
+          */
+          clearWorkingCopy()
           setLoaded(undefined)
+          setSavedResumeId(undefined)
           setError(undefined)
+          /*
+            And empty the address bar, or starting over undoes itself on the next reload: `?cv=` would
+            still name the CV that was just put away, and the mount effect would fetch it straight back.
+            The same trap as forgetting `clearWorkingCopy` here, one layer out.
+          */
+          void navigate({ replace: true, search: {} })
         }}
+        right={<PlanChip plan={consent.plan} />}
       />
 
       {/*
@@ -1447,13 +2063,37 @@ function HunterReady() {
                 removing a row renumbers every index-based path after it, so keeping the old list would
                 leave "we were not sure we read this" pointing at a row the person just typed.
               */
-                  onChange={(resume, provenance) =>
+                  onChange={(resume, provenance, edit) => {
                     setLoaded({
                       ...loaded,
                       resume,
                       ...(provenance === undefined ? {} : { provenance }),
                     })
-                  }
+                    /*
+                      A structural edit renumbers the coordinates the open suggestions point at, so
+                      they shift with it — the same arithmetic the provenance flags just went through.
+                      The accepted set is keyed by those coordinates too, so it is rebuilt through the
+                      same mapping: an accepted suggestion stays accepted at its new address, and the
+                      deleted row's entries leave both lists together.
+                    */
+                    if (edit !== undefined && rewrites !== undefined) {
+                      const moved = rewrites.flatMap((entry) => {
+                        const next = shiftTarget(entry, edit)
+                        return next === undefined
+                          ? []
+                          : [{ before: keyOf(entry), entry: next }]
+                      })
+                      setRewrites(moved.map((m) => m.entry))
+                      setAccepted(
+                        (current) =>
+                          new Set(
+                            moved
+                              .filter((m) => current.has(m.before))
+                              .map((m) => keyOf(m.entry)),
+                          ),
+                      )
+                    }
+                  }}
                   /*
                     Read off the registry rather than compared against a template id, so a third
                     convention would be one entry in one file — that check does not want to live in the
@@ -1471,6 +2111,69 @@ function HunterReady() {
             */}
               {panel === 'wording' && (
                 <div className="card flex flex-col gap-3 p-4">
+                  {/*
+                    Language, at the head of Wording — moved here from Design at Edd's direction: it is
+                    a decision about *words*, and this is the words panel. Switching now translates the
+                    whole document (src/optimize/translate.ts carries the guards and the history of the
+                    line it moves); the wait narrates itself below, and the comparison opens after.
+                  */}
+                  <div className="flex flex-col gap-2 border-b border-hairline pb-4">
+                    <Segmented
+                      label="Language"
+                      options={localeOptions().map((option) => ({
+                        id: option.id,
+                        label: option.label,
+                        hint: 'The whole document: headings, dates and your own words. We show you the before and after.',
+                      }))}
+                      value={resolveLocale(loaded.resume.locale)}
+                      onChange={(locale) => void switchLanguage(locale)}
+                    />
+                    {translating && stages.length > 0 && (
+                      <ol className="flex flex-col gap-1.5">
+                        {stages.map((stage, index) => (
+                          <li
+                            key={index}
+                            className="flex items-center gap-2 text-[13px]"
+                          >
+                            {stage.done ? (
+                              <svg
+                                aria-hidden
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.4"
+                                strokeLinecap="round"
+                                className="h-3.5 w-3.5 shrink-0 text-affirm"
+                              >
+                                <path d="m5 12.5 4.5 4.5L19 7" />
+                              </svg>
+                            ) : (
+                              <Spinner className="h-3 w-3 shrink-0 text-signal" />
+                            )}
+                            <span
+                              className={
+                                stage.done ? 'text-ink-faint' : 'text-ink-soft'
+                              }
+                            >
+                              {stage.label}
+                              {stage.detail === undefined
+                                ? ''
+                                : ` — ${stage.detail}`}
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                    {translateNote !== undefined && (
+                      <p
+                        role="status"
+                        className="text-[13px] leading-relaxed text-ink-soft"
+                      >
+                        {translateNote}
+                      </p>
+                    )}
+                  </div>
+
                   <div className="flex flex-col gap-1">
                     <h2 className="text-[15px] font-semibold text-ink">
                       Wording
@@ -1497,22 +2200,172 @@ function HunterReady() {
                           working="Reading your bullets…"
                         />
                       </button>
-                      {rewriting && (
-                        <span className="text-meta leading-relaxed text-ink-soft">
+                      {rewriting && rewriteChecklist === undefined && (
+                        <span
+                          role="status"
+                          className="text-meta leading-relaxed text-ink-soft"
+                        >
                           One pass over every bullet — the longer your history,
                           the longer this takes.
                         </span>
                       )}
+                      {rewriteChecklist !== undefined && (
+                        <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-field border border-hairline bg-ground px-3 py-2.5">
+                          {/*
+                            Every bullet named before the first model call, ticked green as each one
+                            finishes. The queue is the progress bar — no percentage can lie about what
+                            is left when what is left is listed.
+                          */}
+                          {rewriteChecklist.map((entry, i) => {
+                            const previous = rewriteChecklist[i - 1]
+                            const showCompany =
+                              previous === undefined ||
+                              previous.company !== entry.company
+                            return (
+                              <div key={i} className="flex flex-col gap-1">
+                                {showCompany && (
+                                  <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-faint first:mt-0">
+                                    {entry.company}
+                                  </span>
+                                )}
+                                <span className="flex items-start gap-2">
+                                  {entry.status === 'done' ? (
+                                    <svg
+                                      aria-hidden
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2.6"
+                                      strokeLinecap="round"
+                                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-affirm"
+                                    >
+                                      <path d="m5 12.5 4.5 4.5L19 7" />
+                                    </svg>
+                                  ) : entry.status === 'working' ? (
+                                    <Spinner className="mt-0.5 h-3 w-3 shrink-0 text-signal" />
+                                  ) : entry.status === 'failed' ? (
+                                    <span
+                                      aria-label="skipped"
+                                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-center text-[11px] font-bold leading-none text-caution"
+                                    >
+                                      !
+                                    </span>
+                                  ) : (
+                                    <span
+                                      aria-hidden
+                                      className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full border border-hairline-strong"
+                                    />
+                                  )}
+                                  <span
+                                    className={`line-clamp-1 text-[12px] leading-relaxed ${
+                                      entry.status === 'done'
+                                        ? 'text-ink-faint'
+                                        : 'text-ink-soft'
+                                    }`}
+                                  >
+                                    {entry.text}
+                                  </span>
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <RewriteReview
-                      rewrites={rewrites}
-                      accepted={accepted}
-                      onAccept={acceptRewrite}
-                      onDismiss={dismissRewrite}
-                      onAnswer={(answers) => void askForRewrites(answers)}
-                      busy={rewriting}
-                    />
+                    <div className="flex flex-col gap-2">
+                      {rewriteChecklist !== undefined && (
+                        <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-field border border-hairline bg-ground px-3 py-2.5">
+                          {/*
+                            Every bullet named before the first model call, ticked green as each one
+                            finishes. The queue is the progress bar — no percentage can lie about what
+                            is left when what is left is listed.
+                          */}
+                          {rewriteChecklist.map((entry, i) => {
+                            const previous = rewriteChecklist[i - 1]
+                            const showCompany =
+                              previous === undefined ||
+                              previous.company !== entry.company
+                            return (
+                              <div key={i} className="flex flex-col gap-1">
+                                {showCompany && (
+                                  <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-faint first:mt-0">
+                                    {entry.company}
+                                  </span>
+                                )}
+                                <span className="flex items-start gap-2">
+                                  {entry.status === 'done' ? (
+                                    <svg
+                                      aria-hidden
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2.6"
+                                      strokeLinecap="round"
+                                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-affirm"
+                                    >
+                                      <path d="m5 12.5 4.5 4.5L19 7" />
+                                    </svg>
+                                  ) : entry.status === 'working' ? (
+                                    <Spinner className="mt-0.5 h-3 w-3 shrink-0 text-signal" />
+                                  ) : entry.status === 'failed' ? (
+                                    <span
+                                      aria-label="skipped"
+                                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-center text-[11px] font-bold leading-none text-caution"
+                                    >
+                                      !
+                                    </span>
+                                  ) : (
+                                    <span
+                                      aria-hidden
+                                      className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full border border-hairline-strong"
+                                    />
+                                  )}
+                                  <span
+                                    className={`line-clamp-1 text-[12px] leading-relaxed ${
+                                      entry.status === 'done'
+                                        ? 'text-ink-faint'
+                                        : 'text-ink-soft'
+                                    }`}
+                                  >
+                                    {entry.text}
+                                  </span>
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                      {rewrites.filter(
+                        (entry) =>
+                          entry.suggestion !== undefined &&
+                          !accepted.has(keyOf(entry)),
+                      ).length >= 2 && (
+                        <button
+                          type="button"
+                          onClick={acceptAllRewrites}
+                          className="btn btn-quiet self-start px-4 py-2 text-[13px]"
+                        >
+                          Accept all{' '}
+                          {
+                            rewrites.filter(
+                              (entry) =>
+                                entry.suggestion !== undefined &&
+                                !accepted.has(keyOf(entry)),
+                            ).length
+                          }{' '}
+                          suggestions
+                        </button>
+                      )}
+                      <RewriteReview
+                        rewrites={rewrites}
+                        accepted={accepted}
+                        onAccept={acceptRewrite}
+                        onDismiss={dismissRewrite}
+                        onAnswer={(answers) => void askForRewrites(answers)}
+                        busy={rewriting}
+                      />
+                    </div>
                   )}
 
                   {rewriteNote !== undefined && (
@@ -1579,66 +2432,41 @@ function HunterReady() {
               )}
 
               {panel === 'design' && (
-                <div className="card flex flex-col gap-5 p-4">
+                <div className="card flex flex-col gap-3 p-4">
                   {/*
-                  Back in the sidebar, as a panel of its own.
+                    Thirty pairings, replacing the three segmented rows that were here.
 
-                  These were choice cards here, then a segmented row on the document, and now segmented
-                  rows here — Edd looked at the middle version and asked for tabs instead. The document
-                  pane keeps its full width for the comparison, which is what the move was competing
-                  with: two A4 sheets side by side need every pixel on the X axis, and a control strip
-                  above them was taking a hundred of them for controls you touch once.
+                    The rows were a fine control for twelve combinations spread across two questions. They
+                    cannot present thirty: a person choosing a design is not choosing a structure and a
+                    theme separately, they are choosing a look, and the gallery is the shape of that
+                    question. `design-gallery.tsx` carries why the cards show a type specimen rather than a
+                    thumbnail of a page.
+                  */}
+                  <div className="flex flex-col gap-1">
+                    <h2 className="text-[15px] font-semibold text-ink">
+                      Design
+                    </h2>
+                    <p className="text-[13px] leading-relaxed text-ink-soft">
+                      The layout decides what a reader meets first. The type
+                      decides how it sounds. Both are free to change at any
+                      point — nothing about your CV is rewritten.
+                    </p>
+                  </div>
 
-                  The compact form is kept rather than reverting to cards. Nine hint lines is what made
-                  this block 991px tall in the first place, and one hint for the option you chose reads
-                  better than three you have to compare.
-                */}
-
-                  <Segmented
-                    label="Layout"
-                    options={TEMPLATE_IDS.map((id) => ({
-                      id,
-                      label: templates[id].label.replace('Modern — ', ''),
-                      hint: templates[id].hint,
-                    }))}
-                    value={templateId}
-                    onChange={setTemplateId}
-                  />
-                  {/*
-                The document's language — v0.8. It changes the *furniture* only: section headings, month
-                names, the word for a current role. The candidate's own words are never translated, which
-                the hint says outright, because a user offered "Language" would reasonably expect us to
-                translate their bullets and would be right to be alarmed if we silently did.
-
-                Detected from the CV and overridable, because detection is a guess and the person
-                applying knows which country they are applying in. The hint is now unconditional: it used
-                to appear only on the detected option, which meant that choosing another language removed
-                the sentence promising we would not translate their words — the moment it matters most.
-              */}
-                  <Segmented
-                    label="Language"
-                    options={localeOptions().map((option) => ({
-                      id: option.id,
-                      label: option.label,
-                      hint: 'Headings and dates. Your own words stay exactly as written.',
-                    }))}
-                    value={resolveLocale(loaded.resume.locale)}
-                    onChange={(locale) =>
-                      setLoaded({
-                        ...loaded,
-                        resume: { ...loaded.resume, locale },
-                      })
-                    }
-                  />
-                  <Segmented
-                    label="Type and spacing"
-                    options={THEME_IDS.map((id) => ({
-                      id,
-                      label: themeLabels[id].label,
-                      hint: themeLabels[id].hint,
-                    }))}
-                    value={themeId}
-                    onChange={setThemeId}
+                  <DesignGallery
+                    templateId={templateId}
+                    themeId={themeId}
+                    /*
+                      `=== true` on purpose: the field is `undefined` until the server answers, and an
+                      unknown entitlement must draw as locked rather than as unlocked. A padlock that
+                      appears a moment late is untidy; one that vanishes a moment late offers something
+                      the render endpoint will refuse.
+                    */
+                    entitled={consent.paidDesigns === true}
+                    onChoose={(design) => {
+                      setTemplateId(design.structure)
+                      setThemeId(design.theme)
+                    }}
                   />
                 </div>
               )}
@@ -1647,20 +2475,23 @@ function HunterReady() {
             {/*
               The download, at the foot of its own column.
 
-              It was at the top of the page, on the argument that somebody who only wants a cleaner PDF
-              of a CV that already parsed should not scroll past their whole history to find it. The tabs
-              made that argument obsolete — nothing is below a fold any more — and left two large buttons
-              floating in the header with no relationship to anything beside them. Edd: "estos dos
-              botones aquí arriba no tienen sentido."
+              Restored here after being deleted by accident: the edit that swapped the Design panel for the
+              gallery replaced everything up to `</aside>`, and this footer was inside that range. The
+              product's primary action disappeared and the build stayed green, which is the reason CLAUDE.md
+              says to check a feature is reachable rather than to trust a passing suite.
 
-              Here they read as what they are: the end of the column you work down. Outside the scrolling
-              panel, so the last action never scrolls out of reach, and a full-width primary pill because
-              DESIGN.md is right that it reads as one decisive action in a way a rectangle does not.
+              Outside the scrolling panel, so the last action never scrolls out of reach, and a full-width
+              primary pill because DESIGN.md is right that it reads as one decisive action.
             */}
             <div className="flex shrink-0 flex-col gap-2 border-t border-hairline pt-3">
+              {/*
+                Disabled on a locked design rather than left to fail at the endpoint. `/api/render` is the
+                real gate — a client cannot be trusted with one — but letting somebody press a button whose
+                only possible outcome is a refusal is not respect for the gate, just a worse way to say no.
+              */}
               <button
                 type="button"
-                disabled={downloads.busyFormat !== undefined}
+                disabled={downloads.busyFormat !== undefined || lockedDesign}
                 aria-busy={downloads.busyFormat === 'pdf'}
                 onClick={() =>
                   void downloads.start(loaded.resume, templateId, themeId)
@@ -1678,13 +2509,12 @@ function HunterReady() {
               </button>
               {/*
                 Word, beside the PDF rather than hidden behind a menu — v0.6. Many ATS portals require or
-                prefer `.docx`, and several parse it better than any PDF. It stays the quiet button: the
-                PDF is what most people send and the one whose look they just chose, and the Word file has
-                one ATS-safe layout and no design to pick.
+                prefer `.docx`, and several parse it better than any PDF. It stays the quiet button: the PDF
+                is what most people send and the one whose look they just chose.
               */}
               <button
                 type="button"
-                disabled={downloads.busyFormat !== undefined}
+                disabled={downloads.busyFormat !== undefined || lockedDesign}
                 aria-busy={downloads.busyFormat === 'docx'}
                 onClick={() =>
                   void downloads.start(
@@ -1703,6 +2533,12 @@ function HunterReady() {
                   working="Building…"
                 />
               </button>
+              {lockedDesign && (
+                <p className="text-meta leading-relaxed text-ink-soft">
+                  Pick a design marked Included to download, or keep this one to
+                  compare.
+                </p>
+              )}
               {downloads.failure !== undefined && (
                 <p
                   role="status"
@@ -1762,12 +2598,24 @@ function HunterReady() {
                   </button>
                 )}
                 <span className="tally text-meta text-ink-soft">
-                  A4 · {fit.pages} page{fit.pages === 1 ? '' : 's'}
+                  A4 · {pages} page{pages === 1 ? '' : 's'}
                   {readFields > 0 &&
                     ` · ${readFields - toCheck}/${readFields} read cleanly`}
                 </span>
               </span>
             </div>
+            {/*
+              Said where the document is, because the document is the thing that cannot be downloaded.
+              Caution rather than alert: nothing has failed — this is a fact about the plan, and colouring a
+              price as an error would make it feel like a fault.
+            */}
+            {lockedDesign && (
+              <p className="border-b border-caution/25 bg-caution-wash px-4 py-2 text-[13px] leading-relaxed text-ink">
+                This design is part of the paid plan. You can see it here, and
+                download any design marked <strong>Included</strong> — they
+                produce the same document, checked by the same parse test.
+              </p>
+            )}
             {fit.advice !== undefined && (
               <p className="border-b border-hairline bg-band px-4 py-2 text-[13px] leading-relaxed text-ink-soft">
                 {fit.advice}
@@ -1779,7 +2627,17 @@ function HunterReady() {
               the point where neither is legible. The switch is one click away in either direction, which
               is what makes replacing it safe — every station in this flow is re-enterable.
             */}
-            {comparing ? (
+            {/*
+              `changes.length > 0` as well as `comparing`, because `compare=true` is now something a URL
+              can assert and a URL can be wrong.
+
+              The toggle button lives inside the `changes.length > 0` block above, so a comparison of an
+              unchanged document — a link followed after the edits were saved, say, which makes the current
+              CV its own "before" — would render two identical sheets with no way back but editing the
+              address bar. Ignoring the flag instead is the same rule the search validator follows: an
+              impossible request falls back to the ordinary screen rather than to a dead end.
+            */}
+            {comparing && changes.length > 0 ? (
               <BeforeAfter
                 original={loaded.original}
                 current={loaded.resume}
@@ -1792,6 +2650,12 @@ function HunterReady() {
                 resume={loaded.resume}
                 theme={theme}
                 Template={template.Component}
+                /*
+                  This is the preview whose count the header beside it shows. The first attempt wired the
+                  callback to the targeting branch's preview instead — the label kept reading the estimate
+                  while the sheets beside it disagreed, which is the bug being fixed, one screen over.
+                */
+                onPagesMeasured={setMeasuredPages}
               />
             )}
           </main>

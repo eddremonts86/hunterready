@@ -1,22 +1,24 @@
 /**
- * "Modern" document theme — sans throughout, tight vertical rhythm.
+ * "Modern" — sans throughout, a teal accent bar against every section heading.
  *
- * The default. Reads as contemporary without being fashionable, which is what a CV needs
- * to survive both a recruiter's three-second scan and a parser.
+ * The default. Contemporary without being fashionable. The teal is confident and sector-neutral —
+ * neither corporate navy nor creative anything, which is exactly where a default should sit.
  */
 import { defaultPrimitives } from '@/components/pdf/primitives'
-import type { PdfcnTheme } from '@/components/pdf/theme-types'
+import type { DocTheme } from './style'
 import {
   DEVELOPER_GRAY,
   FONT_SANS,
-  NEUTRALIZED_SEMANTICS,
+  NEUTRALIZED_ALERTS,
   PAPER_MUTED,
   PAPER_WHITE,
   PRINT_BLACK,
   SILVER_GRAY,
+  TEAL_INK,
+  TEAL_WASH,
 } from './tokens'
 
-export const modernTheme: PdfcnTheme = {
+export const modernTheme: DocTheme = {
   name: 'modern',
   primitives: defaultPrimitives,
   colors: {
@@ -24,10 +26,11 @@ export const modernTheme: PdfcnTheme = {
     background: PAPER_WHITE,
     muted: PAPER_MUTED,
     mutedForeground: DEVELOPER_GRAY,
-    primary: PRINT_BLACK,
+    primary: TEAL_INK,
     primaryForeground: PAPER_WHITE,
     border: SILVER_GRAY,
-    ...NEUTRALIZED_SEMANTICS,
+    accent: TEAL_INK,
+    ...NEUTRALIZED_ALERTS,
   },
   typography: {
     body: {
@@ -63,5 +66,16 @@ export const modernTheme: PdfcnTheme = {
   page: {
     size: 'A4',
     orientation: 'portrait',
+  },
+  style: {
+    accent: TEAL_INK,
+    accentWash: TEAL_WASH,
+    onAccent: PAPER_WHITE,
+    masthead: 'plain',
+    heading: 'bar',
+    nameInAccent: false,
+    headingInAccent: true,
+    bulletsInAccent: true,
+    roleInAccent: false,
   },
 }

@@ -756,6 +756,93 @@ line.
 
 ---
 
+## ADR-026 — The sidebar layout exists, honestly rated, with the DOM fighting for the parser
+
+**2026-08-15 · Accepted · Edd's decision**
+
+The two-column CV with a full-height colored panel is what every reference gallery sells and what
+Edd's own CV looks like. docs/05 rule 1 forbids it for _verified_ templates, and that rule stands —
+what changed is that the product now offers the layout under the rating that has existed for it all
+along: **design-first**, with a warning that says the real risk in plain language (a position-sorting
+parser reads a page line by line across both columns).
+
+Honesty is not a licence to make the risk worse. The main column — name, summary, the whole career —
+comes first in the document tree and `row-reverse` puts the sidebar on the visual left, so a
+content-order extractor reads the entire history before the first sidebar item. The template passes
+the full round-trip suite, reading-order assertion included; the badge exists for the parsers the
+suite cannot speak for.
+
+The full-height column is the measured construction from ADR-025 with split margin bands:
+sidebar-colored for the column's width, page-colored for the rest, per page. `onyx` (light type on a
+dark ground) rides the same tinted-paper machinery, and watermarks are pure geometry — takumi renders
+no SVG images, so a "marca de agua" is absolutely-positioned circles and rings at single-digit
+opacity, painted before the text and absent from the text layer.
+
+## ADR-025 — Character axes: tinted papers, section chips, name faces, ten families
+
+**2026-08-14 · Accepted · Edd's decision**
+
+ADR-024 gave each theme an accent and a heading treatment; Edd's bar moved to Apple Pages' CV
+gallery: whole pages of tinted stock, colored masthead bands, a different hue per section, and
+typefaces with a point of view. "No importa el peso" — the font-size budget is explicitly spent.
+
+### The bleed construction
+
+takumi has no page-background option and its margins are unpainted page, so a tinted paper is
+built from three painted pieces: zero side margins with the horizontal margins moved into the
+content box as padding; tinted header and footer bands exactly filling the vertical margins,
+repeated per page by the renderer; and the content box grown to a whole number of usable pages
+— `measure()` first, then `height: pages × usable - 2` (the probe caught an exact-boundary
+slice spilling a phantom blank page, hence the two pixels). Continuation pages keep real
+margins, the counter lives in the tinted footer band, and the text layer is untouched
+throughout. `theme.spacing.page` stays the single source of truth: the preview and the fit
+estimator read the same numbers whether the paper is white or tinted.
+
+### The other axes
+
+Per-section heading accents (`sectionAccents`) give carnival its orange/brick/forest chips —
+the words in the chips never change, so EXPERIENCE on orange extracts exactly as EXPERIENCE. A
+name-only face (`nameFontFamily`) lets brush hand-write the one string the round-trip suite
+scores on every build. A masthead accent (`mastheadAccent`) lets a band differ from the chips.
+
+### Five families vendored, probed first
+
+Playfair Display, EB Garamond, Space Grotesk, Lora, Josefin Sans — all OFL, all through
+`bundle-fonts.mjs`, all exercised by the round-trip matrix (112 combinations) before the
+catalogue offered them. Sixteen themes, fifty-two designs, the free twelve unchanged.
+
+## ADR-024 — Documents own an accent palette; the ban is on chrome colors, not on color
+
+**2026-08-14 · Accepted · Edd's decision**
+
+The first design catalogue shipped thirty pairings that were one grey document in thirty spacing
+configurations, and Edd's verdict was the correct one: nobody pays for that. The cause was an
+over-reading of DESIGN.md's hardest rule. "The print is not ours" bans **our brand** from the
+document — Signal Blue, the chrome greys, Figtree — because a CV carrying our accent carries our
+brand into someone else's job application. It was implemented as "documents are monochrome",
+which bans something the rule never mentioned: color that belongs to the document itself.
+
+### The rule, restated precisely
+
+- Documents draw from their own print palette: seven accent inks (teal, navy, graphite, rust,
+  forest, maroon, slate) plus their washes, all in `ALLOWED_PRINT_COLORS`, all enforced by test.
+- The chrome's colors are banned **by value** in `ROOM_COLORS` — now including Signal Blue
+  `#1B3BD8` alongside the retired darkroom ambers — and the themes test walks both `colors` and
+  the style block against the allowed list.
+- Identity is drawing, never typesetting tricks: bands, bars, rules, frames and washes are shapes
+  with no glyphs in them. `letterSpacing` stays banned on text (rule 13; the round-trip once read
+  a tracked heading back as "E x p e r i e n c e").
+
+### Why themes carry a `style` block instead of thirty template files
+
+`PdfcnTheme` is vendored and cannot gain fields, so each theme exports `DocTheme = PdfcnTheme &
+{ style }` — masthead construction (`plain`/`centered`/`band`/`sideline`), section-heading
+treatment (`hairline`/`underline`/`shortline`/`bar`/`band`/`tint`/`flanked`/`framed`/`plain`),
+and where the accent lands (name, headings, bullets, role line). One template factory executes
+the vocabulary; eight themes speak it differently; the round-trip suite proves all 184
+combinations still parse. A test now asserts no two themes share an accent or a heading look —
+the test Edd's complaint wrote.
+
 ## ADR-023 — The third-party model is the paid capability; our own hardware is the default
 
 **2026-08-14 · Accepted · Edd's decision**

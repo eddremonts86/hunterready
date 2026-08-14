@@ -28,8 +28,30 @@ import {
 } from '../format'
 import { strings } from '../locale'
 import type { OutputLocale } from '../locale'
+import { sectionAccent, styleOf } from '../themes/style'
+import type { SectionKind } from '../themes/style'
 
 export type Convention = 'intl' | 'eu'
+
+/**
+ * Which section a reader meets first, after the summary.
+ *
+ * The only axis that produces genuinely different **structures** without leaving the ATS ruleset. One
+ * column, standard headings, contact as text and a single reading order are all binding (docs/05), so a
+ * template cannot move a block into a sidebar or a table — but which order the blocks appear in is free,
+ * and it is the difference between a CV that argues for a career change and one that recites a history.
+ *
+ *   • `experience` — the default, and right for anybody continuing in their field.
+ *   • `skills` — for a career switcher, whose transferable skills are the argument and whose last job
+ *     title is the thing they are trying to move away from. Burying the skills under it is the wrong
+ *     order for exactly the person who needs the most help.
+ *   • `education` — for a recent graduate or someone newly qualified, where the qualification *is* the
+ *     credential and the work history is bar shifts.
+ *
+ * Reading order is asserted by the round-trip test for every one of them, because reordering blocks is
+ * precisely the sort of change that looks fine and scrambles a text layer.
+ */
+export type SectionOrder = 'experience' | 'skills' | 'education'
 
 /**
  * The printed size of the photo, in points, and the only place it is written down.
@@ -49,17 +71,52 @@ interface BodyProps {
   resume: Resume
   theme: PdfcnTheme
   convention: Convention
+  order: SectionOrder
 }
 
-/** Section heading + hairline. Standard wording; creative headings lose ATS parsers. */
+/**
+ * Section heading, drawn the way this theme draws them. Standard wording always — creative heading
+ * *text* loses ATS parsers (docs/05) — but everything around the words belongs to the theme: a teal
+ * bar, a navy underline, a solid green band, a maroon title between hairlines, a slate box.
+ *
+ * NO letter-spacing anywhere in here, and it is not a style preference. The Block 5 round-trip test
+ * caught `letterSpacing: 1.2` making the renderer position every glyph individually — the extractor
+ * read "E x p e r i e n c e" and an ATS searching for the Experience section would find nothing. That
+ * is why the style system offers bands and bars in the first place: they are the identity tools that
+ * cannot touch the text layer. See rule 13 in docs/05-pdf-rendering.md.
+ */
 function SectionHeading({
   title,
   theme,
+  kind = 'other',
 }: {
   title: string
   theme: PdfcnTheme
+  /** Which section this opens — themes with `sectionAccents` paint each kind its own hue. */
+  kind?: SectionKind
 }) {
-  return (
+  const style = styleOf(theme)
+  const accent = sectionAccent(style, kind)
+  const words = (
+    <div
+      style={{
+        fontFamily: theme.typography.heading.fontFamily,
+        fontSize: theme.typography.heading.fontSize.h2,
+        fontWeight: theme.typography.heading.fontWeight,
+        color:
+          style.heading === 'band'
+            ? style.onAccent
+            : style.headingInAccent
+              ? accent
+              : theme.colors.foreground,
+        textTransform: 'uppercase',
+      }}
+    >
+      {title}
+    </div>
+  )
+
+  const wrap = (children: React.ReactNode) => (
     <div
       style={{
         display: 'flex',
@@ -68,38 +125,144 @@ function SectionHeading({
         marginTop: theme.spacing.sectionGap,
       }}
     >
-      {/**
-       * NO letter-spacing here, and it is not a style preference.
-       *
-       * The Block 5 round-trip test caught this on its first run: `letterSpacing: 1.2` made
-       * the renderer position every glyph individually, and the text extractor read the
-       * heading back as "E x p e r i e n c e". The heading looks perfect on screen while an
-       * ATS searching for the Experience section finds nothing — a CV-killing defect that is
-       * invisible to the eye. Tracked headings are a nice-to-have; being parseable is the
-       * product. See rule 13 in docs/05-pdf-rendering.md.
-       */}
-      <div
-        style={{
-          fontFamily: theme.typography.heading.fontFamily,
-          fontSize: theme.typography.heading.fontSize.h2,
-          fontWeight: theme.typography.heading.fontWeight,
-          color: theme.colors.foreground,
-          textTransform: 'uppercase',
-        }}
-      >
-        {title}
-      </div>
-      <div style={{ height: 1, backgroundColor: theme.colors.border }} />
+      {children}
     </div>
   )
+
+  switch (style.heading) {
+    case 'band':
+      // Solid accent, heading in onAccent. The band is a painted box; the words inside extract as text.
+      return wrap(
+        <div
+          style={{
+            display: 'flex',
+            backgroundColor: accent,
+            paddingTop: 3,
+            paddingBottom: 3,
+            paddingLeft: 8,
+            paddingRight: 8,
+          }}
+        >
+          {words}
+        </div>,
+      )
+    case 'tint':
+      return wrap(
+        <div
+          style={{
+            display: 'flex',
+            backgroundColor: style.accentWash,
+            paddingTop: 2.5,
+            paddingBottom: 2.5,
+            paddingLeft: 7,
+            paddingRight: 7,
+          }}
+        >
+          {words}
+        </div>,
+      )
+    case 'bar':
+      return wrap(
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 7,
+          }}
+        >
+          <div style={{ width: 4, height: 11, backgroundColor: accent }} />
+          {words}
+        </div>,
+      )
+    case 'underline':
+      return wrap(
+        <>
+          {words}
+          <div style={{ height: 2, backgroundColor: accent }} />
+        </>,
+      )
+    case 'shortline':
+      return wrap(
+        <>
+          {words}
+          <div style={{ width: 34, height: 3, backgroundColor: accent }} />
+        </>,
+      )
+    case 'flanked':
+      // Centered title with a hairline on each side. The flanking lines are empty flex children.
+      return wrap(
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+          }}
+        >
+          <div
+            style={{
+              flexGrow: 1,
+              height: 1,
+              backgroundColor: theme.colors.border,
+            }}
+          />
+          {words}
+          <div
+            style={{
+              flexGrow: 1,
+              height: 1,
+              backgroundColor: theme.colors.border,
+            }}
+          />
+        </div>,
+      )
+    case 'framed':
+      return wrap(
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignSelf: 'flex-start',
+            border: `1px solid ${accent}`,
+            paddingTop: 2,
+            paddingBottom: 2,
+            paddingLeft: 7,
+            paddingRight: 7,
+          }}
+        >
+          {words}
+        </div>,
+      )
+    case 'plain':
+      return wrap(words)
+    case 'hairline':
+    default:
+      return wrap(
+        <>
+          {words}
+          <div style={{ height: 1, backgroundColor: theme.colors.border }} />
+        </>,
+      )
+  }
 }
 
 function Bullet({ text, theme }: { text: string; theme: PdfcnTheme }) {
+  const style = styleOf(theme)
   return (
     <div
       style={{ display: 'flex', flexDirection: 'row', gap: 5, marginTop: 2 }}
     >
-      <div style={{ color: theme.colors.mutedForeground }}>•</div>
+      {/* Always the `•` glyph — parsers key on it. Only its ink is the theme's to choose. */}
+      <div
+        style={{
+          color: style.bulletsInAccent
+            ? style.accent
+            : theme.colors.mutedForeground,
+        }}
+      >
+        •
+      </div>
       <div style={{ flexGrow: 1 }}>{text}</div>
     </div>
   )
@@ -131,7 +294,14 @@ function Job({
         breakInside: 'avoid',
       }}
     >
-      <div style={{ fontWeight: 700 }}>
+      <div
+        style={{
+          fontWeight: 700,
+          color: styleOf(theme).roleInAccent
+            ? styleOf(theme).accent
+            : theme.colors.foreground,
+        }}
+      >
         {item.role} — {item.company}
       </div>
       {meta === '' ? null : (
@@ -156,7 +326,7 @@ function Job({
   )
 }
 
-function Body({ resume, theme, convention }: BodyProps) {
+function Body({ resume, theme, convention, order }: BodyProps) {
   const { basics } = resume
   const showPersonalDetails =
     convention === 'eu' && basics.personalDetails.length > 0
@@ -181,6 +351,15 @@ function Body({ resume, theme, convention }: BodyProps) {
   const locale = resolveLocale(resume.locale)
   const local = strings(locale)
 
+  const style = styleOf(theme)
+  const mastheadStyle = style.masthead
+  /**
+   * Secondary text inside the masthead. On paper it is the muted grey; inside a dark accent band that
+   * grey would sit at 2:1 and disappear, so the band swaps it for the band's own foreground.
+   */
+  const mastheadMuted =
+    mastheadStyle === 'band' ? style.onAccent : theme.colors.mutedForeground
+
   const contact = joinParts([
     basics.email,
     basics.phone,
@@ -196,8 +375,57 @@ function Body({ resume, theme, convention }: BodyProps) {
         fontSize: theme.typography.body.fontSize,
         lineHeight: theme.typography.body.lineHeight,
         color: theme.colors.foreground,
+        // The anchor for the watermark geometry below; harmless when there is none.
+        position: 'relative',
       }}
     >
+      {/*
+        The watermark, first in the tree so every glyph paints over it. Geometry only: takumi draws no
+        SVG images, and a text watermark would dump giant letters into the extraction. It appears once,
+        behind the masthead region, like a letterhead — not tiled per page.
+      */}
+      {style.watermark === 'disc' ? (
+        <div
+          style={{
+            position: 'absolute',
+            top: -30,
+            right: -20,
+            width: 230,
+            height: 230,
+            borderRadius: 230,
+            backgroundColor: style.accent,
+            opacity: 0.07,
+          }}
+        />
+      ) : null}
+      {style.watermark === 'rings' ? (
+        <>
+          <div
+            style={{
+              position: 'absolute',
+              top: -20,
+              right: -10,
+              width: 190,
+              height: 190,
+              borderRadius: 190,
+              border: `10px solid ${style.accent}`,
+              opacity: 0.09,
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              top: 40,
+              right: 60,
+              width: 90,
+              height: 90,
+              borderRadius: 90,
+              border: `7px solid ${style.accent}`,
+              opacity: 0.12,
+            }}
+          />
+        </>
+      ) : null}
       {/*
         The masthead becomes a row when there is a photo, and the photo is the **last** child.
 
@@ -208,12 +436,36 @@ function Body({ resume, theme, convention }: BodyProps) {
 
         `flexDirection: row` with the text column growing: flexbox only, no grid (Satori lineage).
       */}
+      {/*
+        The masthead's construction is the theme's single loudest choice, so it is the theme's to make:
+
+          plain     — the classic left-set name.
+          centered  — the formal page; contact centered under the name.
+          band      — the whole masthead painted in the accent, text in onAccent. Executive's signature.
+          sideline  — a thick accent bar down the masthead's left edge.
+
+        Whatever the paint, the DOM order never moves: name, headline, contact, links, details, then the
+        photo LAST — a parser walks this in DOM order and must meet the name before anything image-shaped
+        (docs/05). The band and sideline are painted boxes around the same text in the same order.
+      */}
       <div
         style={{
           display: 'flex',
           flexDirection: 'row',
-          alignItems: 'flex-start',
+          alignItems: mastheadStyle === 'band' ? 'center' : 'flex-start',
           gap: showPhoto ? 14 : 0,
+          ...(mastheadStyle === 'band'
+            ? {
+                backgroundColor: style.mastheadAccent ?? style.accent,
+                paddingTop: 14,
+                paddingBottom: 14,
+                paddingLeft: 16,
+                paddingRight: 16,
+              }
+            : {}),
+          ...(mastheadStyle === 'sideline'
+            ? { borderLeft: `4px solid ${style.accent}`, paddingLeft: 12 }
+            : {}),
         }}
       >
         <div
@@ -223,22 +475,36 @@ function Body({ resume, theme, convention }: BodyProps) {
             flexGrow: 1,
             // `minWidth: 0` so a long headline wraps instead of pushing the photo off the page.
             minWidth: 0,
+            ...(mastheadStyle === 'centered' && !showPhoto
+              ? { alignItems: 'center', textAlign: 'center' }
+              : {}),
           }}
         >
           {/* Name and contact are text, never an image — an ATS drops image headers whole. */}
           <div
             style={{
-              fontFamily: theme.typography.heading.fontFamily,
+              // A display or script face for the name only, when the theme sets one (style axis 3).
+              fontFamily:
+                style.nameFontFamily ?? theme.typography.heading.fontFamily,
               fontSize: theme.typography.heading.fontSize.h1,
-              fontWeight: theme.typography.heading.fontWeight,
+              fontWeight:
+                style.nameFontFamily === undefined
+                  ? theme.typography.heading.fontWeight
+                  : 400,
               lineHeight: theme.typography.heading.lineHeight,
+              color:
+                mastheadStyle === 'band'
+                  ? style.onAccent
+                  : style.nameInAccent
+                    ? style.accent
+                    : theme.colors.foreground,
             }}
           >
             {basics.fullName}
           </div>
 
           {basics.headline === undefined ? null : (
-            <div style={{ marginTop: 3, color: theme.colors.mutedForeground }}>
+            <div style={{ marginTop: 3, color: mastheadMuted }}>
               {basics.headline}
             </div>
           )}
@@ -248,7 +514,7 @@ function Body({ resume, theme, convention }: BodyProps) {
               style={{
                 marginTop: 5,
                 fontSize: theme.typography.body.fontSize - 1,
-                color: theme.colors.mutedForeground,
+                color: mastheadMuted,
               }}
             >
               {contact}
@@ -260,7 +526,7 @@ function Body({ resume, theme, convention }: BodyProps) {
               style={{
                 marginTop: 2,
                 fontSize: theme.typography.body.fontSize - 1,
-                color: theme.colors.mutedForeground,
+                color: mastheadMuted,
               }}
             >
               {/* The URL is spelled out: a bare "LinkedIn" label extracts as nothing useful. */}
@@ -273,7 +539,7 @@ function Body({ resume, theme, convention }: BodyProps) {
               style={{
                 marginTop: 5,
                 fontSize: theme.typography.body.fontSize - 1,
-                color: theme.colors.mutedForeground,
+                color: mastheadMuted,
               }}
             >
               {joinParts(
@@ -310,67 +576,107 @@ function Body({ resume, theme, convention }: BodyProps) {
         </div>
       )}
 
-      {resume.work.length === 0 ? null : (
-        <>
-          <SectionHeading title={local.headings.work} theme={theme} />
-          {resume.work.map((w, i) => (
-            <Job key={i} item={w} theme={theme} locale={locale} />
-          ))}
-        </>
-      )}
+      {/*
+        The three reorderable sections, emitted in the order the template asked for.
 
-      {resume.education.length === 0 ? null : (
-        <>
-          <SectionHeading title={local.headings.education} theme={theme} />
-          {resume.education.map((e, i) => (
-            <div
-              key={i}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 1,
-                marginTop: theme.spacing.componentGap,
-                breakInside: 'avoid',
-              }}
-            >
-              <div style={{ fontWeight: 700 }}>
-                {joinParts([e.degree, e.field], ' ')}
-                {e.degree === undefined && e.field === undefined
-                  ? e.institution
-                  : ` — ${e.institution}`}
-              </div>
-              <div
-                style={{
-                  fontSize: theme.typography.body.fontSize - 1.5,
-                  color: theme.colors.mutedForeground,
-                }}
-              >
-                {joinParts([
-                  formatRange(e.startDate, e.endDate, locale),
-                  e.location,
-                  e.grade,
-                ])}
-              </div>
-              {e.highlights.map((h, j) => (
-                <Bullet key={j} text={h} theme={theme} />
-              ))}
-            </div>
-          ))}
-        </>
-      )}
-
-      {resume.skills.length === 0 ? null : (
-        <>
-          <SectionHeading title={local.headings.skills} theme={theme} />
-          {resume.skills.map((group, i) => (
-            // Comma-separated text, never bars or dots: rating graphics extract as noise.
-            <div key={i} style={{ marginTop: 4, breakInside: 'avoid' }}>
-              <span style={{ fontWeight: 700 }}>{group.category}: </span>
-              <span>{group.items.join(', ')}</span>
-            </div>
-          ))}
-        </>
-      )}
+        Held as variables and then placed, rather than duplicated per order: three copies of the work
+        section is three places for a future date-format fix to be forgotten, and this is the block the
+        round-trip test is most particular about.
+      */}
+      {(() => {
+        const work = (
+          <>
+            {resume.work.length === 0 ? null : (
+              <>
+                <SectionHeading
+                  title={local.headings.work}
+                  theme={theme}
+                  kind="work"
+                />
+                {resume.work.map((w, i) => (
+                  <Job key={i} item={w} theme={theme} locale={locale} />
+                ))}
+              </>
+            )}
+          </>
+        )
+        const education = (
+          <>
+            {resume.education.length === 0 ? null : (
+              <>
+                <SectionHeading
+                  title={local.headings.education}
+                  theme={theme}
+                  kind="education"
+                />
+                {resume.education.map((e, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 1,
+                      marginTop: theme.spacing.componentGap,
+                      breakInside: 'avoid',
+                    }}
+                  >
+                    <div style={{ fontWeight: 700 }}>
+                      {joinParts([e.degree, e.field], ' ')}
+                      {e.degree === undefined && e.field === undefined
+                        ? e.institution
+                        : ` — ${e.institution}`}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: theme.typography.body.fontSize - 1.5,
+                        color: theme.colors.mutedForeground,
+                      }}
+                    >
+                      {joinParts([
+                        formatRange(e.startDate, e.endDate, locale),
+                        e.location,
+                        e.grade,
+                      ])}
+                    </div>
+                    {e.highlights.map((h, j) => (
+                      <Bullet key={j} text={h} theme={theme} />
+                    ))}
+                  </div>
+                ))}
+              </>
+            )}
+          </>
+        )
+        const skills = (
+          <>
+            {resume.skills.length === 0 ? null : (
+              <>
+                <SectionHeading
+                  title={local.headings.skills}
+                  theme={theme}
+                  kind="skills"
+                />
+                {resume.skills.map((group, i) => (
+                  // Comma-separated text, never bars or dots: rating graphics extract as noise.
+                  <div key={i} style={{ marginTop: 4, breakInside: 'avoid' }}>
+                    <span style={{ fontWeight: 700 }}>{group.category}: </span>
+                    <span>{group.items.join(', ')}</span>
+                  </div>
+                ))}
+              </>
+            )}
+          </>
+        )
+        const sequence =
+          order === 'skills'
+            ? [skills, work, education]
+            : order === 'education'
+              ? [education, work, skills]
+              : [work, education, skills]
+        return sequence.map((section, i) => (
+          <Fragment key={i}>{section}</Fragment>
+        ))
+      })()}
 
       {resume.projects.length === 0 ? null : (
         <>
@@ -439,8 +745,18 @@ function Body({ resume, theme, convention }: BodyProps) {
   )
 }
 
-/** `(resume, theme) => JSX`. Page geometry comes from the render options, not from here. */
-export function createModernTemplate(convention: Convention) {
+/**
+ * `(resume, theme) => JSX`. Page geometry comes from the theme, not from here.
+ *
+ * Two axes, and both are structural rather than cosmetic: the **convention** decides which blocks exist at
+ * all (the photo and the personal details, ADR-010), and the **order** decides which the reader meets
+ * first. Colour, type and spacing are the theme's business, which is what lets one factory produce every
+ * structure in the catalogue without a file per entry.
+ */
+export function createModernTemplate(
+  convention: Convention,
+  order: SectionOrder = 'experience',
+) {
   return function ModernTemplate({
     resume,
     theme,
@@ -454,7 +770,12 @@ export function createModernTemplate(convention: Convention) {
       >
         <Page>
           <PdfcnThemeProvider theme={theme}>
-            <Body resume={resume} theme={theme} convention={convention} />
+            <Body
+              resume={resume}
+              theme={theme}
+              convention={convention}
+              order={order}
+            />
           </PdfcnThemeProvider>
         </Page>
       </Document>

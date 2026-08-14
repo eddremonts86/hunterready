@@ -198,37 +198,72 @@ export function Library({
     // `refresh` is stable enough for this: it depends only on sign-in state, which is the trigger.
   }, [signedIn, refresh])
 
-  const save = useCallback(async () => {
-    setBusy(true)
-    setNote(undefined)
-    try {
-      const response = await fetch('/api/library', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          resume,
-          ...(savedId === undefined ? {} : { resumeId: savedId }),
-        }),
-      })
-      if (response.status === 404) {
-        setAvailable(false)
-        return
+  /**
+   * Save, either over the row this CV came from or as a new one.
+   *
+   * `asCopy` exists because the interface could only ever hold **one** saved CV per uploaded file. Sending
+   * `resumeId` updates in place, and `savedId` is set the moment anything is saved, so a person wanting a
+   * second version — the commonest reason to save at all, one CV per kind of job — had to find the original
+   * file and upload it again. The storage never had a limit; there was just no way to ask for a new row.
+   */
+  const save = useCallback(
+    async (asCopy = false) => {
+      setBusy(true)
+      setNote(undefined)
+      try {
+        /**
+         * A name taken from the document, because two rows called "My CV" are not a library.
+         *
+         * The endpoint has always accepted a label and defaulted to `My CV`; the client never sent one,
+         * which was invisible while only one row could exist. The moment "Save as a copy" shipped, the list
+         * showed two identical names both saved today — a choice between indistinguishable things, which is
+         * worse than having no choice.
+         *
+         * The headline is the discriminator that actually discriminates: somebody keeping several CVs is
+         * keeping one per kind of job, and the headline is what a tailoring pass changes. Never the file
+         * name — that is theirs, and it is usually their own name.
+         */
+        const from = resume.basics.headline ?? resume.work[0]?.role
+        const label =
+          from === undefined || from.trim() === ''
+            ? undefined
+            : (asCopy ? `${from.trim()} (copy)` : from.trim()).slice(0, 120)
+
+        const response = await fetch('/api/library', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            resume,
+            ...(label === undefined ? {} : { label }),
+            // Omitting the id is what makes the endpoint create rather than update.
+            ...(savedId === undefined || asCopy ? {} : { resumeId: savedId }),
+          }),
+        })
+        if (response.status === 404) {
+          setAvailable(false)
+          return
+        }
+        if (!response.ok) {
+          setNote('We could not save it just now. Your CV is untouched.')
+          return
+        }
+        const payload = (await response.json()) as { resumeId?: string }
+        if (typeof payload.resumeId === 'string')
+          onSavedIdChange(payload.resumeId)
+        /*
+        A copy becomes the CV being edited, which is what somebody expects after asking for a copy: further
+        changes belong to the new version, not to the one they branched from.
+      */
+        setNote(asCopy ? 'Saved as a new CV.' : 'Saved.')
+        await refresh()
+      } catch {
+        setNote('We could not reach the server. Your CV is untouched.')
+      } finally {
+        setBusy(false)
       }
-      if (!response.ok) {
-        setNote('We could not save it just now. Your CV is untouched.')
-        return
-      }
-      const payload = (await response.json()) as { resumeId?: string }
-      if (typeof payload.resumeId === 'string')
-        onSavedIdChange(payload.resumeId)
-      setNote('Saved.')
-      await refresh()
-    } catch {
-      setNote('We could not reach the server. Your CV is untouched.')
-    } finally {
-      setBusy(false)
-    }
-  }, [resume, savedId, refresh, onSavedIdChange])
+    },
+    [resume, savedId, refresh, onSavedIdChange],
+  )
 
   /**
    * Create a link for the CV on screen. Requires it to be saved first, and says so rather than saving
@@ -400,7 +435,7 @@ export function Library({
           <button
             type="button"
             disabled={busy}
-            onClick={() => void save()}
+            onClick={() => void save(false)}
             className="btn btn-primary px-4 py-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-45"
           >
             <ButtonLabel
@@ -409,6 +444,17 @@ export function Library({
               working="Saving…"
             />
           </button>
+          {current !== undefined && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void save(true)}
+              title="Keep this version and start a second one"
+              className="btn btn-quiet px-3.5 py-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              Save as a copy
+            </button>
+          )}
           {current !== undefined && (
             <span className="text-meta text-ink-soft">
               Last saved {ago(current.updatedAt)}

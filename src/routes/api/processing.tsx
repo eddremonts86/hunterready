@@ -16,7 +16,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { resolveProvider } from '@/structure/provider'
 import { encryptionEnabled } from '@/db/crypto'
-import { entitlementFor } from '@/lib/entitlements'
+import { designsUnlocked, entitlementFor } from '@/lib/entitlements'
 
 /**
  * Host → the company's name as a person would recognise it.
@@ -75,6 +75,18 @@ export const Route = createFileRoute('/api/processing')({
             plan,
             /** Whether a third-party model is configured *at all*, so the UI can offer the upgrade. */
             thirdPartyAvailable: resolveProvider() !== undefined,
+            /**
+             * Whether this caller may use the paid designs.
+             *
+             * The same `thirdParty` entitlement, deliberately: one plan buys the outside model *and* the
+             * paid half of the catalogue, so two fields reading the same flag is honest rather than
+             * redundant — the interface asks a different question of it in each place, and the day the
+             * plans split, the endpoint is where that gets expressed once.
+             *
+             * The gallery uses it to draw padlocks. It is **not** the gate — `/api/render` is, because
+             * this endpoint's answer is advisory and a client can ignore it.
+             */
+            paidDesigns: designsUnlocked() || thirdParty,
           },
           { headers: { 'cache-control': 'no-store' } },
         )

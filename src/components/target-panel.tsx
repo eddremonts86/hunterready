@@ -28,7 +28,7 @@
  * the requirement into the CV, and refusing to is the product. The copy says so in the user's words:
  * it is their decision whether to apply anyway.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ButtonLabel } from '@/components/working'
 import type { CvScore, Finding } from '@/optimize/score'
 import { scoreCv } from '@/optimize/score'
@@ -247,10 +247,13 @@ function FixList({ findings }: { findings: Array<Finding> }) {
 export function AdvertForm({
   busy,
   error,
+  stages,
   onSubmit,
 }: {
   busy: boolean
   error?: string
+  /** The narrated wait — the server's own stage list, same channel as the upload screen. */
+  stages?: Array<{ label: string; detail?: string; done: boolean }>
   onSubmit: (advert: string) => void
 }) {
   const [text, setText] = useState('')
@@ -294,6 +297,39 @@ export function AdvertForm({
         >
           {busy ? 'Reading the advert…' : 'See how you match'}
         </button>
+        {busy && stages !== undefined && stages.length > 0 && (
+          <ol className="flex flex-col gap-1.5">
+            {stages.map((stage, index) => (
+              <li key={index} className="flex items-center gap-2 text-[13px]">
+                {stage.done ? (
+                  <svg
+                    aria-hidden
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    className="h-3.5 w-3.5 shrink-0 text-affirm"
+                  >
+                    <path d="m5 12.5 4.5 4.5L19 7" />
+                  </svg>
+                ) : (
+                  <span
+                    aria-hidden
+                    className="h-3 w-3 shrink-0 animate-spin rounded-full border-[1.5px] border-signal border-t-transparent"
+                    data-motion="essential"
+                  />
+                )}
+                <span
+                  className={stage.done ? 'text-ink-faint' : 'text-ink-soft'}
+                >
+                  {stage.label}
+                  {stage.detail === undefined ? '' : ` — ${stage.detail}`}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
         {!enough && text.trim() !== '' && (
           <span className="text-[13px] text-ink-soft">
             A little more of it, and we can work with this.
@@ -325,6 +361,10 @@ export function TargetPanel({
   onAcceptSummary,
   onSaveApplication,
   onDraftLetter,
+  onFitCv,
+  letterStages,
+  locale,
+  onTranslateText,
   onDownloadLetter,
 }: {
   resume: Resume
@@ -353,6 +393,20 @@ export function TargetPanel({
    */
   onDraftLetter?: (requirements: JobRequirements) => Promise<CoverLetterOffer>
   /**
+   * Apply the whole tailored bundle in one action: the reorderings and the aimed summary together,
+   * then show the before/after so the person sees exactly what one click did. Advising is step one;
+   * when the person asks the product to do it, it does it (Edd's direction). The original is intact,
+   * the diff is on screen, and reverting is one click — which is what keeps a bulk apply inside the
+   * spirit of enforcement layer 3.
+   */
+  onFitCv: (variant: Resume, summary?: string) => void
+  /** The narrated wait while the letter drafts — the server's own stages, polled by the page. */
+  letterStages?: Array<{ label: string; detail?: string; done: boolean }>
+  /** The document's language. When it changes and a letter exists, the letter follows it. */
+  locale?: string
+  /** Translate one block of text into the document's language — the page owns the endpoint. */
+  onTranslateText?: (text: string) => Promise<string | undefined>
+  /**
    * Download the letter on screen, including any edits, as `.docx`.
    *
    * Async because it now buffers the file rather than submitting a form — so this panel can say the
@@ -376,6 +430,35 @@ export function TargetPanel({
   >('idle')
   const [letter, setLetter] = useState<CoverLetterOffer | undefined>()
   const [letterBusy, setLetterBusy] = useState(false)
+
+  /**
+   * The letter follows the document's language.
+   *
+   * Edd's rule for the switcher: the whole document, "CV y cover letter (si es generada)". The letter
+   * is client state, so the page cannot reach in — this effect watches the locale and sends the CURRENT
+   * text (edits included) through the same guarded translation the CV went through. Skipped on mount:
+   * only a change translates, so opening the panel never spends a model call.
+   */
+  const lastLocale = useRef(locale)
+  useEffect(() => {
+    if (locale === undefined || lastLocale.current === locale) return
+    lastLocale.current = locale
+    if (
+      letter?.outcome !== 'drafted' ||
+      letterText.trim() === '' ||
+      onTranslateText === undefined
+    )
+      return
+    setLetterBusy(true)
+    void onTranslateText(letterText)
+      .then((translated) => {
+        if (translated !== undefined && translated.trim() !== '') {
+          setLetterText(translated)
+        }
+      })
+      .finally(() => setLetterBusy(false))
+    // letterText deliberately absent: this fires on language change, never on typing.
+  }, [locale, letter, onTranslateText])
   /** The letter as edited. Held separately so re-drafting cannot silently discard their wording. */
   const [letterText, setLetterText] = useState('')
   const [letterSaving, setLetterSaving] = useState(false)
@@ -686,6 +769,36 @@ export function TargetPanel({
           </p>
         </div>
 
+        {/*
+          The do-it-for-me action. One click applies everything below — the reorderings AND the aimed
+          summary — and flips to the comparison so the person sees precisely what changed. It sits above
+          the itemised moves rather than replacing them: advising first, then doing, is the order Edd
+          set, and both remain available.
+        */}
+        {(tailored.moves.length > 0 ||
+          reading.summary.suggestion !== undefined) && (
+          <div className="flex flex-col gap-2 rounded-field border border-signal-edge bg-signal-wash px-3.5 py-3">
+            <p className="text-[13px] leading-relaxed text-ink">
+              Want us to fit your CV to this advert in one go? We apply the
+              reorderings below
+              {reading.summary.suggestion !== undefined
+                ? ' and the summary aimed at this job'
+                : ''}
+              , and show you the before and after. Nothing is invented, and one
+              click puts it back.
+            </p>
+            <button
+              type="button"
+              onClick={() =>
+                onFitCv(tailored.resume, reading.summary.suggestion)
+              }
+              className="btn btn-primary self-start px-4 py-2.5 text-[14px]"
+            >
+              Fit my CV to this job
+            </button>
+          </div>
+        )}
+
         {tailored.moves.length === 0 ? (
           <p className="text-[13px] leading-relaxed text-ink-soft">
             Nothing worth moving. Your CV already leads with what this job asks
@@ -758,7 +871,49 @@ export function TargetPanel({
                 working="Writing…"
               />
             </button>
-          ) : letter.outcome === 'drafted' ? (
+          ) : null}
+          {letter === undefined &&
+            letterBusy &&
+            letterStages !== undefined &&
+            letterStages.length > 0 && (
+              <ol className="flex flex-col gap-1.5">
+                {letterStages.map((stage, index) => (
+                  <li
+                    key={index}
+                    className="flex items-center gap-2 text-[13px]"
+                  >
+                    {stage.done ? (
+                      <svg
+                        aria-hidden
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.4"
+                        strokeLinecap="round"
+                        className="h-3.5 w-3.5 shrink-0 text-affirm"
+                      >
+                        <path d="m5 12.5 4.5 4.5L19 7" />
+                      </svg>
+                    ) : (
+                      <span
+                        aria-hidden
+                        data-motion="essential"
+                        className="h-3 w-3 shrink-0 animate-spin rounded-full border-[1.5px] border-signal border-t-transparent"
+                      />
+                    )}
+                    <span
+                      className={
+                        stage.done ? 'text-ink-faint' : 'text-ink-soft'
+                      }
+                    >
+                      {stage.label}
+                      {stage.detail === undefined ? '' : ` — ${stage.detail}`}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          {letter === undefined ? null : letter.outcome === 'drafted' ? (
             <>
               {/*
                 Editable, and the edit is what downloads. A letter is the one artifact here written in
@@ -773,9 +928,17 @@ export function TargetPanel({
                 className="field min-h-[260px] resize-y font-sans leading-relaxed"
               />
               {letter.rationale !== '' && (
-                <p className="text-[13px] leading-relaxed text-ink-soft">
-                  {letter.rationale}
-                </p>
+                /*
+                  Folded, not in the reading path. Edd's words: once the CV is fitted and the letter is
+                  asked for, "no me interesan tus explicaciones" — the letter is the deliverable and the
+                  reasoning is a receipt for whoever wants to check it.
+                */
+                <details className="text-[13px] leading-relaxed text-ink-soft">
+                  <summary className="cursor-pointer text-meta text-ink-soft transition-colors hover:text-ink">
+                    Why it claims what it claims
+                  </summary>
+                  <p className="mt-1.5">{letter.rationale}</p>
+                </details>
               )}
               <div className="flex flex-wrap items-center gap-2">
                 {onDownloadLetter !== undefined && (
