@@ -85,6 +85,29 @@ async function loadFamily(cssValue: string): Promise<Array<FontLoader>> {
   const loaded: Array<FontLoader> = []
 
   for (const weight of WEIGHTS) {
+    /**
+     * A full-coverage TTF wins, and the per-range `woff2` files are then skipped for that weight.
+     *
+     * ADR-022 is the reason. takumi-pdf 0.6.4 cannot reach the glyphs in fontsource's per-range `woff2`
+     * subsets beyond Latin — it loads them, draws Latin, and reports `MissingGlyphs` for a Cyrillic or
+     * Greek name. A single subsetted TTF covering Latin, Greek and Cyrillic renders all three, which was
+     * measured before any of it was vendored.
+     *
+     * Skipping the `woff2` for a weight that has a TTF is not tidiness: registering both puts two fonts
+     * under one family and weight, and only one of them is consulted. Which one is not ours to decide.
+     *
+     * Written as a preference rather than a replacement so the change stays additive — a face with no
+     * `-full-` file, or a checkout where `node scripts/make-fonts.mjs` has not been run, behaves exactly
+     * as it did before.
+     */
+    const full = join(dir, `${slug}-full-${weight}-normal.ttf`)
+    try {
+      loaded.push({ name: family, data: await readFile(full), weight })
+      continue
+    } catch {
+      /* no full-coverage file for this weight; fall back to the subsets below */
+    }
+
     for (const subset of SUBSETS) {
       const file = join(dir, `${slug}-${subset}-${weight}-normal.woff2`)
       try {

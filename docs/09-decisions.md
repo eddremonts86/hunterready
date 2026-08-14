@@ -674,7 +674,7 @@ believes it is encrypting and is not is worse than one that knows it is not.
 
 ## ADR-022 — Cyrillic and Greek are a font-format problem, not a subset list
 
-**2026-08-14 · Accepted (finding) · the work itself is Proposed, and needs a decision**
+**2026-08-14 · Accepted · shipped the same day the finding was recorded**
 
 Recorded because the obvious fix is wrong and three plausible approaches were ruled out by measurement.
 Whoever picks this up should not repeat them.
@@ -729,6 +729,30 @@ Greek and Cyrillic upstream and are OFL, so licensing is not the question. The q
 That is a decision about the deployed image and about vendoring, not a line in a list. It is not blocked
 on anything technical, and the second estimate should be trusted more than the first only because this
 one was measured.
+
+### What shipped
+
+Edd chose to subset rather than vendor the full fonts, and the numbers came out better than either
+estimate: `scripts/make-fonts.mjs` fetches Adobe's pinned releases and restricts each weight to the
+ranges a CV in this product's markets needs, giving **1.24 MB for six faces** — against 2.4 MB for the
+full fonts and 460 KB for the Latin-only subsets it replaces.
+
+The loader **prefers** a `-full-*.ttf` over the per-range `woff2` for the same weight and skips the
+subsets entirely when it finds one. Skipping is not tidiness: registering both puts two fonts under one
+family and weight, and which one gets consulted is not ours to decide. Written as a preference rather
+than a replacement so the change is additive — a checkout that has not run the generator behaves exactly
+as before.
+
+The order of work is the part worth keeping: the subsetted TTF was **proved to render Cyrillic and Greek
+through takumi before a single file was vendored**. The previous attempt bundled fonts the renderer could
+not use, and only a failing render revealed it.
+
+### One more trap, caught before it shipped
+
+`scripts/copy-assets.mjs` filtered on `.woff2`. The new TTFs would have been left out of `.output`, so
+the loader would have found only the Latin subsets **in production only** — the source tree has the
+files, so every local test would have passed. That is the worst shape a font bug can take, and it was one
+line.
 
 ---
 

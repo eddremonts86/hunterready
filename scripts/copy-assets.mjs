@@ -35,8 +35,16 @@ console.log(
 
 // --- fonts --------------------------------------------------------------------------------
 await mkdir(FONTS_TO, { recursive: true })
-const fontFiles = (await readdir(FONTS_FROM)).filter((f) =>
-  f.endsWith('.woff2'),
+/**
+ * `.ttf` as well as `.woff2`.
+ *
+ * The full-coverage document faces from `scripts/make-fonts.mjs` are TTFs (ADR-022 — takumi cannot use
+ * the per-range `woff2` subsets beyond Latin). Filtering on `.woff2` alone left them out of the build, so
+ * the loader found only the Latin subsets in `.output` and a Cyrillic name failed to render **in
+ * production only** — the one place it is hardest to notice, since the source tree has the files.
+ */
+const fontFiles = (await readdir(FONTS_FROM)).filter(
+  (f) => f.endsWith('.woff2') || f.endsWith('.ttf'),
 )
 
 if (fontFiles.length === 0) {
