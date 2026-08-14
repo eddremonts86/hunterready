@@ -533,6 +533,15 @@ function HunterReady() {
   const downloads = useDownloads()
   /** Whether the document pane is showing the comparison instead of the current CV. */
   const [comparing, setComparing] = useState(false)
+  /**
+   * Pages as the preview actually laid them out, once it has.
+   *
+   * Preferred over `estimateFit` when present: the estimator counts characters per line and over-counted
+   * three pages on a document the renderer put on two, while the measured layout matched the PDF exactly.
+   * A label about page count is one a person acts on — they cut a bullet because of it — so it should come
+   * from the strongest evidence available at the time.
+   */
+  const [measuredPages, setMeasuredPages] = useState<number | undefined>()
   const [panel, setPanel] = useState<PanelId>('check')
 
   const upload = useCallback(
@@ -1313,6 +1322,7 @@ function HunterReady() {
                 resume={loaded.resume}
                 theme={theme}
                 Template={template.Component}
+                onPagesMeasured={setMeasuredPages}
               />
             </main>
           </div>
@@ -1347,6 +1357,15 @@ function HunterReady() {
       template.convention === 'eu' &&
       loaded.resume.basics.photoUrl !== undefined,
   })
+  /**
+   * Measured if the preview has measured, estimated until then.
+   *
+   * The estimator counts characters per line and over-counts on an unusual block — it claimed three pages
+   * on a document the renderer put on two, while the preview's measurement of real laid-out boxes matched
+   * the renderer exactly. A page count is a label somebody acts on, so it takes the better evidence as soon
+   * as there is any.
+   */
+  const pages = measuredPages ?? fit.pages
 
   return (
     <div className="flex min-h-screen flex-col bg-band">
@@ -1762,7 +1781,7 @@ function HunterReady() {
                   </button>
                 )}
                 <span className="tally text-meta text-ink-soft">
-                  A4 · {fit.pages} page{fit.pages === 1 ? '' : 's'}
+                  A4 · {pages} page{pages === 1 ? '' : 's'}
                   {readFields > 0 &&
                     ` · ${readFields - toCheck}/${readFields} read cleanly`}
                 </span>
@@ -1792,6 +1811,12 @@ function HunterReady() {
                 resume={loaded.resume}
                 theme={theme}
                 Template={template.Component}
+                /*
+                  This is the preview whose count the header beside it shows. The first attempt wired the
+                  callback to the targeting branch's preview instead — the label kept reading the estimate
+                  while the sheets beside it disagreed, which is the bug being fixed, one screen over.
+                */
+                onPagesMeasured={setMeasuredPages}
               />
             )}
           </main>

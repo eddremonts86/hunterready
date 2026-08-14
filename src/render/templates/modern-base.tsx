@@ -32,6 +32,26 @@ import type { OutputLocale } from '../locale'
 export type Convention = 'intl' | 'eu'
 
 /**
+ * Which section a reader meets first, after the summary.
+ *
+ * The only axis that produces genuinely different **structures** without leaving the ATS ruleset. One
+ * column, standard headings, contact as text and a single reading order are all binding (docs/05), so a
+ * template cannot move a block into a sidebar or a table — but which order the blocks appear in is free,
+ * and it is the difference between a CV that argues for a career change and one that recites a history.
+ *
+ *   • `experience` — the default, and right for anybody continuing in their field.
+ *   • `skills` — for a career switcher, whose transferable skills are the argument and whose last job
+ *     title is the thing they are trying to move away from. Burying the skills under it is the wrong
+ *     order for exactly the person who needs the most help.
+ *   • `education` — for a recent graduate or someone newly qualified, where the qualification *is* the
+ *     credential and the work history is bar shifts.
+ *
+ * Reading order is asserted by the round-trip test for every one of them, because reordering blocks is
+ * precisely the sort of change that looks fine and scrambles a text layer.
+ */
+export type SectionOrder = 'experience' | 'skills' | 'education'
+
+/**
  * The printed size of the photo, in points, and the only place it is written down.
  *
  * `fit.ts` imports it, because a page-count estimate that does not know how tall the masthead is will
@@ -49,6 +69,7 @@ interface BodyProps {
   resume: Resume
   theme: PdfcnTheme
   convention: Convention
+  order: SectionOrder
 }
 
 /** Section heading + hairline. Standard wording; creative headings lose ATS parsers. */
@@ -156,7 +177,7 @@ function Job({
   )
 }
 
-function Body({ resume, theme, convention }: BodyProps) {
+function Body({ resume, theme, convention, order }: BodyProps) {
   const { basics } = resume
   const showPersonalDetails =
     convention === 'eu' && basics.personalDetails.length > 0
@@ -310,67 +331,98 @@ function Body({ resume, theme, convention }: BodyProps) {
         </div>
       )}
 
-      {resume.work.length === 0 ? null : (
-        <>
-          <SectionHeading title={local.headings.work} theme={theme} />
-          {resume.work.map((w, i) => (
-            <Job key={i} item={w} theme={theme} locale={locale} />
-          ))}
-        </>
-      )}
+      {/*
+        The three reorderable sections, emitted in the order the template asked for.
 
-      {resume.education.length === 0 ? null : (
-        <>
-          <SectionHeading title={local.headings.education} theme={theme} />
-          {resume.education.map((e, i) => (
-            <div
-              key={i}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 1,
-                marginTop: theme.spacing.componentGap,
-                breakInside: 'avoid',
-              }}
-            >
-              <div style={{ fontWeight: 700 }}>
-                {joinParts([e.degree, e.field], ' ')}
-                {e.degree === undefined && e.field === undefined
-                  ? e.institution
-                  : ` — ${e.institution}`}
-              </div>
-              <div
-                style={{
-                  fontSize: theme.typography.body.fontSize - 1.5,
-                  color: theme.colors.mutedForeground,
-                }}
-              >
-                {joinParts([
-                  formatRange(e.startDate, e.endDate, locale),
-                  e.location,
-                  e.grade,
-                ])}
-              </div>
-              {e.highlights.map((h, j) => (
-                <Bullet key={j} text={h} theme={theme} />
-              ))}
-            </div>
-          ))}
-        </>
-      )}
-
-      {resume.skills.length === 0 ? null : (
-        <>
-          <SectionHeading title={local.headings.skills} theme={theme} />
-          {resume.skills.map((group, i) => (
-            // Comma-separated text, never bars or dots: rating graphics extract as noise.
-            <div key={i} style={{ marginTop: 4, breakInside: 'avoid' }}>
-              <span style={{ fontWeight: 700 }}>{group.category}: </span>
-              <span>{group.items.join(', ')}</span>
-            </div>
-          ))}
-        </>
-      )}
+        Held as variables and then placed, rather than duplicated per order: three copies of the work
+        section is three places for a future date-format fix to be forgotten, and this is the block the
+        round-trip test is most particular about.
+      */}
+      {(() => {
+        const work = (
+          <>
+            {resume.work.length === 0 ? null : (
+              <>
+                <SectionHeading title={local.headings.work} theme={theme} />
+                {resume.work.map((w, i) => (
+                  <Job key={i} item={w} theme={theme} locale={locale} />
+                ))}
+              </>
+            )}
+          </>
+        )
+        const education = (
+          <>
+            {resume.education.length === 0 ? null : (
+              <>
+                <SectionHeading
+                  title={local.headings.education}
+                  theme={theme}
+                />
+                {resume.education.map((e, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 1,
+                      marginTop: theme.spacing.componentGap,
+                      breakInside: 'avoid',
+                    }}
+                  >
+                    <div style={{ fontWeight: 700 }}>
+                      {joinParts([e.degree, e.field], ' ')}
+                      {e.degree === undefined && e.field === undefined
+                        ? e.institution
+                        : ` — ${e.institution}`}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: theme.typography.body.fontSize - 1.5,
+                        color: theme.colors.mutedForeground,
+                      }}
+                    >
+                      {joinParts([
+                        formatRange(e.startDate, e.endDate, locale),
+                        e.location,
+                        e.grade,
+                      ])}
+                    </div>
+                    {e.highlights.map((h, j) => (
+                      <Bullet key={j} text={h} theme={theme} />
+                    ))}
+                  </div>
+                ))}
+              </>
+            )}
+          </>
+        )
+        const skills = (
+          <>
+            {resume.skills.length === 0 ? null : (
+              <>
+                <SectionHeading title={local.headings.skills} theme={theme} />
+                {resume.skills.map((group, i) => (
+                  // Comma-separated text, never bars or dots: rating graphics extract as noise.
+                  <div key={i} style={{ marginTop: 4, breakInside: 'avoid' }}>
+                    <span style={{ fontWeight: 700 }}>{group.category}: </span>
+                    <span>{group.items.join(', ')}</span>
+                  </div>
+                ))}
+              </>
+            )}
+          </>
+        )
+        const sequence =
+          order === 'skills'
+            ? [skills, work, education]
+            : order === 'education'
+              ? [education, work, skills]
+              : [work, education, skills]
+        return sequence.map((section, i) => (
+          <Fragment key={i}>{section}</Fragment>
+        ))
+      })()}
 
       {resume.projects.length === 0 ? null : (
         <>
@@ -439,8 +491,18 @@ function Body({ resume, theme, convention }: BodyProps) {
   )
 }
 
-/** `(resume, theme) => JSX`. Page geometry comes from the render options, not from here. */
-export function createModernTemplate(convention: Convention) {
+/**
+ * `(resume, theme) => JSX`. Page geometry comes from the theme, not from here.
+ *
+ * Two axes, and both are structural rather than cosmetic: the **convention** decides which blocks exist at
+ * all (the photo and the personal details, ADR-010), and the **order** decides which the reader meets
+ * first. Colour, type and spacing are the theme's business, which is what lets one factory produce every
+ * structure in the catalogue without a file per entry.
+ */
+export function createModernTemplate(
+  convention: Convention,
+  order: SectionOrder = 'experience',
+) {
   return function ModernTemplate({
     resume,
     theme,
@@ -454,7 +516,12 @@ export function createModernTemplate(convention: Convention) {
       >
         <Page>
           <PdfcnThemeProvider theme={theme}>
-            <Body resume={resume} theme={theme} convention={convention} />
+            <Body
+              resume={resume}
+              theme={theme}
+              convention={convention}
+              order={order}
+            />
           </PdfcnThemeProvider>
         </Page>
       </Document>
