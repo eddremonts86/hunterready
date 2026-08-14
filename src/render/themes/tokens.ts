@@ -62,6 +62,23 @@ export const SLATE_INK = '#3D4A54'
  * text on top of one keeps printing-press contrast, and that a mono laser printer renders
  * it as a whisper of grey rather than a slab.
  */
+export const ROSE_INK = '#B03A5B'
+export const ORANGE_INK = '#C75B12'
+export const BRICK_INK = '#B3382C'
+export const PLUM_INK = '#5B3A6E'
+export const BRONZE_INK = '#8A6D3B'
+export const CORAL_INK = '#C24D3D'
+export const STEEL_INK = '#33596E'
+export const UMBER_INK = '#5C4632'
+
+/**
+ * Page grounds. The paper itself can be a color (ADR-025) — a whole cream or pale-blue sheet, the way
+ * a stationer sells tinted stock. Light enough that ink stays printing-press legible, and that a mono
+ * laser renders the ground as a faint grey rather than eating a toner cartridge.
+ */
+export const GLACIER_PAPER = '#DDE8F2'
+export const PARCHMENT_PAPER = '#F6F0E4'
+
 export const TEAL_WASH = '#E4F0EE'
 export const NAVY_WASH = '#E8EDF4'
 export const GRAPHITE_WASH = '#EAEAEC'
@@ -69,6 +86,11 @@ export const RUST_WASH = '#F6E8E1'
 export const FOREST_WASH = '#E5EEE8'
 export const MAROON_WASH = '#F2E7E7'
 export const SLATE_WASH = '#E9EDF0'
+export const ROSE_WASH = '#F4DCE4'
+export const PLUM_WASH = '#EDE6F2'
+export const BRONZE_WASH = '#F1EBDD'
+export const CORAL_WASH = '#F8E5E1'
+export const STEEL_WASH = '#E3EBF1'
 
 /** Every color a document theme is allowed to use. Enforced by a test. */
 export const ALLOWED_PRINT_COLORS = [
@@ -92,6 +114,21 @@ export const ALLOWED_PRINT_COLORS = [
   FOREST_WASH,
   MAROON_WASH,
   SLATE_WASH,
+  ROSE_INK,
+  ORANGE_INK,
+  BRICK_INK,
+  PLUM_INK,
+  BRONZE_INK,
+  CORAL_INK,
+  STEEL_INK,
+  UMBER_INK,
+  ROSE_WASH,
+  PLUM_WASH,
+  BRONZE_WASH,
+  CORAL_WASH,
+  STEEL_WASH,
+  GLACIER_PAPER,
+  PARCHMENT_PAPER,
 ] as const
 
 /**

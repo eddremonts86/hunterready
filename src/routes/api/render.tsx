@@ -15,7 +15,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createFileRoute } from '@tanstack/react-router'
-import { entitlementFor } from '@/lib/entitlements'
+import { designsUnlocked, entitlementFor } from '@/lib/entitlements'
 import { errorEvent } from '@/lib/log'
 import { DEFAULT_DESIGN_ID, findDesign, tierOf } from '@/render/designs'
 import { Resume } from '@/schema/resume'
@@ -73,6 +73,9 @@ async function refuseUnlessEntitled(
   if (structure === undefined || theme === undefined) return undefined
 
   if (tierOf(structure, theme) === 'free') return undefined
+
+  // The developer switch (see entitlements.ts): a catalogue you cannot try is one you cannot test.
+  if (designsUnlocked()) return undefined
 
   const { thirdParty, plan } = await entitlementFor(request)
   if (thirdParty) return undefined

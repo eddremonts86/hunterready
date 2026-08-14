@@ -11,6 +11,10 @@ renderer is WASM and the fonts are bundled, and both can be absent from a build 
 
 ---
 
+> **Never set `HR_UNLOCK_DESIGNS` in Coolify.** It is the developer switch that removes the paid-design
+> gate for a whole process (`src/lib/entitlements.ts`). It belongs in `docker-compose.local.yml`
+> (gitignored) and nowhere else; in production it would give the paid catalogue away silently.
+
 ## TL;DR — the deploy flow
 
 ```

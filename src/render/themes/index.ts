@@ -8,6 +8,14 @@
  */
 import type { PdfcnTheme } from '@/components/pdf/theme-types'
 import { academicTheme } from './academic'
+import { blossomTheme } from './blossom'
+import { brushTheme } from './brush'
+import { carnivalTheme } from './carnival'
+import { editorialTheme } from './editorial'
+import { glacierTheme } from './glacier'
+import { groteskTheme } from './grotesk'
+import { heritageTheme } from './heritage'
+import { parchmentTheme } from './parchment'
 import { compactTheme } from './compact'
 import { executiveTheme } from './executive'
 import { minimalTheme } from './minimal'
@@ -17,14 +25,15 @@ import { professionalTheme } from './professional'
 import { technicalTheme } from './technical'
 
 /**
- * Eight, and every one of them uses a family already bundled and registered.
+ * Sixteen, across ten bundled families.
  *
- * That constraint is the reason there are eight rather than pdfcn's nine or some larger number: a new
- * typeface is not a line of config, it is megabytes in the deployed image and a `make-fonts.mjs` run, and
- * ADR-022 is the record of what happens when fonts get vendored before anyone checks the renderer can use
- * them. Source Sans 3, Source Serif 4, Courier Prime and Archivo Narrow give four genuine type
- * directions; the rest of the difference is size, leading and margin, which is where a document's
- * character actually lives.
+ * The first eight kept to the four families that already existed, on the theory that type is where a
+ * document's character lives. Edd's verdict on the result — thirty designs nobody would pay for — killed
+ * the theory: character lives in what a person can see at arm's length. The expansion (ADR-025) vendored
+ * five more families (Playfair Display, EB Garamond, Space Grotesk, Lora, Josefin Sans; Caveat Brush was
+ * already here for the chrome) and added the axes type alone cannot carry: tinted papers, masthead
+ * bands, per-section color chips, a script face for the name. Every family is OFL, bundled by
+ * `scripts/bundle-fonts.mjs`, and probed against the renderer before anything relies on it (ADR-022).
  */
 export const THEME_IDS = [
   'modern',
@@ -35,6 +44,15 @@ export const THEME_IDS = [
   'narrow',
   'academic',
   'technical',
+  // The character expansion (ADR-025): tinted papers, display faces, multi-color chips.
+  'glacier',
+  'parchment',
+  'blossom',
+  'carnival',
+  'editorial',
+  'grotesk',
+  'heritage',
+  'brush',
 ] as const
 export type ThemeId = (typeof THEME_IDS)[number]
 
@@ -49,6 +67,14 @@ export const themes: Record<ThemeId, PdfcnTheme> = {
   narrow: narrowTheme,
   academic: academicTheme,
   technical: technicalTheme,
+  glacier: glacierTheme,
+  parchment: parchmentTheme,
+  blossom: blossomTheme,
+  carnival: carnivalTheme,
+  editorial: editorialTheme,
+  grotesk: groteskTheme,
+  heritage: heritageTheme,
+  brush: brushTheme,
 }
 
 /** Shown in the theme picker. Plain language — the audience is not designers. */
@@ -84,6 +110,38 @@ export const themeLabels: Record<ThemeId, { label: string; hint: string }> = {
   technical: {
     label: 'Technical',
     hint: 'Monospace headings in boxes, like good documentation. At home in IT and engineering.',
+  },
+  glacier: {
+    label: 'Glacier',
+    hint: 'The whole page is a pale blue, with light geometric headings. Calm and unusual.',
+  },
+  parchment: {
+    label: 'Parchment',
+    hint: 'A cream page set in a classical book face. For fields that still write letters.',
+  },
+  blossom: {
+    label: 'Blossom',
+    hint: 'Your name in white on a deep rose band, headings on pale pink. The warmest one here.',
+  },
+  carnival: {
+    label: 'Carnival',
+    hint: 'A different colour per section — orange, brick and green chips under a rose masthead.',
+  },
+  editorial: {
+    label: 'Editorial',
+    hint: 'A magazine-scale name, centred, black on white. Presence without any colour at all.',
+  },
+  grotesk: {
+    label: 'Grotesk',
+    hint: 'Contemporary type with plum accents. For product, media and studios.',
+  },
+  heritage: {
+    label: 'Heritage',
+    hint: 'Classical serifs and bronze, centred. For careers built on institutions.',
+  },
+  brush: {
+    label: 'Brush',
+    hint: 'Your name hand-written at poster size, coral accents, a warm serif underneath.',
   },
 }
 

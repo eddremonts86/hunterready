@@ -19,10 +19,12 @@ import { TEMPLATE_IDS, templates } from '../templates/registry'
 import { THEME_IDS } from '../themes'
 
 describe('the catalogue', () => {
-  it('has thirty entries, twelve free and eighteen paid', () => {
-    expect(DESIGNS).toHaveLength(30)
+  it('has fifty-two entries, twelve free and forty paid', () => {
+    // Thirty at the first catalogue; fifty-two after the character expansion (ADR-025). The free
+    // twelve never change: taking a design away from someone's CV tool is not a growth strategy.
+    expect(DESIGNS).toHaveLength(52)
     expect(FREE_DESIGNS).toHaveLength(12)
-    expect(PAID_DESIGNS).toHaveLength(18)
+    expect(PAID_DESIGNS).toHaveLength(40)
   })
 
   it('has no duplicate ids', () => {

@@ -79,6 +79,52 @@ export interface DocumentStyle {
   bulletsInAccent: boolean
   /** Whether the role line ("Role — Company") is set in the accent. */
   roleInAccent: boolean
+  /**
+   * The masthead band's own color, when it differs from `accent`.
+   *
+   * Exists for the multi-color construction: carnival's page is a rose masthead over orange, brick
+   * and forest section chips — four hues with jobs, not decoration. Ignored unless `masthead: 'band'`.
+   */
+  mastheadAccent?: string
+  /**
+   * A tinted page ground — the paper itself is a color, the way a stationer sells tinted stock.
+   *
+   * When set, `colors.background` must carry the same value (the on-screen preview paints its sheet
+   * from `colors.background`), and the renderer switches to the bleed construction: zero side margins,
+   * tinted header and footer bands filling the vertical margins, and the content box grown to a whole
+   * number of pages so the tint reaches the bottom edge of the last page (ADR-025 records the probe).
+   * Omitted for white paper, which stays the ordinary path through the renderer.
+   */
+  paper?: string
+  /**
+   * Per-section heading accents — the "colored chips" construction, one hue per section kind.
+   *
+   * The strongest multi-color statement available inside the ATS rules: the heading *words* never
+   * change, only the paint behind them, so EXPERIENCE in white on an orange band extracts exactly as
+   * EXPERIENCE. A missing kind falls back to `accent`.
+   */
+  sectionAccents?: {
+    work?: string
+    education?: string
+    skills?: string
+  }
+  /**
+   * A third face for the candidate's name only.
+   *
+   * The one place a display or script face earns its risk: the name is short, set large, and scored by
+   * the round-trip suite, so a face whose glyphs extracted badly would fail the build rather than ship.
+   * The font loader registers it alongside body and heading.
+   */
+  nameFontFamily?: string
+}
+
+/** Which section a heading opens — the key into `sectionAccents`. */
+export type SectionKind = 'work' | 'education' | 'skills' | 'other'
+
+/** The accent a given section's heading should use under this style. */
+export function sectionAccent(style: DocumentStyle, kind: SectionKind): string {
+  if (kind === 'other') return style.accent
+  return style.sectionAccents?.[kind] ?? style.accent
 }
 
 /** A theme that carries its style. Passes anywhere a `PdfcnTheme` is expected. */

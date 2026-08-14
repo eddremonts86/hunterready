@@ -72,6 +72,14 @@ const THEME_NAMES: Record<ThemeId, string> = {
   narrow: 'Narrow',
   academic: 'Academic',
   technical: 'Technical',
+  glacier: 'Glacier',
+  parchment: 'Parchment',
+  blossom: 'Blossom',
+  carnival: 'Carnival',
+  editorial: 'Editorial',
+  grotesk: 'Grotesk',
+  heritage: 'Heritage',
+  brush: 'Brush',
 }
 
 /** What each theme is *for*, in one clause, so a gallery of thirty is navigable. */
@@ -86,6 +94,14 @@ const THEME_FOR: Record<ThemeId, string> = {
   academic: 'serif text, the convention in research, law and medicine',
   technical:
     'typewriter headings over dense text, for trades, labs and engineering',
+  glacier: 'a pale blue page with light geometric headings',
+  parchment: 'a cream page in a classical book face',
+  blossom: 'a rose masthead band and pale pink section bands',
+  carnival: 'a different colour per section, under a rose masthead',
+  editorial: 'a magazine-scale name, centred, black on white',
+  grotesk: 'contemporary type with plum accents',
+  heritage: 'classical serifs and bronze, centred',
+  brush: 'a hand-written name at poster size with coral accents',
 }
 
 function design(structure: TemplateId, theme: ThemeId, tier: Tier): Design {
@@ -149,6 +165,36 @@ export const DESIGNS: ReadonlyArray<Design> = [
   design('modern-eu-skills', 'modern', 'paid'),
   design('modern-eu-skills', 'academic', 'paid'),
   design('modern-eu-education', 'modern', 'paid'),
+
+  /**
+   * ── Paid: the character themes (ADR-025) ──────────────────────────────────────────────────────
+   *
+   * Tinted papers, display faces, a script name, one hue per section. Each appears on the two plain
+   * structures, plus the pairing its personality argues for: Carnival on Skills-first (the career
+   * switcher who wants to be remembered), Blossom and Parchment on the European convention (photo
+   * markets), Editorial and Brush on Showcase (the structures already built to be looked at).
+   */
+  ...(
+    [
+      'glacier',
+      'parchment',
+      'blossom',
+      'carnival',
+      'editorial',
+      'grotesk',
+      'heritage',
+      'brush',
+    ] as const
+  ).flatMap((theme) => [
+    design('modern-intl', theme, 'paid'),
+    design('modern-eu', theme, 'paid'),
+  ]),
+  design('modern-intl-skills', 'carnival', 'paid'),
+  design('modern-intl-skills', 'grotesk', 'paid'),
+  design('modern-intl-education', 'glacier', 'paid'),
+  design('showcase', 'editorial', 'paid'),
+  design('showcase', 'brush', 'paid'),
+  design('showcase', 'heritage', 'paid'),
 ]
 
 export const FREE_DESIGNS = DESIGNS.filter((d) => d.tier === 'free')

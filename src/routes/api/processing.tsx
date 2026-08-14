@@ -16,7 +16,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { resolveProvider } from '@/structure/provider'
 import { encryptionEnabled } from '@/db/crypto'
-import { entitlementFor } from '@/lib/entitlements'
+import { designsUnlocked, entitlementFor } from '@/lib/entitlements'
 
 /**
  * Host → the company's name as a person would recognise it.
@@ -86,7 +86,7 @@ export const Route = createFileRoute('/api/processing')({
              * The gallery uses it to draw padlocks. It is **not** the gate — `/api/render` is, because
              * this endpoint's answer is advisory and a client can ignore it.
              */
-            paidDesigns: thirdParty,
+            paidDesigns: designsUnlocked() || thirdParty,
           },
           { headers: { 'cache-control': 'no-store' } },
         )

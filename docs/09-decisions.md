@@ -756,6 +756,39 @@ line.
 
 ---
 
+## ADR-025 — Character axes: tinted papers, section chips, name faces, ten families
+
+**2026-08-14 · Accepted · Edd's decision**
+
+ADR-024 gave each theme an accent and a heading treatment; Edd's bar moved to Apple Pages' CV
+gallery: whole pages of tinted stock, colored masthead bands, a different hue per section, and
+typefaces with a point of view. "No importa el peso" — the font-size budget is explicitly spent.
+
+### The bleed construction
+
+takumi has no page-background option and its margins are unpainted page, so a tinted paper is
+built from three painted pieces: zero side margins with the horizontal margins moved into the
+content box as padding; tinted header and footer bands exactly filling the vertical margins,
+repeated per page by the renderer; and the content box grown to a whole number of usable pages
+— `measure()` first, then `height: pages × usable - 2` (the probe caught an exact-boundary
+slice spilling a phantom blank page, hence the two pixels). Continuation pages keep real
+margins, the counter lives in the tinted footer band, and the text layer is untouched
+throughout. `theme.spacing.page` stays the single source of truth: the preview and the fit
+estimator read the same numbers whether the paper is white or tinted.
+
+### The other axes
+
+Per-section heading accents (`sectionAccents`) give carnival its orange/brick/forest chips —
+the words in the chips never change, so EXPERIENCE on orange extracts exactly as EXPERIENCE. A
+name-only face (`nameFontFamily`) lets brush hand-write the one string the round-trip suite
+scores on every build. A masthead accent (`mastheadAccent`) lets a band differ from the chips.
+
+### Five families vendored, probed first
+
+Playfair Display, EB Garamond, Space Grotesk, Lora, Josefin Sans — all OFL, all through
+`bundle-fonts.mjs`, all exercised by the round-trip matrix (112 combinations) before the
+catalogue offered them. Sixteen themes, fifty-two designs, the free twelve unchanged.
+
 ## ADR-024 — Documents own an accent palette; the ban is on chrome colors, not on color
 
 **2026-08-14 · Accepted · Edd's decision**

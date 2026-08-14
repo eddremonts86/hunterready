@@ -52,7 +52,7 @@ grep -rn "optimize/thing" src --include='*.ts' --include='*.tsx' | grep -v __tes
   other chrome colour, and the chrome typeface (Figtree) appear nowhere in a CV preview
   or an exported PDF. Documents draw from their **own** print palette — seven accent inks
   and their washes in `src/render/themes/tokens.ts`, enforced by test — and the renderer's
-  own faces (Source Sans 3 / Source Serif 4 / Courier Prime / Archivo Narrow). A CV
+  own bundled faces (ten OFL families — see `scripts/bundle-fonts.mjs`). A CV
   carrying our accent carries our brand into someone else's job application; a CV carrying
   a navy of its own is just a CV (ADR-024).
   _This rule outlived the v0.6 world change unaltered — it was never about amber, and it

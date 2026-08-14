@@ -28,7 +28,8 @@ import {
 } from '../format'
 import { strings } from '../locale'
 import type { OutputLocale } from '../locale'
-import { styleOf } from '../themes/style'
+import { sectionAccent, styleOf } from '../themes/style'
+import type { SectionKind } from '../themes/style'
 
 export type Convention = 'intl' | 'eu'
 
@@ -87,11 +88,15 @@ interface BodyProps {
 function SectionHeading({
   title,
   theme,
+  kind = 'other',
 }: {
   title: string
   theme: PdfcnTheme
+  /** Which section this opens — themes with `sectionAccents` paint each kind its own hue. */
+  kind?: SectionKind
 }) {
   const style = styleOf(theme)
+  const accent = sectionAccent(style, kind)
   const words = (
     <div
       style={{
@@ -102,7 +107,7 @@ function SectionHeading({
           style.heading === 'band'
             ? style.onAccent
             : style.headingInAccent
-              ? style.accent
+              ? accent
               : theme.colors.foreground,
         textTransform: 'uppercase',
       }}
@@ -131,7 +136,7 @@ function SectionHeading({
         <div
           style={{
             display: 'flex',
-            backgroundColor: style.accent,
+            backgroundColor: accent,
             paddingTop: 3,
             paddingBottom: 3,
             paddingLeft: 8,
@@ -166,9 +171,7 @@ function SectionHeading({
             gap: 7,
           }}
         >
-          <div
-            style={{ width: 4, height: 11, backgroundColor: style.accent }}
-          />
+          <div style={{ width: 4, height: 11, backgroundColor: accent }} />
           {words}
         </div>,
       )
@@ -176,16 +179,14 @@ function SectionHeading({
       return wrap(
         <>
           {words}
-          <div style={{ height: 2, backgroundColor: style.accent }} />
+          <div style={{ height: 2, backgroundColor: accent }} />
         </>,
       )
     case 'shortline':
       return wrap(
         <>
           {words}
-          <div
-            style={{ width: 34, height: 3, backgroundColor: style.accent }}
-          />
+          <div style={{ width: 34, height: 3, backgroundColor: accent }} />
         </>,
       )
     case 'flanked':
@@ -223,7 +224,7 @@ function SectionHeading({
             display: 'flex',
             flexDirection: 'row',
             alignSelf: 'flex-start',
-            border: `1px solid ${style.accent}`,
+            border: `1px solid ${accent}`,
             paddingTop: 2,
             paddingBottom: 2,
             paddingLeft: 7,
@@ -406,7 +407,7 @@ function Body({ resume, theme, convention, order }: BodyProps) {
           gap: showPhoto ? 14 : 0,
           ...(mastheadStyle === 'band'
             ? {
-                backgroundColor: style.accent,
+                backgroundColor: style.mastheadAccent ?? style.accent,
                 paddingTop: 14,
                 paddingBottom: 14,
                 paddingLeft: 16,
@@ -433,9 +434,14 @@ function Body({ resume, theme, convention, order }: BodyProps) {
           {/* Name and contact are text, never an image — an ATS drops image headers whole. */}
           <div
             style={{
-              fontFamily: theme.typography.heading.fontFamily,
+              // A display or script face for the name only, when the theme sets one (style axis 3).
+              fontFamily:
+                style.nameFontFamily ?? theme.typography.heading.fontFamily,
               fontSize: theme.typography.heading.fontSize.h1,
-              fontWeight: theme.typography.heading.fontWeight,
+              fontWeight:
+                style.nameFontFamily === undefined
+                  ? theme.typography.heading.fontWeight
+                  : 400,
               lineHeight: theme.typography.heading.lineHeight,
               color:
                 mastheadStyle === 'band'
@@ -533,7 +539,11 @@ function Body({ resume, theme, convention, order }: BodyProps) {
           <>
             {resume.work.length === 0 ? null : (
               <>
-                <SectionHeading title={local.headings.work} theme={theme} />
+                <SectionHeading
+                  title={local.headings.work}
+                  theme={theme}
+                  kind="work"
+                />
                 {resume.work.map((w, i) => (
                   <Job key={i} item={w} theme={theme} locale={locale} />
                 ))}
@@ -548,6 +558,7 @@ function Body({ resume, theme, convention, order }: BodyProps) {
                 <SectionHeading
                   title={local.headings.education}
                   theme={theme}
+                  kind="education"
                 />
                 {resume.education.map((e, i) => (
                   <div
@@ -591,7 +602,11 @@ function Body({ resume, theme, convention, order }: BodyProps) {
           <>
             {resume.skills.length === 0 ? null : (
               <>
-                <SectionHeading title={local.headings.skills} theme={theme} />
+                <SectionHeading
+                  title={local.headings.skills}
+                  theme={theme}
+                  kind="skills"
+                />
                 {resume.skills.map((group, i) => (
                   // Comma-separated text, never bars or dots: rating graphics extract as noise.
                   <div key={i} style={{ marginTop: 4, breakInside: 'avoid' }}>

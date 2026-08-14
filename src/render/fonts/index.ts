@@ -39,6 +39,12 @@ const FAMILY_SLUGS: ReadonlyMap<string, string> = new Map([
   ['Courier Prime', 'courier-prime'],
   ['Archivo Narrow', 'archivo-narrow'],
   ['Caveat Brush', 'caveat-brush'],
+  // The character expansion (ADR-025): display, classical, grotesque, warm, geometric.
+  ['Playfair Display', 'playfair-display'],
+  ['EB Garamond', 'eb-garamond'],
+  ['Space Grotesk', 'space-grotesk'],
+  ['Lora', 'lora'],
+  ['Josefin Sans', 'josefin-sans'],
 ])
 
 /** Weights to try per family. A missing weight is survivable; a missing 400 is not. */
@@ -129,11 +135,16 @@ async function loadFamily(cssValue: string): Promise<Array<FontLoader>> {
 /** Every font a theme needs, deduped by family. */
 export async function loadThemeFonts(theme: {
   typography: { body: { fontFamily: string }; heading: { fontFamily: string } }
+  /** A theme may set the candidate's name in a third face (style.nameFontFamily). */
+  style?: { nameFontFamily?: string }
 }): Promise<Array<FontLoader>> {
-  const families = new Set([
-    theme.typography.body.fontFamily,
-    theme.typography.heading.fontFamily,
-  ])
+  const families = new Set(
+    [
+      theme.typography.body.fontFamily,
+      theme.typography.heading.fontFamily,
+      theme.style?.nameFontFamily,
+    ].filter((family): family is string => family !== undefined),
+  )
 
   const all: Array<FontLoader> = []
   for (const family of families) {
