@@ -296,11 +296,15 @@ One defect found by doing it: saving an application created a _second_ copy of t
 row id lived inside the library component and never reached `/api/application`. Five applications would
 have left six copies of one CV in somebody's library.
 
-## v0.6 — "It exports what portals want"
+## v0.6 — "It exports what portals want" · shipped
 
-**DOCX export.** Many ATS portals require or prefer `.docx`, so a PDF-only tool has a real hole; this is
-the highest-value non-obvious item on the roadmap. Same `Resume`, same ATS ruleset, and round-trip
-verified the way the PDF path is — the guarantee is the test, not the format.
+**DOCX export** (`src/render/docx/`). Same `Resume`, same ATS ruleset, round-trip verified with mammoth
+the way the PDF path is verified with unpdf — the guarantee is the test, not the format. Hand-written
+OOXML and ZIP rather than a document library, because the guarantee turns on what is _absent_ and a
+library that helpfully emits a table would break it invisibly. No template or theme choice: there is one
+ATS-safe Word layout, and offering a design in the format uploaded to the crudest portals would be
+selling a decision that cannot be honoured. Details and the three defects found in
+[05-pdf-rendering.md](05-pdf-rendering.md#docx-export--v06).
 
 ## v0.7 — "It writes the letter"
 

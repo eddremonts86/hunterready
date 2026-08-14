@@ -77,8 +77,8 @@ const STEPS_HOW = [
     body: 'We show you every detail we pulled out and mark the ones we were not sure about, with the line each came from. You correct anything wrong.',
   },
   {
-    title: 'Download your PDF',
-    body: 'A clean, well-set A4 document that automated screening can parse — verified by a round-trip test, not by eye.',
+    title: 'Download it',
+    body: 'A clean, well-set A4 PDF — or a Word file, for the portals that ask for one. Both verified by a round-trip test that reads the document back, not by eye.',
   },
 ]
 
@@ -258,11 +258,25 @@ function StepBar({
   )
 }
 
-/** POSTs the edited resume so the download is what the user is looking at, not a fixture. */
-function downloadPdf(resume: Resume, templateId: TemplateId, themeId: ThemeId) {
+/**
+ * POSTs the edited resume so the download is what the user is looking at, not a fixture.
+ *
+ * A form POST rather than `fetch` plus a blob URL, because it lets the browser stream the file straight
+ * to disk instead of holding a CV in a JavaScript variable first.
+ *
+ * `format` is `'docx'` for the Word export (v0.6). Template and theme are still sent and the server
+ * ignores them for `.docx`: there is one ATS-safe Word layout, and passing the user's design choice into
+ * a format that cannot honour it would be a promise made in the query string.
+ */
+function downloadDocument(
+  resume: Resume,
+  templateId: TemplateId,
+  themeId: ThemeId,
+  format: 'pdf' | 'docx' = 'pdf',
+) {
   const form = document.createElement('form')
   form.method = 'POST'
-  form.action = `/api/render?template=${templateId}&theme=${themeId}&download=1`
+  form.action = `/api/render?template=${templateId}&theme=${themeId}&download=1&format=${format}`
   form.style.display = 'none'
   const input = document.createElement('input')
   input.type = 'hidden'
@@ -1055,7 +1069,7 @@ function HunterReady() {
                 <button
                   type="button"
                   onClick={() =>
-                    downloadPdf(loaded.resume, templateId, themeId)
+                    downloadDocument(loaded.resume, templateId, themeId)
                   }
                   className="btn btn-quiet px-3.5 py-1.5 text-[13px]"
                 >
@@ -1112,11 +1126,28 @@ function HunterReady() {
           */}
           <button
             type="button"
-            onClick={() => downloadPdf(loaded.resume, templateId, themeId)}
+            onClick={() => downloadDocument(loaded.resume, templateId, themeId)}
             className="btn btn-primary px-6 py-3 text-[15px]"
           >
             <Icon name="download" className="h-[18px] w-[18px]" />
             Download the PDF
+          </button>
+          {/*
+            Word, beside the PDF rather than hidden behind a menu — v0.6.
+            Many ATS portals require or prefer `.docx`, and several parse it better than any PDF, so a
+            candidate who needs it needs it *now*, at the moment they are uploading. It is the quiet
+            button because the PDF is what most people send and the one whose look they just chose;
+            the Word file has one ATS-safe layout and no design to pick.
+          */}
+          <button
+            type="button"
+            onClick={() =>
+              downloadDocument(loaded.resume, templateId, themeId, 'docx')
+            }
+            title="For portals that ask for a Word file"
+            className="btn btn-quiet px-4 py-3 text-[14px]"
+          >
+            Word (.docx)
           </button>
         </div>
 
