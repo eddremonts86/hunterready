@@ -143,16 +143,16 @@ function blankResume(fullName: string): Resume {
  */
 const STEPS_HOW = [
   {
-    title: 'Upload what you have',
-    body: 'A PDF, a Word file, plain text, or a photo of a printed page. No account, no forms, no retyping your history.',
+    title: 'Start from a file, or from nothing',
+    body: 'A PDF, a Word file, plain text, or a photo of a printed page — or an empty one, if this is your first. No account either way.',
   },
   {
-    title: 'Check what we read',
-    body: 'We show you every detail we pulled out and mark the ones we were not sure about, with the line each came from. You correct anything wrong.',
+    title: 'Correct what is on the page',
+    body: 'Every detail we read, with the ones we were unsure of marked and the line each came from. Written from scratch instead? Same form, empty.',
   },
   {
     title: 'Download it',
-    body: 'A clean, well-set A4 PDF — or a Word file, for the portals that ask for one. Both verified by a round-trip test that reads the document back, not by eye.',
+    body: 'A clean, well-set A4 PDF — or a Word file, for the portals that ask for one. Both checked by reading the finished document back.',
   },
 ]
 
@@ -170,17 +170,20 @@ const MECHANISMS = [
   {
     icon: 'verified' as const,
     title: 'Verified by a test, not a claim',
-    body: 'Every template is rendered, read back with an independent parser, and checked field by field in reading order. One that loses a field does not ship.',
+    body: 'Every design is rendered, read back with a separate parser, and checked field by field in reading order.',
+    how: 'A design that loses a field does not ship',
   },
   {
     icon: 'shield' as const,
     title: 'It cannot invent anything',
-    body: 'Suggestions may sharpen your own wording. A number, employer, date or outcome that is not already in your CV is blocked in code — and you accept every line by hand.',
+    body: 'Suggestions sharpen your own wording. A number, employer, date or outcome that is not already in your CV is refused.',
+    how: 'Blocked in code, not asked for in a prompt',
   },
   {
     icon: 'lock' as const,
     title: 'Your CV is not our training data',
-    body: 'Your phone number and address are stripped before any model sees the text, and you can decline the outside provider and be read by a model on our own server instead.',
+    body: 'Your phone number and street address are removed before any model sees the text, and you can keep the whole thing on our own server.',
+    how: 'Declining leaves it on this machine',
   },
 ]
 
@@ -267,19 +270,32 @@ function StartFromScratch({
  * (docs/12). Ours opens by saying most CVs parse fine, because most do, and a page whose first claim
  * is false to the majority of its readers has spent its credibility before the fold. What is on the
  * left is only what genuinely cannot be checked without doing what this product does.
+ *
+ * Paired, one row at a time, rather than two lists side by side. Two lists ask the reader to do the
+ * matching themselves and most will not bother; a row that says "this happens" beside "here is the
+ * answer to that exact thing" is the same content doing the work it was written for.
  */
-const ALONE = [
-  'You send the file and find out nothing. No reply is the same signal as a mangled file.',
-  'A two-column layout looks right to you and arrives as one scrambled paragraph.',
-  'A tool sharpens a bullet by adding a number nobody gave it — and you defend it in the interview.',
-  'Rewriting the same CV for every advert, by hand, at eleven at night.',
-]
-
-const WITH_US = [
-  'We render your PDF, read it back with a separate parser, and show you what survived.',
-  'You see every field we read and correct anything wrong before it leaves.',
-  'Nothing can be invented: a claim not already in your CV is rejected in code, not discouraged in a prompt.',
-  'Point it at one advert and get a version for that job, with what changed listed line by line.',
+const COMPARISON = [
+  {
+    alone:
+      'You send the file and find out nothing. No reply reads the same as a mangled one.',
+    here: 'We read the finished document back and show you what survived.',
+  },
+  {
+    alone:
+      'A two-column layout looks right to you and arrives as one scrambled paragraph.',
+    here: 'You see every field we read, and correct anything wrong before it leaves.',
+  },
+  {
+    alone:
+      'A tool sharpens a line by adding a number nobody gave it — and you defend it at the interview.',
+    here: 'A claim that is not already in your CV is refused, in code.',
+  },
+  {
+    alone:
+      'Rewriting the same CV for every advert, by hand, at eleven at night.',
+    here: 'Point it at one advert and get a version for that job, with what changed listed.',
+  },
 ]
 
 /**
@@ -1791,31 +1807,48 @@ function HunterReady() {
             </div>
           </section>
 
-          {/* How it works — three steps, because the product is three steps and saying so removes
-              the main reason somebody hesitates: not knowing how long this will take. */}
+          {/*
+            How it works. A numbered rail, not three cards in a row.
+
+            Two card rows ran back to back on this page — this one and the proof section below — so
+            the eye met the identical rhythm twice and read neither. Neither needed a box either:
+            DESIGN.md gives a card an elevation, and elevation says "this sits above that", which is
+            false of three equal steps. Hairlines group them for nothing.
+
+            The heading holds the left column and stays put while the steps scroll past it, which is
+            what a heading is for when its list is long enough to leave it behind.
+          */}
           <section className="border-b border-hairline bg-band">
-            <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
+            <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20 lg:px-8 lg:py-24">
               <Reveal>
-                <h2 className="max-w-2xl text-display text-balance text-ink">
-                  Three steps, about five minutes
-                  <span className="text-signal">.</span>
-                </h2>
+                <div className="flex flex-col gap-4 lg:sticky lg:top-24">
+                  <h2 className="text-display text-balance text-ink">
+                    Three steps, about five minutes
+                    <span className="text-signal">.</span>
+                  </h2>
+                  <p className="max-w-xs text-[15px] leading-relaxed text-ink-soft">
+                    The commonest reason people put this off is not doubting it
+                    works — it is not knowing whether they are starting a
+                    two-minute job or a two-hour one.
+                  </p>
+                </div>
               </Reveal>
-              <div className="mt-10 grid gap-4 md:grid-cols-3">
+
+              <ol className="flex flex-col divide-y divide-hairline-strong border-y border-hairline-strong">
                 {STEPS_HOW.map((step, index) => (
-                  <Reveal key={step.title} delay={index * 90}>
-                    <div className="card hover-lift flex h-full flex-col gap-3 p-6">
-                      <span className="tally flex h-9 w-9 items-center justify-center rounded-full bg-signal text-[15px] font-bold text-white">
-                        {index + 1}
+                  <Reveal key={step.title} delay={index * 80}>
+                    <li className="grid grid-cols-[2rem_1fr] gap-x-5 gap-y-1.5 py-6 sm:grid-cols-[3rem_1fr] sm:py-7">
+                      <span className="tally text-[13px] font-bold leading-6 text-signal sm:text-[15px]">
+                        {String(index + 1).padStart(2, '0')}
                       </span>
                       <h3 className="text-title text-ink">{step.title}</h3>
-                      <p className="text-[14px] leading-relaxed text-ink-soft">
+                      <p className="col-start-2 max-w-[58ch] text-[14px] leading-relaxed text-ink-soft">
                         {step.body}
                       </p>
-                    </div>
+                    </li>
                   </Reveal>
                 ))}
-              </div>
+              </ol>
             </div>
           </section>
 
@@ -1886,24 +1919,43 @@ function HunterReady() {
             </div>
           </section>
 
-          <section className="bg-band">
-            <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
+          {/*
+            The proof section, as a ledger.
+
+            This is the page's whole argument — everyone in this category says "ATS-friendly" and
+            only this one checks the file it just produced (docs/12) — and it was three identical
+            boxes with a circled icon each, indistinguishable at a glance from the three steps above.
+
+            Now each claim carries the mechanism that enforces it on the same line, in plain words
+            rather than a file path: the audience is every sector, not this one, and a nurse does not
+            want a source reference. It is the one place on the page where saying HOW is more
+            persuasive than saying WHAT.
+          */}
+          <section className="border-b border-hairline bg-ground">
+            <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
               <Reveal>
                 <h2 className="max-w-2xl text-display text-balance text-ink">
                   Three things we can prove, not just say
                   <span className="text-signal">.</span>
                 </h2>
               </Reveal>
-              <div className="mt-10 grid gap-4 md:grid-cols-3">
+              <div className="mt-10 flex flex-col divide-y divide-hairline border-y border-hairline">
                 {MECHANISMS.map((item, index) => (
-                  <Reveal key={item.title} delay={index * 90}>
-                    <div className="card hover-lift flex h-full flex-col gap-3 p-6">
-                      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-signal-wash text-signal">
-                        <Icon name={item.icon} />
-                      </span>
-                      <h3 className="text-title text-ink">{item.title}</h3>
-                      <p className="text-[14px] leading-relaxed text-ink-soft">
-                        {item.body}
+                  <Reveal key={item.title} delay={index * 80}>
+                    <div className="grid gap-x-10 gap-y-3 py-7 lg:grid-cols-[1.15fr_0.85fr] lg:py-8">
+                      <div className="flex gap-4">
+                        <span className="mt-0.5 shrink-0 text-signal">
+                          <Icon name={item.icon} className="h-5 w-5" />
+                        </span>
+                        <div className="flex flex-col gap-2">
+                          <h3 className="text-title text-ink">{item.title}</h3>
+                          <p className="max-w-[52ch] text-[14px] leading-relaxed text-ink-soft">
+                            {item.body}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-[14px] font-medium leading-relaxed text-ink lg:pt-1 lg:text-right">
+                        {item.how}
                       </p>
                     </div>
                   </Reveal>
@@ -1913,19 +1965,19 @@ function HunterReady() {
           </section>
 
           {/*
-            The cost of doing it yourself, beside the cost of not.
+            The cost of doing it yourself, paired with the answer to each line of it.
 
-            Taken from the clearest section on any competitor's site (docs/12): JobAssist's two-column
-            "Doing it alone / With JobAssist". The structure works because it names the reader's
-            current evening rather than our feature list — and ours writes itself, because every row
-            on the left is a real failure this product was built after watching.
+            Two boxes side by side made the reader do the matching, and most will not: the left list
+            and the right list were about the same four things and nothing said so. Row by row, each
+            problem meets its own answer, and the boxes go — a card promises elevation, and these two
+            columns sit on the same plane by definition.
 
-            The left column deliberately does not exaggerate. "Your CV probably parses fine" is on it,
-            because for most people it does, and a page that opens by telling somebody their document
-            is broken has already lied to the majority of its readers.
+            The left column deliberately does not exaggerate. "Your CV probably parses fine" is in the
+            lead, because for most people it does, and a page that opens by telling somebody their
+            document is broken has already lied to the majority of its readers.
           */}
-          <section className="border-b border-hairline bg-ground">
-            <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
+          <section className="border-b border-hairline bg-band">
+            <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
               <Reveal>
                 <h2 className="max-w-2xl text-display text-balance text-ink">
                   What you cannot check on your own
@@ -1937,49 +1989,32 @@ function HunterReady() {
                   invisible in the document you are looking at.
                 </p>
               </Reveal>
-              <div className="mt-10 grid gap-4 md:grid-cols-2">
-                <Reveal>
-                  <div className="flex h-full flex-col gap-4 rounded-card border border-hairline bg-band p-6">
-                    <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
-                      On your own
-                    </span>
-                    <ul className="flex flex-col gap-3">
-                      {ALONE.map((item) => (
-                        <li
-                          key={item}
-                          className="flex gap-2.5 text-[14px] leading-relaxed text-ink-soft"
-                        >
-                          <span
-                            aria-hidden
-                            className="mt-2 h-[3px] w-[3px] shrink-0 rounded-full bg-ink-faint"
-                          />
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </Reveal>
-                <Reveal delay={90}>
-                  <div className="lift flex h-full flex-col gap-4 rounded-card border border-signal-edge bg-ground p-6">
-                    <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-signal">
-                      Here
-                    </span>
-                    <ul className="flex flex-col gap-3">
-                      {WITH_US.map((item) => (
-                        <li
-                          key={item}
-                          className="flex gap-2.5 text-[14px] leading-relaxed text-ink"
-                        >
-                          <Icon
-                            name="check"
-                            className="mt-0.5 h-4 w-4 shrink-0 text-affirm"
-                          />
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </Reveal>
+
+              <div className="mt-10 flex flex-col divide-y divide-hairline-strong border-y border-hairline-strong">
+                <div className="hidden gap-10 py-3 lg:grid lg:grid-cols-2">
+                  <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
+                    On your own
+                  </span>
+                  <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-signal">
+                    Here
+                  </span>
+                </div>
+                {COMPARISON.map((row, index) => (
+                  <Reveal key={row.here} delay={index * 70}>
+                    <div className="grid gap-3 py-6 lg:grid-cols-2 lg:gap-10">
+                      <p className="max-w-[52ch] text-[14px] leading-relaxed text-ink-faint">
+                        {row.alone}
+                      </p>
+                      <p className="flex max-w-[52ch] gap-2.5 text-[15px] leading-relaxed text-ink">
+                        <Icon
+                          name="check"
+                          className="mt-1 h-4 w-4 shrink-0 text-affirm"
+                        />
+                        {row.here}
+                      </p>
+                    </div>
+                  </Reveal>
+                ))}
               </div>
             </div>
           </section>
@@ -1990,32 +2025,44 @@ function HunterReady() {
             Every competitor has this section and every one of them uses it to handle objections about
             *billing*. Ours answers the three things a person actually hesitates over — where the file
             goes, whether the employer can tell, and whether they have to pay — because those are the
-            ones that stop somebody uploading, and a page that dodges them is asking for trust it has
+            ones that stop somebody starting, and a page that dodges them is asking for trust it has
             not offered anything for.
 
+            Five identical white pills in a narrow column, with the right half of the page empty, was
+            a wall of sameness with nothing to aim at. The heading takes that empty half; the
+            questions are a plain divided list, because a question is a line of text and does not need
+            a container to be one.
+
             `<details>` rather than a JS accordion: it works before hydration, it is keyboard-operable
-            for free, and the browser's find-in-page can reach into a closed one.
+            for free, and find-in-page can reach inside a closed one.
           */}
-          <section className="border-b border-hairline bg-band">
-            <div className="mx-auto w-full max-w-3xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
+          <section className="border-b border-hairline bg-ground">
+            <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20 lg:px-8 lg:py-24">
               <Reveal>
-                <h2 className="text-display text-balance text-ink">
-                  Before you upload anything
-                  <span className="text-signal">.</span>
-                </h2>
+                <div className="flex flex-col gap-4 lg:sticky lg:top-24">
+                  <h2 className="text-display text-balance text-ink">
+                    Before you start
+                    <span className="text-signal">.</span>
+                  </h2>
+                  <p className="max-w-xs text-[15px] leading-relaxed text-ink-soft">
+                    The three that actually stop people, answered straight.
+                    Anything still unclear is worth an email.
+                  </p>
+                </div>
               </Reveal>
-              <div className="mt-8 flex flex-col gap-2">
+
+              <div className="flex flex-col divide-y divide-hairline border-y border-hairline">
                 {FAQ.map((item, index) => (
                   <Reveal key={item.q} delay={index * 60}>
-                    <details className="card group px-5 py-4">
-                      <summary className="flex cursor-pointer items-center justify-between gap-4 text-[15px] font-semibold text-ink">
+                    <details className="group py-5">
+                      <summary className="flex cursor-pointer list-none items-baseline justify-between gap-6 text-[16px] font-semibold text-ink transition-colors hover:text-signal">
                         {item.q}
                         <Icon
                           name="chevron-down"
-                          className="h-4 w-4 shrink-0 text-ink-faint transition-transform group-open:rotate-180"
+                          className="mt-1 h-4 w-4 shrink-0 text-ink-faint transition-transform duration-200 group-open:rotate-180"
                         />
                       </summary>
-                      <p className="mt-3 text-[14px] leading-relaxed text-ink-soft">
+                      <p className="mt-3 max-w-[68ch] text-[14px] leading-relaxed text-ink-soft">
                         {item.a}
                       </p>
                     </details>
