@@ -89,6 +89,7 @@ export function BeforeAfter({
   changes,
   theme,
   Template,
+  since = 'upload',
 }: {
   original: Resume
   current: Resume
@@ -96,6 +97,15 @@ export function BeforeAfter({
   changes: Array<Change>
   theme: PdfcnTheme
   Template: (props: { resume: Resume; theme: PdfcnTheme }) => React.ReactNode
+  /**
+   * What the left-hand page **is**, which is not always the file somebody uploaded.
+   *
+   * A CV written here has no upload, so "as you uploaded it" would name a document that never
+   * existed — and the comparison after fitting one to a job is against the version from a moment
+   * before, not against the empty page it started as. The two cases need different words for the
+   * same picture.
+   */
+  since?: 'upload' | 'fit'
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -111,8 +121,12 @@ export function BeforeAfter({
         <span className="flex min-w-0 flex-col">
           <span className="text-[14px] font-semibold text-ink">
             {changes.length === 1
-              ? 'change since you uploaded it'
-              : 'changes since you uploaded it'}
+              ? since === 'fit'
+                ? 'change fitting this job made'
+                : 'change since you uploaded it'
+              : since === 'fit'
+                ? 'changes fitting this job made'
+                : 'changes since you uploaded it'}
           </span>
           <span className="text-[13px] leading-snug text-ink-soft">
             {changeBreakdown(changes)}. Every one of them was your decision —
@@ -123,8 +137,12 @@ export function BeforeAfter({
 
       <div className="flex flex-col gap-4 p-4 lg:flex-row lg:items-start">
         <Sheet
-          label="As you uploaded it"
-          caption="The file you already had."
+          label={since === 'fit' ? 'Before this job' : 'As you uploaded it'}
+          caption={
+            since === 'fit'
+              ? 'Your CV a moment ago, before it was aimed at this advert.'
+              : 'The file you already had.'
+          }
           resume={original}
           theme={theme}
           Template={Template}
