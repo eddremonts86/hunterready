@@ -62,10 +62,25 @@ const RewritePayload = z.object({
    * remain as sanity bounds against a runaway response.
    */
   rationale: z.string().max(4000).default(''),
-  questions: z.array(z.string().min(1).max(2000)).max(2).default([]),
+  /**
+   * `.catch` on both, and it is the same argument the paragraph above makes about length, applied to
+   * shape — because the local model made it a live bug rather than a hypothetical one.
+   *
+   * A 3B model asked for `changed: ['verb'|'structure'|'concision'|'jargon']` frequently answers with
+   * the *schema* instead of a value — `[{"items":[…],"type":"array"}]` was observed verbatim. Zod then
+   * rejected the entire payload, the outcome became `unavailable`, and a perfectly good suggestion was
+   * thrown away because its decorative metadata was malformed. Measured on the local path: **14 of 14
+   * bullets failed this way**, which is exactly what Edd meant by "el wording a mí no me funciona".
+   *
+   * Neither field ever reaches the CV. `changed` colours a label and `questions` prompts a follow-up,
+   * so a malformed one costs a chip, not a claim. Falling back to empty keeps the suggestion — which
+   * IS the product — and the fabrication guard still inspects it exactly as before.
+   */
+  questions: z.array(z.string().min(1).max(2000)).max(2).catch([]).default([]),
   changed: z
     .array(z.enum(['verb', 'structure', 'concision', 'jargon']))
     .max(4)
+    .catch([])
     .default([]),
 })
 
