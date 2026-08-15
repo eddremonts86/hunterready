@@ -430,6 +430,14 @@ and the first measured numbers for the free tier.
 - ✅ **ADR-029** records Edd's decision on `personalDetails` in translation, so it stops being an open
   question.
 
+### v0.10.1 — the fit had no answer on a CV written from nothing
+
+Found walking production end to end, and it was mine twice over: the audit's P1 fix brought the fit
+back to the document, and the from-scratch feature then hid the comparison for authored CVs — each
+right on its own, together the original dead end on the new path. The baseline now depends on **what
+just happened** rather than on where the document came from: an upload is measured from the upload, a
+CV written here is measured from the moment before the fit.
+
 **Cost:** one session. **Left open:** pricing and payments (still the last thing between here and
 v1.0), and the free tier's speed on the production box (ADR-027 — the lever is taking the model call
 off the blocking path, not a faster engine).
