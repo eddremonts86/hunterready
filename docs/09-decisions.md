@@ -756,6 +756,37 @@ line.
 
 ---
 
+## ADR-029 — Translation sends `personalDetails`, and the page says so
+
+**2026-08-15 · Accepted · Edd's decision, and it is closed**
+
+The whole-document translation sends `basics.personalDetails` field by field. On a European CV that is
+exactly where **date of birth, nationality and marital status** live — more sensitive than the phone
+number `redactForLlm` goes out of its way to strip on the first read.
+
+Two options were put to Edd: withhold those fields and tell the person to translate them by hand, or
+send them and say so. **He chose being straight with the user**, and this ADR exists so it is not
+re-opened by the next person who notices.
+
+### Why it holds up
+
+The person asked for **their whole document** in another language. Those lines are printed on it. A
+translation that silently skipped them would hand back a document that is wrong in a way the person
+cannot see — which is the failure this product exists to not commit — and one that says "we left
+these out for your safety" makes a decision about somebody's own data on their behalf.
+
+What makes it defensible is not the sending; it is the saying. `/privacy` enumerates what leaves and
+for which purpose, so the transfer is a thing the person can decline (ADR-023: declining leaves them
+on our own hardware, where the document never leaves the machine).
+
+### What would re-open it
+
+A jurisdiction where transferring special-category data needs its own explicit consent, separate from
+the general processing consent. That is a legal question, not a design one; the fields are already
+isolated in one array, so the change would be one filter and one sentence.
+
+---
+
 ## ADR-028 — A claim has to belong to the job it is claimed for
 
 **2026-08-15 · Accepted · measured**

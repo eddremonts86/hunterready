@@ -227,7 +227,7 @@ quoting DESIGN.md), one icon family, no nested cards, no badge that changes no d
 `btn-primary` on the landing page are the **same** action repeated down a long page, not two
 competing primaries.
 
-## Open question for Edd, found while correcting the privacy copy
+## Closed: the question found while correcting the privacy copy
 
 `redactForLlm` — the pass that strips a phone number and street address before anything is sent —
 runs **only in `src/structure/extract.ts`**, on the first read of a file. Rewriting, targeting, the
@@ -235,7 +235,13 @@ letter and the translation do not call it. In practice they send less: the rewri
 headline, summary and bullets; the translation's slot list deliberately excludes name, employer,
 institution, email and URL.
 
-But the translation **does** send `basics.personalDetails` — which on a European CV is exactly where
+**Decided (ADR-029): they travel, and the page says so.** Edd's call, and it is closed — the person
+asked for their whole document in another language, those lines are printed on it, and a translation
+that silently skipped them would hand back a document wrong in a way they cannot see. What makes it
+defensible is the saying, not the sending.
+
+The reasoning, kept because it is what the decision was made on: the translation **does** send
+`basics.personalDetails` — which on a European CV is exactly where
 date of birth, nationality and marital status live. That is defensible (the person asked for their
 whole document in another language, and those lines are printed on it) and it is more sensitive than
 the phone number the product goes out of its way to strip. The new copy says what is sent rather

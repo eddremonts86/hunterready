@@ -321,6 +321,7 @@ export function ReviewForm({
   provenance,
   onChange,
   ocr = false,
+  authoring = false,
   photoShown = false,
   onUseEuropeanLayout,
 }: {
@@ -348,6 +349,17 @@ export function ReviewForm({
   ) => void
   /** The text was read off an image, which changes the honest answer to "how much of this?" */
   ocr?: boolean
+  /**
+   * Nobody read this document — it is being written here.
+   *
+   * Everything in this form's chrome is about *our reading of a file*: a count of fields we were
+   * unsure of, a banner asking the person to check what we found, "we could not tell which fields to
+   * double-check". Point that at a CV typed from nothing and every line of it refers to a file that
+   * does not exist. So the counter is replaced by the one number that does mean something here — how
+   * much of the document has anything in it — and the sections start open, because there is nothing
+   * to collapse and the empty states are the instructions.
+   */
+  authoring?: boolean
   /**
    * Whether the chosen template draws a photo — the European one does, the international one does not.
    *
@@ -561,6 +573,20 @@ export function ReviewForm({
   const flaggedCount = flaggedPaths.length
   const unsure = ocr || total === 0
 
+  /**
+   * How much of the document exists yet — the only count that means anything while authoring.
+   *
+   * Five sections, ticked as each gets its first entry. Not a percentage: a CV with no education is
+   * finished for plenty of people, and a bar at 80% would invent a deficiency out of a life.
+   */
+  const written = [
+    resume.basics.headline !== undefined && resume.basics.headline !== '',
+    resume.basics.summary !== undefined && resume.basics.summary !== '',
+    resume.work.length > 0,
+    resume.education.length > 0,
+    resume.skills.length > 0,
+  ].filter(Boolean).length
+
   return (
     <div className="flex flex-col gap-3">
       {/**
@@ -577,29 +603,37 @@ export function ReviewForm({
       <div
         className={[
           'flex items-center gap-3.5 rounded-card border p-4',
-          unsure
-            ? 'border-caution/25 bg-caution-wash'
-            : 'border-signal-edge bg-signal-wash',
+          authoring
+            ? 'border-signal-edge bg-signal-wash'
+            : unsure
+              ? 'border-caution/25 bg-caution-wash'
+              : 'border-signal-edge bg-signal-wash',
         ].join(' ')}
       >
         <span
           className={[
             'tally text-[34px] font-extrabold leading-none tracking-[-0.03em]',
-            unsure ? 'text-caution' : 'text-signal',
+            authoring ? 'text-signal' : unsure ? 'text-caution' : 'text-signal',
           ].join(' ')}
         >
-          {unsure ? '?' : flaggedCount}
+          {authoring ? written : unsure ? '?' : flaggedCount}
         </span>
         <span className="flex flex-col">
           <span className="text-[14px] font-semibold text-ink">
-            {unsure ? 'Check everything' : 'To check'}
+            {authoring
+              ? 'Sections filled in'
+              : unsure
+                ? 'Check everything'
+                : 'To check'}
           </span>
           <span className="text-[13px] leading-snug text-ink-soft">
-            {ocr
-              ? 'read from a picture'
-              : total === 0
-                ? 'we could not tell which fields'
-                : `of ${total} fields we read`}
+            {authoring
+              ? 'of 5 — none of them is compulsory'
+              : ocr
+                ? 'read from a picture'
+                : total === 0
+                  ? 'we could not tell which fields'
+                  : `of ${total} fields we read`}
           </span>
         </span>
       </div>
@@ -617,14 +651,22 @@ export function ReviewForm({
        * did not report which fields it was unsure about, so we know *less* than usual — and
        * saying "0 to check" there would be the opposite of the truth.
        */}
-      {!ocr && total === 0 && (
+      {authoring && (
+        <p className="text-[13px] leading-relaxed text-ink-soft">
+          Nothing here is required except your name. Add what you have, in any
+          order — the document on the right updates as you type, and you can
+          download it at any point.
+        </p>
+      )}
+
+      {!authoring && !ocr && total === 0 && (
         <p className="text-[13px] leading-relaxed text-ink-soft">
           This time we could not tell which fields to double-check, so please
           read through all of them — especially the dates and job titles.
         </p>
       )}
 
-      {!ocr && flaggedCount === 0 && total > 0 && (
+      {!authoring && !ocr && flaggedCount === 0 && total > 0 && (
         <p className="text-[13px] leading-relaxed text-ink-soft">
           Nothing looked uncertain. Still worth a glance at your dates and job
           titles — those are the ones that cost you an interview if they are
@@ -726,12 +768,13 @@ export function ReviewForm({
         title="Experience"
         count={resume.work.length}
         flagged={sectionFlagged('work')}
-        defaultOpen={sectionFlagged('work')}
+        defaultOpen={authoring || sectionFlagged('work')}
       >
         {resume.work.length === 0 && (
           <p className="text-[13px] leading-relaxed text-ink-soft">
-            We did not find any jobs. That is usually a sign the file was hard
-            to read — check the original, or add them here.
+            {authoring
+              ? 'One entry per job — the most recent first. A job you left, a placement, an apprenticeship or self-employment all count.'
+              : 'We did not find any jobs. That is usually a sign the file was hard to read — check the original, or add them here.'}
           </p>
         )}
         {resume.work.map((item, i) => (
@@ -849,7 +892,7 @@ export function ReviewForm({
         title="Education"
         count={resume.education.length}
         flagged={sectionFlagged('education')}
-        defaultOpen={false}
+        defaultOpen={authoring}
       >
         {/*
           These were four read-only paragraphs. Somebody whose institution came out of a two-column PDF
@@ -858,8 +901,9 @@ export function ReviewForm({
         */}
         {resume.education.length === 0 && (
           <p className="text-[13px] leading-relaxed text-ink-soft">
-            We did not find any. Add what you have — a course or a certificate
-            counts, and so does an apprenticeship.
+            {authoring
+              ? 'Whatever you have. A course or a certificate counts, and so does an apprenticeship — leave it empty if there is nothing to put here.'
+              : 'We did not find any. Add what you have — a course or a certificate counts, and so does an apprenticeship.'}
           </p>
         )}
         {resume.education.map((item, i) => (
@@ -942,7 +986,7 @@ export function ReviewForm({
         title="Skills"
         count={resume.skills.reduce((n, g) => n + g.items.length, 0)}
         flagged={sectionFlagged('skills')}
-        defaultOpen={false}
+        defaultOpen={authoring}
       >
         {/*
           Comma-separated, one field per group, rather than a chip editor.
@@ -957,8 +1001,9 @@ export function ReviewForm({
         */}
         {resume.skills.length === 0 && (
           <p className="text-[13px] leading-relaxed text-ink-soft">
-            We did not find any. Group them however your trade does — the
-            headings are yours, not a fixed list.
+            {authoring
+              ? 'Group them however your trade does — the headings are yours, not a fixed list. "Clinical", "Machines I have run", "Languages".'
+              : 'We did not find any. Group them however your trade does — the headings are yours, not a fixed list.'}
           </p>
         )}
         {resume.skills.map((group, i) => (

@@ -43,6 +43,15 @@ export const WorkingCopy = z.object({
   warnings: z.array(z.string()).default([]),
   method: z.enum(['llm', 'local', 'rules']),
   ocr: z.boolean().default(false),
+  /**
+   * Whether this document was read from a file or written here.
+   *
+   * Carried through the reload because it decides what the second step *says*: a CV nobody read has
+   * nothing to check, and restoring one as `file` would greet its author with "we could not tell
+   * which fields to double-check" about a file that never existed. Defaults to `file`, so a copy
+   * written by a previous deploy restores as what it almost certainly was.
+   */
+  origin: z.enum(['file', 'blank']).default('file'),
   /** Which stored row this came from, when it came from one. */
   savedResumeId: z.string().optional(),
 })

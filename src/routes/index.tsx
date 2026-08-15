@@ -95,6 +95,43 @@ interface Loaded {
   method: 'llm' | 'local' | 'rules'
   /** Read off an image. Carried through because it changes what the review step asks of the user. */
   ocr: boolean
+  /**
+   * Where this document came from — and it changes what the whole second step is *for*.
+   *
+   * Every screen after the upload is written as "check what we read": flags on the fields we were
+   * unsure of, the line each one came from, a count of what is worth a second look. All of that is
+   * about **our reading of a file**. Point it at a CV nobody read and every word of it is false —
+   * there is no reading to check, no provenance to flag, and "we could not tell which fields to
+   * double-check" becomes a confession about a file that does not exist.
+   *
+   * So authoring is not "upload with an empty file". It is the same editor with a different frame.
+   */
+  origin: 'file' | 'blank'
+}
+
+/**
+ * A CV with nothing in it but the one thing a CV cannot be without.
+ *
+ * `fullName` is `min(1)` in the schema, which is right — a document with no name on it is not a CV —
+ * and it is the reason the from-scratch flow asks one question before it opens. The alternative was
+ * seeding "Your name" and hoping they replace it, which puts our words in their document and would
+ * eventually be printed by somebody in a hurry.
+ *
+ * Nothing else is seeded. An empty work row would look like help and is actually a decision made on
+ * their behalf, in a form whose empty states already say what goes in each section.
+ */
+function blankResume(fullName: string): Resume {
+  return Resume.parse({
+    schemaVersion: '1.0',
+    basics: { fullName: fullName.trim(), links: [], personalDetails: [] },
+    work: [],
+    education: [],
+    skills: [],
+    projects: [],
+    certifications: [],
+    languages: [],
+    custom: [],
+  })
 }
 
 const SAMPLES = [
@@ -152,6 +189,92 @@ const MECHANISMS = [
     body: 'Your phone number and address are stripped before any model sees the text, and you can decline the outside provider and be read by a model on our own server instead.',
   },
 ]
+
+/**
+ * "I do not have one" — one field, and it is the only field a CV cannot do without.
+ *
+ * Closed until asked for, because the upload is still the right first answer for most people and a
+ * second form competing with the dropzone would blunt both. Open, it is one question with its reason
+ * under it — the shape the competitors' twenty-screen quizzes get right and then abuse (docs/12).
+ */
+function StartFromScratch({
+  onStart,
+  busy,
+}: {
+  onStart: (fullName: string) => void
+  busy: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState('')
+  const ready = name.trim() !== ''
+
+  if (!open) {
+    return (
+      <div className="mt-6 flex flex-col items-center gap-2">
+        <span className="text-meta text-ink-soft">
+          No CV yet, or the old one is not worth fixing?
+        </span>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => setOpen(true)}
+          className="btn btn-quiet px-5 py-2.5 text-[14px]"
+        >
+          Write one from scratch
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (ready && !busy) onStart(name)
+      }}
+      className="card mt-6 flex flex-col gap-3 p-5"
+    >
+      <div className="flex flex-col gap-1">
+        <label
+          htmlFor="blank-name"
+          className="text-[15px] font-semibold text-ink"
+        >
+          What is your name?
+        </label>
+        <p className="text-[13px] leading-relaxed text-ink-soft">
+          The only thing a CV cannot be without. Everything else — jobs,
+          schooling, skills, courses, references — you add in any order, and
+          nothing is compulsory.
+        </p>
+      </div>
+      <input
+        id="blank-name"
+        type="text"
+        autoFocus
+        autoComplete="name"
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        className="field"
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="submit"
+          disabled={!ready || busy}
+          className="btn btn-primary px-5 py-2.5 text-[14px] disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          Start writing
+        </button>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="rounded-full px-3 py-2 text-[13px] text-ink-soft transition-colors hover:bg-band hover:text-ink"
+        >
+          I do have a file
+        </button>
+      </div>
+    </form>
+  )
+}
 
 /**
  * The comparison, and the rule it follows: **the left column is not a strawman.**
@@ -729,6 +852,8 @@ function HunterReady() {
         warnings: [],
         method: 'rules',
         ocr: false,
+        // A stored CV was a file once, whatever it was authored from. It is not being authored now.
+        origin: 'file',
       })
       setSavedResumeId(id)
     },
@@ -757,6 +882,7 @@ function HunterReady() {
         warnings: copy.warnings,
         method: copy.method,
         ocr: copy.ocr,
+        origin: copy.origin ?? 'file',
       })
       if (copy.savedResumeId !== undefined) setSavedResumeId(copy.savedResumeId)
       return
@@ -813,6 +939,7 @@ function HunterReady() {
       warnings: loaded.warnings,
       method: loaded.method,
       ocr: loaded.ocr,
+      origin: loaded.origin,
       ...(savedResumeId === undefined ? {} : { savedResumeId }),
     })
   }, [loaded, savedResumeId])
@@ -965,6 +1092,7 @@ function HunterReady() {
                 ? 'local'
                 : 'llm',
           ocr: payload.ocr === true,
+          origin: 'file',
         })
       } catch {
         setError(
@@ -1297,6 +1425,31 @@ function HunterReady() {
     [loaded, consent.choice],
   )
 
+  /**
+   * Start with nothing but a name.
+   *
+   * Until now this product could only *correct* a CV, which quietly excluded the person who most needs
+   * one: a first job, a return to work after years out, a trade where nobody ever wrote one down. The
+   * editor has done full add/remove on every section since v0.5 and the custom sections take any
+   * heading a life needs — so the feature was already built and only the door was missing.
+   *
+   * It asks for the name because the schema requires one (`fullName` is `min(1)`, correctly: a document
+   * with no name on it is not a CV), and asking beats seeding "Your name" and hoping it gets replaced
+   * before somebody in a hurry prints it.
+   */
+  const startBlank = useCallback((fullName: string) => {
+    const resume = blankResume(fullName)
+    setLoaded({
+      resume,
+      original: resume,
+      provenance: [],
+      warnings: [],
+      method: 'rules',
+      ocr: false,
+      origin: 'blank',
+    })
+  }, [])
+
   const loadSample = useCallback(async (id: string) => {
     setBusy(true)
     setError(undefined)
@@ -1311,6 +1464,7 @@ function HunterReady() {
           warnings: [],
           method: 'rules',
           ocr: false,
+          origin: 'file',
         })
       }
     } catch {
@@ -1612,10 +1766,16 @@ function HunterReady() {
                   className="rise flex flex-wrap gap-x-5 gap-y-2"
                   style={{ animationDelay: '280ms' }}
                 >
+                  {/*
+                    Proof beside the promise, which is the one structural thing every competitor does
+                    in the hero and we did not (docs/12). "Free to try" was a price, not evidence, and
+                    it is said twice more further down the page; the parse check is the claim nobody
+                    else in this category makes about *your* file, so it belongs in the first viewport.
+                  */}
                   {[
+                    'Checked by reading the PDF back',
                     'No account needed',
                     'PDF, Word, or a photo',
-                    'Free to try',
                   ].map((item) => (
                     <li
                       key={item}
@@ -1694,6 +1854,19 @@ function HunterReady() {
 
               <Reveal delay={80}>
                 <Dropzone onFile={upload} onPick={picker.open} busy={busy} />
+              </Reveal>
+
+              {/*
+                The door for somebody who has no CV at all.
+
+                Until now this product could only *correct* one, which excluded exactly the people who
+                need one most: a first job, a return to work after years out, a trade where nobody ever
+                wrote one down. It sits under the dropzone rather than beside it, because uploading is
+                still the faster path for everybody who has a file — but it is a real control with the
+                same weight as the samples below it, not a link in small print.
+              */}
+              <Reveal delay={110}>
+                <StartFromScratch onStart={startBlank} busy={busy} />
               </Reveal>
 
               <Reveal delay={140}>
@@ -2358,14 +2531,25 @@ function HunterReady() {
       <div className="mx-auto flex w-full flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:h-[calc(100vh-3.5rem-2px)] lg:min-h-0 lg:flex-none lg:px-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-col gap-1">
+            {/*
+              Two headings, because there are two situations and one of them was being lied to.
+
+              "Check what we read" is about our reading of a file. Somebody who started from nothing has
+              no file and no reading — telling them to check it, and counting details we were unsure of
+              in a document nobody parsed, is a sentence with no referent.
+            */}
             <h1 className="text-display text-ink">
-              Check what we read
+              {loaded.origin === 'blank'
+                ? 'Write your CV'
+                : 'Check what we read'}
               <span className="text-signal">.</span>
             </h1>
             <p className="text-[14px] text-ink-soft">
-              {toCheck > 0
-                ? `${toCheck} ${toCheck === 1 ? 'detail is' : 'details are'} worth your eyes. Everything else looked clear.`
-                : 'Your dates and job titles are the ones worth a second look.'}
+              {loaded.origin === 'blank'
+                ? 'Fill in what you have. The page on the right is the document as it will arrive.'
+                : toCheck > 0
+                  ? `${toCheck} ${toCheck === 1 ? 'detail is' : 'details are'} worth your eyes. Everything else looked clear.`
+                  : 'Your dates and job titles are the ones worth a second look.'}
             </p>
           </div>
         </div>
@@ -2426,6 +2610,7 @@ function HunterReady() {
                   resume={loaded.resume}
                   provenance={loaded.provenance}
                   ocr={loaded.ocr}
+                  authoring={loaded.origin === 'blank'}
                   /*
                 The provenance comes back on structural edits, and taking it is not optional: adding or
                 removing a row renumbers every index-based path after it, so keeping the old list would
