@@ -1247,78 +1247,120 @@ function HunterReady() {
           <div aria-hidden className="aurora" />
           <StepBar />
           <div className="relative z-[1] flex flex-1 items-center justify-center px-4 py-12 sm:px-6">
-            <div
-              className="rise flex w-full max-w-md flex-col items-center gap-6 text-center"
-              role="status"
-              aria-live="polite"
-            >
-              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-signal-wash text-signal">
-                <Spinner className="h-7 w-7" />
-              </span>
+            <div className="rise flex w-full max-w-lg flex-col gap-6">
+              {/*
+                Left-aligned, not centred, and that is the whole redesign in one decision.
 
-              <div className="flex flex-col gap-3">
+                The old screen centred a headline, a big spinner and an indeterminate bar above a
+                left-aligned list of stages — four axes fighting, and the bar read as a progress meter
+                stuck at zero rather than as motion. DESIGN.md forbids "a percentage we were not given";
+                a thin line with a dot at its left end is that percentage drawn anyway. The stages ARE
+                the progress, so they get the weight and everything else lines up behind them.
+              */}
+              <div className="flex flex-col gap-2">
                 <h1 className="text-display text-balance text-ink">
                   Reading your CV
                   <span className="text-signal">…</span>
                 </h1>
+                {/*
+                  The shape of the wait, never a duration — DESIGN.md's rule, which the old copy broke.
+                  "A few seconds" was measured at fifty on the production box, and a promise that has
+                  already expired is how a working request starts looking broken.
+                */}
                 <p className="text-lead text-ink-soft">
-                  A few seconds — longer for a scan or a photo of a printed
-                  page.
+                  However long your document needs. A scan or a photo takes the
+                  longest, and nothing is lost while you wait.
                 </p>
               </div>
 
-              <div
-                aria-hidden
-                className="h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-band"
-              >
-                <div
-                  data-motion="essential"
-                  className="indeterminate h-full w-1/3 rounded-full bg-signal"
-                />
-              </div>
-
               {/*
-                The narrated wait. Each stage the server reports appears here as it starts — a tick when
-                it finishes, a spinner and a live page/attempt counter while it runs. The labels come
-                from the pipeline itself (src/lib/progress.ts), so this list cannot drift from what the
-                code actually does the way a hardcoded "step 2 of 4" would.
+                The work itself, as an object on the page (DESIGN.md's two-layer elevation): one row per
+                stage the server has actually reported, a tick when it finishes, a spinner and a live
+                counter on the one running. The labels come from the pipeline (src/lib/progress.ts), so
+                this list cannot drift from what the code does the way a hardcoded "step 2 of 4" would —
+                and it never claims a step that has not started.
               */}
-              {stages.length > 0 && (
-                <ol className="flex w-full max-w-xs flex-col gap-1.5 text-left">
-                  {stages.map((stage, index) => (
-                    <li
-                      key={index}
-                      className="flex items-center gap-2 text-[13px]"
-                    >
+              <ol
+                className="card flex flex-col divide-y divide-hairline"
+                role="status"
+                aria-live="polite"
+              >
+                {(stages.length > 0
+                  ? stages
+                  : [
+                      {
+                        label: 'Sending your file',
+                        done: false,
+                        at: Date.now(),
+                        detail: undefined,
+                      },
+                    ]
+                ).map((stage, index) => (
+                  <li
+                    key={index}
+                    className="flex items-start gap-3 px-4 py-3.5"
+                  >
+                    <span className="mt-px flex h-5 w-5 shrink-0 items-center justify-center">
                       {stage.done ? (
                         <svg
                           aria-hidden
                           viewBox="0 0 24 24"
                           fill="none"
                           stroke="currentColor"
-                          strokeWidth="2.4"
+                          strokeWidth="2.6"
                           strokeLinecap="round"
-                          className="h-3.5 w-3.5 shrink-0 text-affirm"
+                          className="h-4 w-4 text-affirm"
                         >
                           <path d="m5 12.5 4.5 4.5L19 7" />
                         </svg>
                       ) : (
-                        <Spinner className="h-3 w-3 shrink-0 text-signal" />
+                        <Spinner className="h-4 w-4 text-signal" />
                       )}
+                    </span>
+
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span
                         className={
-                          stage.done ? 'text-ink-faint' : 'text-ink-soft'
+                          stage.done
+                            ? 'text-[14px] text-ink-faint'
+                            : 'text-[14px] font-semibold text-ink'
                         }
                       >
                         {stage.label}
-                        {stage.detail === undefined ? '' : ` — ${stage.detail}`}
                       </span>
-                    </li>
-                  ))}
-                </ol>
-              )}
+                      {stage.detail !== undefined && (
+                        <span className="text-meta text-ink-soft">
+                          {stage.detail}
+                        </span>
+                      )}
+                    </span>
 
-              <p className="text-meta text-ink-soft">
+                    {/*
+                      Seconds on the running stage — measured, never predicted, and the difference
+                      matters: an elapsed count is a fact about what has happened, where an estimate is
+                      a promise about what has not. It answers the only question a long wait provokes
+                      ("is this stuck?") without pretending to know the end.
+
+                      `aria-hidden` because the row is inside a live region: a screen reader announcing
+                      a new number every second would bury the stage name it exists to convey.
+                    */}
+                    {!stage.done && (
+                      <span
+                        aria-hidden
+                        className="tally mt-0.5 shrink-0 text-meta text-ink-faint"
+                      >
+                        {Math.max(
+                          0,
+                          Math.round((Date.now() - stage.at) / 1000),
+                        )}
+                        s
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ol>
+
+              <p className="text-meta leading-relaxed text-ink-soft">
                 Your phone number and street address were removed before the
                 text was sent.
               </p>
