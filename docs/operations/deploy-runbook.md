@@ -5,9 +5,14 @@ and in Coolify so a deploy never leaves the app half-broken.
 
 The policy here is BuilderHunt's, adapted rather than copied: same branch model, same "Quality green
 on master deploys", same Coolify trigger. What is different is what a release can get _wrong_.
-BuilderHunt's risk is the database — migrations, roles, pgvector. HunterReady has no database at all,
-so there is no migration orchestrator and nothing to roll back. Its risk is the **image**: the PDF
-renderer is WASM and the fonts are bundled, and both can be absent from a build that exited 0.
+BuilderHunt's risk is the database — migrations, roles, pgvector. HunterReady has had one since v0.5,
+with its own orchestrator and the same roles problem, so that risk is now shared. What is still its
+own is the **image**: the PDF renderer is WASM and the fonts are bundled, and both can be absent from
+a build that exited 0.
+
+_(This paragraph used to say the app had no database and nothing to roll back. That stopped being true
+at v0.5 and the sentence outlived it by five releases — see "The database" below, and the
+post-deployment command in the Coolify table, which exists precisely because there is state.)_
 
 ---
 
@@ -36,7 +41,7 @@ Release live ✓
 **The single most important rule: a deploy is not verified by a status code.** `/api/health` returns
 
 ```json
-{ "status": "ok", "checks": { "wasm": true, "fonts": true, "families": 5 } }
+{ "status": "ok", "checks": { "wasm": true, "fonts": true, "families": 10 } }
 ```
 
 and the deploy workflow asserts `wasm` and `fonts` field by field. That is not defensive
@@ -181,21 +186,35 @@ homepage, which reads as health.
 
 ## The database (v0.5, ADR-019)
 
-|           |                                                                                                                                               |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Resource  | `hunterready-db`, Postgres 18, in the `hunterready` Coolify project                                                                           |
-| Exposure  | **internal only** (`is_public: false`). Migrations run _inside_ the Coolify network as the post-deployment command; nothing needs it exposed. |
-| Roles     | `hunterready_owner` (Coolify's), `hunterready_app`, `hunterready_readonly`                                                                    |
-| Retention | 90 days from the last sign-in, swept by `scripts/db/retention.mjs`                                                                            |
+|           |                                                                                                                                                                                                              |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Resource  | the `db` **service of the compose stack** — `postgres:18-alpine`, container `hunterready-db`, volume `hunterready_postgres_data`                                                                             |
+| Exposure  | **internal only**, reachable as `db:5432` on the stack's own network. Migrations run inside that network as Coolify's post-deployment command (`node scripts/deploy/orchestrate.mjs`); nothing is published. |
+| Roles     | `hunterready_owner` (the compose `POSTGRES_USER`), `hunterready_app`, `hunterready_readonly`                                                                                                                 |
+| Retention | 90 days from the last sign-in, swept by `scripts/db/retention.mjs`                                                                                                                                           |
+
+**It is not a standalone Coolify database resource, and adding one is the mistake to avoid.** The
+stack carries its own Postgres, so a separate resource is something nothing has a connection string
+for. One was created alongside the stack on 14 Aug 2026 and sat there running `postgres:16-alpine`
+with no client at all until it was deleted on the 15th. If the Coolify UI shows a `hunterready-db`
+outside the compose stack, that is the empty one, not this one.
 
 Env rows Coolify must carry, beyond the model provider:
 
-| Name                     | Notes                                                                               |
-| ------------------------ | ----------------------------------------------------------------------------------- |
-| `DATABASE_URL`           | the **app** role. Internal hostname is the database's Coolify uuid.                 |
-| `DATABASE_MIGRATION_URL` | the **owner** role. Only migrations and the retention sweep use it.                 |
-| `DATABASE_APP_PASSWORD`  | provisioned onto `hunterready_app` by the orchestrator on every deploy              |
-| `SESSION_SECRET`         | `openssl rand -hex 32`. Unset disables sessions rather than signing with a default. |
+| Name                    | Notes                                                                                                                                    |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `POSTGRES_PASSWORD`     | the **owner** role. The compose file builds `DATABASE_MIGRATION_URL` from it.                                                            |
+| `DATABASE_APP_PASSWORD` | the **app** role. The compose file builds `DATABASE_URL` from it; the orchestrator provisions it onto `hunterready_app` on every deploy. |
+| `BETTER_AUTH_SECRET`    | `openssl rand -hex 32`. Signs sessions.                                                                                                  |
+| `BETTER_AUTH_URL`       | the public origin. A wrong value breaks the auth callbacks and nothing else, which makes it slow to spot.                                |
+| `DATA_ENCRYPTION_KEY`   | see below. **Unset means plaintext**, and it was unset in production from the first deploy until 15 Aug 2026.                            |
+
+Neither `DATABASE_URL` nor `DATABASE_MIGRATION_URL` is a Coolify row: the compose file composes both
+from the two passwords above and the internal `db` hostname. Setting them by hand in Coolify creates a
+second source of truth that the compose file then overrides, silently.
+
+`SESSION_SECRET` was on this list and is gone. Nothing in `src/` or `scripts/` has read it since auth
+moved to Better Auth — `BETTER_AUTH_SECRET` is the one that signs sessions now.
 
 ### Verifying it locally before trusting it in production
 
@@ -264,6 +283,16 @@ Coolify UI does not come from a compose stack at all. Copying its answers here w
 
 `DATA_ENCRYPTION_KEY` — 64 hex characters, `openssl rand -hex 32`. Set it in Coolify's environment for
 the stack, exactly like the database passwords.
+
+**It was empty in production from the first deploy until 15 Aug 2026**, so everything stored before
+that date is plaintext and stays that way — `decryptJson` passes a non-envelope through untouched, and
+there is no re-encryption pass in `scripts/db/`. Write one before claiming the whole table is
+encrypted. The live key is now set for both the production and preview scopes, and its copy lives in
+the AI-OS master `.env` as `HUNTERREADY_DATA_ENCRYPTION_KEY`. That file is one laptop; point 1 below is
+still owed.
+
+Confirm the state from outside rather than from the log, which only speaks on first use:
+`curl -s https://hunterready.eduardoinerarte.dk/api/processing` reports `encryptsAtRest`.
 
 ```bash
 openssl rand -hex 32
