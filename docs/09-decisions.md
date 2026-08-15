@@ -756,6 +756,149 @@ line.
 
 ---
 
+## ADR-029 — Translation sends `personalDetails`, and the page says so
+
+**2026-08-15 · Accepted · Edd's decision, and it is closed**
+
+The whole-document translation sends `basics.personalDetails` field by field. On a European CV that is
+exactly where **date of birth, nationality and marital status** live — more sensitive than the phone
+number `redactForLlm` goes out of its way to strip on the first read.
+
+Two options were put to Edd: withhold those fields and tell the person to translate them by hand, or
+send them and say so. **He chose being straight with the user**, and this ADR exists so it is not
+re-opened by the next person who notices.
+
+### Why it holds up
+
+The person asked for **their whole document** in another language. Those lines are printed on it. A
+translation that silently skipped them would hand back a document that is wrong in a way the person
+cannot see — which is the failure this product exists to not commit — and one that says "we left
+these out for your safety" makes a decision about somebody's own data on their behalf.
+
+What makes it defensible is not the sending; it is the saying. `/privacy` enumerates what leaves and
+for which purpose, so the transfer is a thing the person can decline (ADR-023: declining leaves them
+on our own hardware, where the document never leaves the machine).
+
+### What would re-open it
+
+A jurisdiction where transferring special-category data needs its own explicit consent, separate from
+the general processing consent. That is a legal question, not a design one; the fields are already
+isolated in one array, so the change would be one filter and one sentence.
+
+---
+
+## ADR-028 — A claim has to belong to the job it is claimed for
+
+**2026-08-15 · Accepted · measured**
+
+The anti-fabrication guard grounds a rewrite on the **whole résumé**, and ADR-017 and docs/06 are
+right about why: if somebody's skills list says `Salesforce` and a bullet about their pipeline
+mentions it, that is their own word resurfacing, not an invention. Narrowing the grounding to the
+single bullet would reject the useful half of the feature.
+
+That decision has a blind spot with a precise shape, and this ADR closes it.
+
+### What was measured
+
+`src/optimize/__tests__/rewrite-quality.test.ts` — the local model, one call per bullet, across the
+three fixtures (26 bullets). Four runs before this change:
+
+|       | drift observed                                                           |
+| ----- | ------------------------------------------------------------------------ |
+| run 1 | `Plejecenter`, `Sølund` — a previous employer's name, on a Herlev bullet |
+| run 2 | none                                                                     |
+| run 3 | `40`, `ten` — another job's figures, on a Northgate bullet               |
+| run 4 | none                                                                     |
+
+Roughly **one run in two**, one suggestion each time. Every token was in the document, so the guard
+passed all of them. Nothing was invented and each sentence was still false — a claim moved to the
+wrong employer is the failure a reader would call lying, and it is the failure this product exists to
+not commit.
+
+### The rule
+
+A **number** must be grounded in the bullet's own job. A **name** must not be another job's
+identifying material — its employer, its job title, its tools.
+
+Everything belonging to the _person_ stays grounded exactly as before: summary, skills, education,
+certifications, and anything they typed into an answer. Only the other employers' facts are withdrawn.
+
+### Why the check and the metric are the same function
+
+`findCrossJobDrift` is called by the guard **and** by the measurement suite. A metric that
+paraphrases the rule it measures drifts away from it silently; sharing the code means the suite's
+`drifted: 0` is a statement about the guard rather than about a second implementation of it.
+
+### The false positive that shaped the definition
+
+The first version counted every capitalised word the narrowed grounding did not cover, and flagged
+**"Led"** — an ordinary verb, grounded in the full résumé only because another bullet opens with it.
+A metric that counts vocabulary reports drift forever while pointing at nothing. Hence "identifying
+material" rather than "any word from another job", with the case kept as a test.
+
+### Cost
+
+A rejection costs one retry and, at worst, the candidate's own wording — the same trade the guard
+already makes, and the one docs/06 states plainly: a false positive costs a better sentence, a false
+negative costs somebody their credibility in an interview.
+
+---
+
+## ADR-027 — vLLM is the wrong lever on a 4-vCPU ARM box; the model is not where the time goes
+
+**2026-08-15 · Accepted · measured**
+
+Edd asked whether swapping Ollama for vLLM would buy the advertised 2–5×. It would not, and
+measuring produced a more useful answer than the question expected.
+
+### The box
+
+Production is a Hetzner `cax21`: **ARM64 (Ampere Altra), 4 vCPU, 8 GB RAM**, shared with a dozen
+other apps. Measured there today: **50.2 s** for one local extraction of the nurse fixture.
+
+### Why vLLM cannot help here
+
+- **Architecture.** vLLM's CPU speed comes from AVX512/AMX on x86. On ARM it asks only for NEON and
+  is the least-optimised path. Apple Silicon GPU support exists solely in the separate `vLLM-Metal`
+  project, which is irrelevant to a Linux VPS.
+- **Memory.** The CPU backend takes FP32/FP16/BF16 plus AWQ/GPTQ — **no GGUF**. `qwen2.5-3b` in
+  bf16 is ~6 GB, plus a 4 GB default KV cache, against 8 GB total shared with Postgres and the app.
+  Ollama's GGUF Q4 is 1.9 GB. The arithmetic does not close.
+- **Its actual advantage does not apply.** Continuous batching wins when compute sits idle. Measured
+  on ARM64 at 4 threads, running the real 14-bullet Wording pass: sequential 9.1 s → concurrent
+  12.5 s on 3b (**0.7×**), 5.6 s → 4.5 s on 1.5b (1.2×). Four cores are already saturated by one
+  request.
+
+### What was measured instead (ARM64, 4 threads, same architecture as production)
+
+| Lever                                           | Effect                                                                                         |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `qwen2.5:3b` → `1.5b`                           | **1.7×** (60 → 102 tok/s)                                                                      |
+| `3b` → `0.5b`                                   | 3.1× — quality too low to use                                                                  |
+| 14 separate calls → one batched call            | 1.5× on 3b, 1.0× on 1.5b                                                                       |
+| Concurrency                                     | 1.0×, and 0.7× on 3b                                                                           |
+| `OLLAMA_FLASH_ATTENTION` + `KV_CACHE_TYPE=q8_0` | no measurable effect (prompts are short)                                                       |
+| `qwen3:1.7b`                                    | 1.5× faster, but emits reasoning tokens through this API even with `/no_think` — not a drop-in |
+
+### The finding that matters more than any of them
+
+`accuracy.test.ts` scores the **rule engine alone at 100% on all six fixtures**, including both
+two-column layouts. The local model's job on the extraction path is to file corrections onto that
+baseline — and it costs 50 s of somebody's first impression to do it. The lever is not which engine
+runs the model; it is **whether that model call belongs in the blocking path at all**.
+
+⚠️ Before acting on that: the fixtures are synthetic and grew up alongside the rule engine
+(ADR-016), so 100% may flatter it. Verify against a wider corpus of real documents before moving
+the model off the critical path.
+
+### Decision
+
+Keep Ollama. Do not adopt vLLM on this hardware. If the local path needs to be faster, in order:
+right-size the model to `1.5b`, take the model call out of the blocking path where rules already
+answer, batch multi-item work into single calls, and only then buy cores (`cax31` doubles them).
+A benchmark that uses `--cpus` to simulate a smaller box is invalid — Docker's CFS quota throttled
+llama.cpp 40× (46 → 1.1 tok/s) and made every model look identical. Limit threads instead.
+
 ## ADR-026 — The sidebar layout exists, honestly rated, with the DOM fighting for the parser
 
 **2026-08-15 · Accepted · Edd's decision**

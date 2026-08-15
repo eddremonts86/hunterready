@@ -339,9 +339,26 @@ export interface SharedDocument {
  * The visit is counted, not logged. A per-visit log would be a record of who looked at somebody's CV and
  * when — data this product has no use for and no business holding.
  */
+/**
+ * The token is a `uuid` primary key, so anything that is not shaped like one never reaches the table.
+ *
+ * Without this check Postgres raises `22P02 invalid input syntax for type uuid`, the query throws, and
+ * the route answers **500** instead of the 404 it was written to give — so a truncated link and an
+ * unknown-but-well-formed one get *different* answers, in the one endpoint whose stated rule is one
+ * answer for every failure. The driver also puts the offending parameter in the error it logs, which is
+ * the token this module goes out of its way never to log.
+ *
+ * Found in the browser: `/s/no-existe` answered 200 with the right page (the shell is client-rendered)
+ * over an API call that had 500'd underneath it.
+ */
+const SHARE_TOKEN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export async function readShare(
   token: string,
 ): Promise<SharedDocument | undefined> {
+  if (!SHARE_TOKEN.test(token)) return undefined
+
   const [row] = await db.select().from(shares).where(eq(shares.id, token))
   if (row === undefined) return undefined
   if (row.revokedAt !== null) return undefined
@@ -382,6 +399,9 @@ export async function revokeShare(input: {
   userId: string
   token: string
 }): Promise<boolean> {
+  // Same uuid column, same 500 if a malformed token reaches it. "Nothing to revoke" is the honest answer.
+  if (!SHARE_TOKEN.test(input.token)) return false
+
   const changed = await db
     .update(shares)
     .set({ revokedAt: new Date() })

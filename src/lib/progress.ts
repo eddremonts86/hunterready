@@ -78,6 +78,23 @@ export function progressStep(id: string, label: string, detail?: string): void {
   sweep()
   const state = store.get(id) ?? { steps: [], updatedAt: 0 }
   const last = state.steps[state.steps.length - 1]
+
+  /**
+   * The same stage twice in a row is a retry, not a new step.
+   *
+   * The extraction path calls this once per attempt, so a repaired structure drew the identical
+   * sentence twice — one ticked, one spinning — which reads as the screen having lost count.
+   * Collapsing them into one row that says which attempt it is on tells the truth about what is
+   * happening (it is having another go) without pretending the list grew.
+   */
+  if (last !== undefined && last.label === label && !last.done) {
+    const attempt = Number(/attempt (\d+)/.exec(last.detail ?? '')?.[1] ?? '1')
+    last.detail = detail ?? `attempt ${attempt + 1}`
+    state.updatedAt = Date.now()
+    store.set(id, state)
+    return
+  }
+
   if (last !== undefined) last.done = true
   state.steps.push({
     label,

@@ -292,6 +292,22 @@ describe.skipIf(URL_ENV === '')('persistence, against a real Postgres', () => {
       ).toBeUndefined()
     })
 
+    it('answers a malformed token the same way, instead of throwing', async () => {
+      /*
+        The token is a `uuid` primary key, so `no-existe` used to reach Postgres, raise 22P02 and come
+        back to the route as a 500 — a different answer for a truncated link than for an unknown one,
+        in the endpoint whose whole rule is that there is only one answer. Found at `/s/no-existe`.
+      */
+      for (const bad of ['no-existe', '', '   ', "'; drop table shares; --"]) {
+        expect(await repo.readShare(bad)).toBeUndefined()
+      }
+    })
+
+    it('revokes nothing for a malformed token, instead of throwing', async () => {
+      const userId = await seedUser('share-bad-revoke-')
+      expect(await repo.revokeShare({ userId, token: 'no-existe' })).toBe(false)
+    })
+
     it('counts views without recording who', async () => {
       const userId = await seedUser('share-views-')
       const resumeId = await repo.saveResume({ userId, resume: RESUME })

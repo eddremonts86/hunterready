@@ -9,7 +9,7 @@
  * the questions to come from provenance rather than from a script (ADR-011). This is the form
  * underneath it: sections collapsed by default, uncertain ones open.
  */
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { DateField } from '@/components/date-field'
 import { PhotoField } from '@/components/photo-field'
 import {
@@ -95,11 +95,11 @@ function Field({
         <Flag entry={provenance} />
       </span>
       {multiline ? (
-        <textarea
+        <AutoTextarea
           value={value}
-          rows={3}
-          onChange={(event) => onChange(event.target.value)}
-          className={`${shared} resize-y leading-relaxed`}
+          minRows={3}
+          onChange={onChange}
+          className={shared}
         />
       ) : (
         <input
@@ -144,6 +144,83 @@ function RemoveRow({ label, onClick }: { label: string; onClick: () => void }) {
       </svg>
       Remove
     </button>
+  )
+}
+
+/**
+ * One editable line, and the control that removes it, in a container of their own.
+ *
+ * They used to sit side by side — a textarea with "Remove" pinned to its right. That gave the least
+ * width to the longest thing on the page (a sentence somebody is writing about their own work, which
+ * wraps after four or five words in a squeezed box), and it put the control that deletes that
+ * sentence directly beside the cursor writing it. Edd's words: the button goes under the text, the
+ * text takes the whole column, and the pair sits in a bubble that separates it from the next line.
+ *
+ * Tinted and flat, never a `.card`. DESIGN.md's elevation rule says a shadow means "this surface is
+ * above that one", and these are *inside* an open section — a nested card would claim a layer it does
+ * not have. Recessed says the true thing: a well holding one line of the document.
+ */
+function LineBubble({
+  children,
+  removeLabel,
+  onRemove,
+}: {
+  children: React.ReactNode
+  removeLabel: string
+  onRemove: () => void
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-choice border border-hairline bg-band p-2.5">
+      {children}
+      <RemoveRow label={removeLabel} onClick={onRemove} />
+    </div>
+  )
+}
+
+/**
+ * A textarea that is always exactly as tall as what is written in it.
+ *
+ * A fixed `rows={2}` hid the end of the sentence the moment the column got narrow — on a phone, the
+ * third line of a bullet sat behind a scrollbar inside a box two lines high, in the panel whose entire
+ * job is *checking what we read*. You cannot check a line you cannot see. Two rows is the floor, not
+ * the ceiling: it grows to the text and shrinks back when the text does.
+ *
+ * `useLayoutEffect` rather than `useEffect` so the height is set before the browser paints — measuring
+ * after paint makes the box visibly jump on every keystroke. The `height: auto` first is not
+ * redundant: `scrollHeight` on an already-stretched element reports the old height forever, so
+ * deleting text would never shrink it back.
+ */
+function AutoTextarea({
+  value,
+  onChange,
+  className,
+  ariaLabel,
+  minRows = 2,
+}: {
+  value: string
+  onChange: (next: string) => void
+  className: string
+  ariaLabel?: string
+  minRows?: number
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+
+  useLayoutEffect(() => {
+    const element = ref.current
+    if (element === null) return
+    element.style.height = 'auto'
+    element.style.height = `${element.scrollHeight}px`
+  }, [value])
+
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      rows={minRows}
+      {...(ariaLabel === undefined ? {} : { 'aria-label': ariaLabel })}
+      onChange={(event) => onChange(event.target.value)}
+      className={`${className} resize-none overflow-hidden leading-relaxed`}
+    />
   )
 }
 
@@ -244,6 +321,7 @@ export function ReviewForm({
   provenance,
   onChange,
   ocr = false,
+  authoring = false,
   photoShown = false,
   onUseEuropeanLayout,
 }: {
@@ -271,6 +349,17 @@ export function ReviewForm({
   ) => void
   /** The text was read off an image, which changes the honest answer to "how much of this?" */
   ocr?: boolean
+  /**
+   * Nobody read this document — it is being written here.
+   *
+   * Everything in this form's chrome is about *our reading of a file*: a count of fields we were
+   * unsure of, a banner asking the person to check what we found, "we could not tell which fields to
+   * double-check". Point that at a CV typed from nothing and every line of it refers to a file that
+   * does not exist. So the counter is replaced by the one number that does mean something here — how
+   * much of the document has anything in it — and the sections start open, because there is nothing
+   * to collapse and the empty states are the instructions.
+   */
+  authoring?: boolean
   /**
    * Whether the chosen template draws a photo — the European one does, the international one does not.
    *
@@ -484,6 +573,20 @@ export function ReviewForm({
   const flaggedCount = flaggedPaths.length
   const unsure = ocr || total === 0
 
+  /**
+   * How much of the document exists yet — the only count that means anything while authoring.
+   *
+   * Five sections, ticked as each gets its first entry. Not a percentage: a CV with no education is
+   * finished for plenty of people, and a bar at 80% would invent a deficiency out of a life.
+   */
+  const written = [
+    resume.basics.headline !== undefined && resume.basics.headline !== '',
+    resume.basics.summary !== undefined && resume.basics.summary !== '',
+    resume.work.length > 0,
+    resume.education.length > 0,
+    resume.skills.length > 0,
+  ].filter(Boolean).length
+
   return (
     <div className="flex flex-col gap-3">
       {/**
@@ -500,29 +603,37 @@ export function ReviewForm({
       <div
         className={[
           'flex items-center gap-3.5 rounded-card border p-4',
-          unsure
-            ? 'border-caution/25 bg-caution-wash'
-            : 'border-signal-edge bg-signal-wash',
+          authoring
+            ? 'border-signal-edge bg-signal-wash'
+            : unsure
+              ? 'border-caution/25 bg-caution-wash'
+              : 'border-signal-edge bg-signal-wash',
         ].join(' ')}
       >
         <span
           className={[
             'tally text-[34px] font-extrabold leading-none tracking-[-0.03em]',
-            unsure ? 'text-caution' : 'text-signal',
+            authoring ? 'text-signal' : unsure ? 'text-caution' : 'text-signal',
           ].join(' ')}
         >
-          {unsure ? '?' : flaggedCount}
+          {authoring ? written : unsure ? '?' : flaggedCount}
         </span>
         <span className="flex flex-col">
           <span className="text-[14px] font-semibold text-ink">
-            {unsure ? 'Check everything' : 'To check'}
+            {authoring
+              ? 'Sections filled in'
+              : unsure
+                ? 'Check everything'
+                : 'To check'}
           </span>
           <span className="text-[13px] leading-snug text-ink-soft">
-            {ocr
-              ? 'read from a picture'
-              : total === 0
-                ? 'we could not tell which fields'
-                : `of ${total} fields we read`}
+            {authoring
+              ? 'of 5 — none of them is compulsory'
+              : ocr
+                ? 'read from a picture'
+                : total === 0
+                  ? 'we could not tell which fields'
+                  : `of ${total} fields we read`}
           </span>
         </span>
       </div>
@@ -540,14 +651,22 @@ export function ReviewForm({
        * did not report which fields it was unsure about, so we know *less* than usual — and
        * saying "0 to check" there would be the opposite of the truth.
        */}
-      {!ocr && total === 0 && (
+      {authoring && (
+        <p className="text-[13px] leading-relaxed text-ink-soft">
+          Nothing here is required except your name. Add what you have, in any
+          order — the document on the right updates as you type, and you can
+          download it at any point.
+        </p>
+      )}
+
+      {!authoring && !ocr && total === 0 && (
         <p className="text-[13px] leading-relaxed text-ink-soft">
           This time we could not tell which fields to double-check, so please
           read through all of them — especially the dates and job titles.
         </p>
       )}
 
-      {!ocr && flaggedCount === 0 && total > 0 && (
+      {!authoring && !ocr && flaggedCount === 0 && total > 0 && (
         <p className="text-[13px] leading-relaxed text-ink-soft">
           Nothing looked uncertain. Still worth a glance at your dates and job
           titles — those are the ones that cost you an interview if they are
@@ -649,12 +768,13 @@ export function ReviewForm({
         title="Experience"
         count={resume.work.length}
         flagged={sectionFlagged('work')}
-        defaultOpen={sectionFlagged('work')}
+        defaultOpen={authoring || sectionFlagged('work')}
       >
         {resume.work.length === 0 && (
           <p className="text-[13px] leading-relaxed text-ink-soft">
-            We did not find any jobs. That is usually a sign the file was hard
-            to read — check the original, or add them here.
+            {authoring
+              ? 'One entry per job — the most recent first. A job you left, a placement, an apprenticeship or self-employment all count.'
+              : 'We did not find any jobs. That is usually a sign the file was hard to read — check the original, or add them here.'}
           </p>
         )}
         {resume.work.map((item, i) => (
@@ -718,28 +838,25 @@ export function ReviewForm({
                 </p>
               )}
               {item.highlights.map((text, b) => (
-                <div key={b} className="flex items-start gap-2">
-                  <textarea
+                <LineBubble
+                  key={b}
+                  removeLabel={`Remove bullet ${b + 1}`}
+                  onRemove={() => removeBullet(i, b)}
+                >
+                  <AutoTextarea
                     value={text}
-                    rows={2}
-                    aria-label={`Bullet ${b + 1} for ${item.role || 'this job'}`}
-                    onChange={(event) =>
+                    ariaLabel={`Bullet ${b + 1} for ${item.role || 'this job'}`}
+                    onChange={(next) =>
                       setHighlights(
                         i,
                         item.highlights.map((line, at) =>
-                          at === b ? event.target.value : line,
+                          at === b ? next : line,
                         ),
                       )
                     }
-                    className={`${fieldClass(
-                      `work.${i}.highlights.${b}`,
-                    )} min-w-0 flex-1 resize-y leading-relaxed`}
+                    className={fieldClass(`work.${i}.highlights.${b}`)}
                   />
-                  <RemoveRow
-                    label={`Remove bullet ${b + 1}`}
-                    onClick={() => removeBullet(i, b)}
-                  />
-                </div>
+                </LineBubble>
               ))}
               <AddRow label="Add a line" onClick={() => addBullet(i)} />
             </div>
@@ -775,7 +892,7 @@ export function ReviewForm({
         title="Education"
         count={resume.education.length}
         flagged={sectionFlagged('education')}
-        defaultOpen={false}
+        defaultOpen={authoring}
       >
         {/*
           These were four read-only paragraphs. Somebody whose institution came out of a two-column PDF
@@ -784,8 +901,9 @@ export function ReviewForm({
         */}
         {resume.education.length === 0 && (
           <p className="text-[13px] leading-relaxed text-ink-soft">
-            We did not find any. Add what you have — a course or a certificate
-            counts, and so does an apprenticeship.
+            {authoring
+              ? 'Whatever you have. A course or a certificate counts, and so does an apprenticeship — leave it empty if there is nothing to put here.'
+              : 'We did not find any. Add what you have — a course or a certificate counts, and so does an apprenticeship.'}
           </p>
         )}
         {resume.education.map((item, i) => (
@@ -868,7 +986,7 @@ export function ReviewForm({
         title="Skills"
         count={resume.skills.reduce((n, g) => n + g.items.length, 0)}
         flagged={sectionFlagged('skills')}
-        defaultOpen={false}
+        defaultOpen={authoring}
       >
         {/*
           Comma-separated, one field per group, rather than a chip editor.
@@ -883,8 +1001,9 @@ export function ReviewForm({
         */}
         {resume.skills.length === 0 && (
           <p className="text-[13px] leading-relaxed text-ink-soft">
-            We did not find any. Group them however your trade does — the
-            headings are yours, not a fixed list.
+            {authoring
+              ? 'Group them however your trade does — the headings are yours, not a fixed list. "Clinical", "Machines I have run", "Languages".'
+              : 'We did not find any. Group them however your trade does — the headings are yours, not a fixed list.'}
           </p>
         )}
         {resume.skills.map((group, i) => (
@@ -903,18 +1022,17 @@ export function ReviewForm({
                 What goes under it
                 <Flag entry={index.get(`skills.${i}.items`)} />
               </span>
-              <textarea
+              <AutoTextarea
                 value={group.items.join(', ')}
-                rows={2}
-                onChange={(event) =>
+                onChange={(next) =>
                   setSkillGroup(i, {
-                    items: event.target.value
+                    items: next
                       .split(',')
                       .map((item) => item.trim())
                       .filter((item) => item !== ''),
                   })
                 }
-                className={`${fieldClass(`skills.${i}.items`)} resize-y leading-relaxed`}
+                className={fieldClass(`skills.${i}.items`)}
               />
               <span className="text-meta text-ink-soft">
                 Separated by commas.
@@ -961,29 +1079,29 @@ export function ReviewForm({
             onChange={(title) => setCustomSection(i, { title })}
             provenance={index.get(`custom.${i}.title`)}
           />
+          {/*
+            The remove control here was a bare "✕" character where every other one in the form is the
+            same drawn bin — two icon families for one action, and the odd one out was the one sitting
+            closest to the text. Same bubble, same button, same place: learned once, true everywhere.
+          */}
           {section.items.map((item, j) => (
-            <label key={j} className="flex flex-col gap-1.5">
-              <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
-                Line {j + 1}
-                <Flag entry={index.get(`custom.${i}.items.${j}`)} />
-              </span>
-              <div className="flex items-start gap-2">
-                <textarea
+            <LineBubble
+              key={j}
+              removeLabel={`Remove line ${j + 1} of ${section.title || 'this section'}`}
+              onRemove={() => removeCustomItem(i, j)}
+            >
+              <label className="flex flex-col gap-1.5">
+                <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
+                  Line {j + 1}
+                  <Flag entry={index.get(`custom.${i}.items.${j}`)} />
+                </span>
+                <AutoTextarea
                   value={item}
-                  rows={Math.min(4, Math.max(1, Math.ceil(item.length / 70)))}
-                  onChange={(event) => setCustomItem(i, j, event.target.value)}
-                  className={`${fieldClass(`custom.${i}.items.${j}`)} flex-1 resize-y leading-relaxed`}
+                  onChange={(next) => setCustomItem(i, j, next)}
+                  className={fieldClass(`custom.${i}.items.${j}`)}
                 />
-                <button
-                  type="button"
-                  aria-label={`Remove line ${j + 1} of ${section.title || 'this section'}`}
-                  onClick={() => removeCustomItem(i, j)}
-                  className="mt-1 rounded-field px-2 py-1 text-[13px] text-ink-soft transition-colors hover:bg-band hover:text-ink"
-                >
-                  ✕
-                </button>
-              </div>
-            </label>
+              </label>
+            </LineBubble>
           ))}
           <AddRow label="Add a line" onClick={() => addCustomItem(i)} />
           <RemoveRow

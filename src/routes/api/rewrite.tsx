@@ -148,6 +148,16 @@ export const Route = createFileRoute('/api/rewrite')({
           promptVersion: result.promptVersion,
           bullets: result.rewrites.length,
           ...result.tally,
+          /*
+            Why the silent ones were silent. `unavailable` alone was undiagnosable: a dropped
+            connection, a model answering in prose instead of calling the tool, and a payload the
+            schema refuses all looked identical, so a measured "an eighth of bullets say nothing"
+            could not be turned into a fix. Counts of fixed labels — nothing from the CV.
+          */
+          silenceCallFailed: result.silence['call-failed'],
+          silenceNoToolCall: result.silence['no-tool-call'],
+          silenceMalformed: result.silence.malformed,
+          silenceNoProvider: result.silence['no-provider'],
           // Whether the voice rules are holding. A rising share is the signal to spend a retry on
           // bullets too, and without the number that decision would be a guess.
           voiceTells: result.voice.tells,

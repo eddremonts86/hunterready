@@ -256,7 +256,7 @@ export function ConsentGate({
       <div className="flex flex-col items-center gap-2 text-center">
         <p className="text-meta text-ink-soft">
           Your phone number and street address are removed before either model
-          sees the text. You can change your mind on the next upload.
+          sees the text. You can change this whenever you like, under Account.
         </p>
         <a
           href="/privacy"
@@ -265,6 +265,83 @@ export function ConsentGate({
           What we do with your data
         </a>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Who reads your CV — the standing control, changeable at any moment.
+ *
+ * ## The promise this keeps
+ *
+ * The gate used to say "you can change your mind on the next upload" and then never ask again: the
+ * answer is persisted, `needsConsent` requires an *absent* answer, and `reset` was exported and
+ * called from nowhere. So the one decision this product asks a person to make about their own data
+ * was, in practice, permanent and invisible — in the product whose whole proposition is being
+ * straight about exactly this. Edd's instruction was plain: "debemos poder cambiar entre minimax y
+ * local siempre que queramos."
+ *
+ * ## Why the unavailable option is shown rather than hidden
+ *
+ * Without an entitled account the server sends nothing outward whatever the client asks (ADR-023 —
+ * `mayUseThirdParty` is an `&&` of plan and consent). Offering the choice anyway would be a button
+ * that lies: a visitor could pick the third-party model, watch the local one run, and never be told.
+ * So the option is drawn, plainly disabled, with the reason underneath. Hiding it would answer
+ * "what am I missing?" with silence; a false choice would answer it with a fiction.
+ *
+ * The displayed value is the **effective** one, not the stored one — an old `granted` on an account
+ * that no longer has the plan reads as local here, because local is what will happen.
+ */
+export function ProcessingChoice({
+  provider,
+  choice,
+  onDecide,
+  Control,
+}: {
+  /** The third-party provider's name, or null/undefined when this visitor cannot reach it. */
+  provider?: string | null
+  choice?: ConsentChoice
+  onDecide: (choice: ConsentChoice) => void
+  /** The app's `Segmented`, injected so this component does not reach into the route. */
+  Control: (props: {
+    label: string
+    options: ReadonlyArray<{
+      id: string
+      label: string
+      hint?: string
+      disabled?: boolean
+    }>
+    value: string
+    onChange: (id: string) => void
+  }) => React.ReactNode
+}) {
+  const entitled = typeof provider === 'string' && provider !== ''
+  const effective = entitled && choice === 'granted' ? 'provider' : 'local'
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Control
+        label="Who reads your CV"
+        value={effective}
+        onChange={(id) => onDecide(id === 'provider' ? 'granted' : 'declined')}
+        options={[
+          {
+            id: 'local',
+            label: 'Our own server',
+            hint: entitled
+              ? 'Smaller and slower, and your CV never leaves this machine.'
+              : undefined,
+          },
+          {
+            id: 'provider',
+            label: entitled ? provider : 'A larger model',
+            disabled: !entitled,
+            hint: entitled
+              ? `The larger model. Its text goes to ${provider} and nowhere else; we keep no copy.`
+              : 'The larger model needs an account on the paid plan. Until then your CV is read here and never leaves this machine — which is the more private half of the deal, not the lesser one.',
+          },
+        ]}
+      />
     </div>
   )
 }

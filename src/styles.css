@@ -154,6 +154,16 @@
   --text-display--letter-spacing: -0.024em;
   --text-display--font-weight: 800;
 
+  /* The level between Display and Title, and the gap was doing real damage.
+     Every section heading on the landing page was Display, so a page with seven sections shouted
+     seven times at the same volume and none of them led. Supporting sections take this; the two the
+     page is actually built on keep Display. Fluid for the same reason Display is: it sits under a
+     hero that grows, and a fixed size drifts away from it. */
+  --text-section: clamp(1.375rem, 2.2vw, 1.75rem);
+  --text-section--line-height: 1.2;
+  --text-section--letter-spacing: -0.02em;
+  --text-section--font-weight: 800;
+
   --text-title: 1.1875rem;
   --text-title--line-height: 1.3;
   --text-title--letter-spacing: -0.014em;
@@ -208,6 +218,67 @@ body {
     box-shadow:
       0 1px 2px rgb(16 26 51 / 4%),
       0 10px 28px -14px rgb(16 26 51 / 12%);
+  }
+
+  /**
+   * The chapter label above a section heading.
+   *
+   * Small, tracked wide, in the accent, with a 3px rule in front of it. It does two jobs at once:
+   * it tells the reader where they are in the page's argument, and it gives every section a
+   * three-step ladder — label, heading, body — so hierarchy comes from the sequence rather than from
+   * making the heading bigger. That is the difference between a page with seven sections and a page
+   * that shouts seven times.
+   */
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-signal);
+  }
+
+  .eyebrow::before {
+    content: '';
+    width: 3px;
+    height: 0.875rem;
+    background: currentColor;
+    flex-shrink: 0;
+  }
+
+  /**
+   * The one dark band on the page, and it may only ever be one.
+   *
+   * The page had exactly two grounds — white and Band — alternating mechanically, which is a rhythm
+   * with no accent in it: seven sections of equal weight, so the reader has no idea which one the
+   * product actually turns on. Ink as a ground is the largest tonal event available without inventing
+   * a hue (DESIGN.md's One Accent permits luminance, not a new colour), so it is spent on the single
+   * section that carries the argument — the one naming what a person cannot check for themselves.
+   *
+   * Two of them would be stripes and neither would mean anything. If a second section ever wants
+   * this, the question to answer first is which one gives it up.
+   *
+   * Ink is #101A33 and white on it measures 17.3:1; the softened text below is white at 72%, which
+   * lands at 11.5:1 — both comfortably past AA, which is the only reason a dark band is allowed here
+   * at all.
+   */
+  .band-ink {
+    background: var(--color-ink);
+    color: #ffffff;
+  }
+
+  .band-ink .on-ink-soft {
+    color: rgb(255 255 255 / 72%);
+  }
+
+  .band-ink .on-ink-faint {
+    color: rgb(255 255 255 / 45%);
+  }
+
+  .band-ink .rule-ink {
+    border-color: rgb(255 255 255 / 14%);
   }
 
   .card {
@@ -410,6 +481,114 @@ body {
   }
 
   /**
+   * A tick that draws itself as its row arrives.
+   *
+   * The comparison rows say "here is the answer to that". A check that is simply *there* states it;
+   * one that completes as the row appears performs it, which is the only reason this exists — the
+   * stroke lands at the moment the sentence beside it becomes readable. 320ms, once, never a loop.
+   *
+   * `pathLength="1"` normalises the geometry so the dash maths is the same for any path we draw
+   * through this class, rather than depending on the length of one particular tick.
+   */
+  .draw-in path {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    transition: stroke-dashoffset 320ms cubic-bezier(0.16, 1, 0.3, 1) 140ms;
+  }
+
+  .reveal[data-in='true'] .draw-in path {
+    stroke-dashoffset: 0;
+  }
+
+  /**
+   * A row in a ruled list that answers the cursor without becoming a button.
+   *
+   * 3px of travel and nothing else — no background, no border, no shadow. These lists have no boxes
+   * by design (a card claims an elevation these rows do not have), so the only honest hover is the
+   * row acknowledging the pointer and moving on.
+   */
+  .row-nudge {
+    transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .row-nudge:hover {
+    transform: translateX(3px);
+  }
+
+  .row-nudge:hover .row-marker {
+    color: var(--color-signal);
+  }
+
+  .row-marker {
+    transition: color 260ms ease;
+  }
+
+  /**
+   * The eyebrow's rule grows in with its section.
+   *
+   * `scaleY` from the bottom, not a height change: DESIGN.md's performance rule is transform and
+   * opacity only, and a 3px bar animating `height` is a layout pass per frame for two pixels of
+   * movement.
+   */
+  .eyebrow::before {
+    transform: scaleY(0.2);
+    transform-origin: bottom;
+    transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1) 80ms;
+  }
+
+  .reveal[data-in='true'] .eyebrow::before,
+  .rise .eyebrow::before {
+    transform: scaleY(1);
+  }
+
+  /**
+   * The primary button answers the cursor before it is pressed.
+   *
+   * Lift on hover, press on active — the two halves of one physical story, and the press already
+   * existed. Kept to 1px each way: a call-to-action that jumps is a call-to-action that looks
+   * unreliable.
+   */
+  .btn-primary {
+    transition:
+      background-color 140ms ease,
+      transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 200ms ease;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px -12px rgb(27 59 216 / 55%);
+  }
+
+  /**
+   * The FAQ answer opens instead of appearing.
+   *
+   * `::details-content` with `interpolate-size` is the only way to animate a `<details>` to its own
+   * height without measuring it in JavaScript. Where it is unsupported the answer simply appears,
+   * which is exactly what it did before — no fallback code, no layout shift, no library.
+   */
+  @supports (interpolate-size: allow-keywords) {
+    :root {
+      interpolate-size: allow-keywords;
+    }
+
+    details::details-content {
+      block-size: 0;
+      overflow: hidden;
+      opacity: 0;
+      transition:
+        block-size 300ms cubic-bezier(0.16, 1, 0.3, 1),
+        content-visibility 300ms allow-discrete,
+        opacity 240ms ease;
+    }
+
+    details[open]::details-content {
+      block-size: auto;
+      opacity: 1;
+    }
+  }
+
+  /**
    * The atmosphere behind the hero: two large, heavily blurred washes of the accent that drift very
    * slowly. The one piece of pure decoration in the system.
    *
@@ -451,6 +630,52 @@ body {
     left: -8rem;
     background: rgb(27 59 216 / 6%);
     animation: drift 26s ease-in-out infinite alternate-reverse;
+  }
+
+  /**
+   * The same atmosphere on the dark band, and it has to be built differently to read at all.
+   *
+   * On white the aurora is the accent at 9%; on Ink the accent is *darker* than the ground, so the
+   * same recipe would show as a smudge. This lifts instead: the accent at 22% over a near-black
+   * ground reads as light rather than pigment. Still under `pointer-events: none`, still the only
+   * decoration in the section.
+   */
+  .band-ink {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .band-ink::before,
+  .band-ink::after {
+    content: '';
+    position: absolute;
+    border-radius: 999px;
+    filter: blur(90px);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .band-ink::before {
+    width: 34rem;
+    height: 34rem;
+    top: -16rem;
+    right: -12rem;
+    background: rgb(27 59 216 / 22%);
+    animation: drift 24s ease-in-out infinite alternate;
+  }
+
+  .band-ink::after {
+    width: 22rem;
+    height: 22rem;
+    bottom: -14rem;
+    left: -8rem;
+    background: rgb(27 59 216 / 14%);
+    animation: drift 30s ease-in-out infinite alternate-reverse;
+  }
+
+  .band-ink > * {
+    position: relative;
+    z-index: 1;
   }
 }
 
@@ -532,5 +757,22 @@ body {
   [data-motion='essential'] {
     animation-duration: 2.4s !important;
     animation-iteration-count: infinite !important;
+  }
+}
+
+/**
+ * A scroll container with no visible bar.
+ *
+ * For the panel tab strip on a narrow screen: the row must stay one axis, so it scrolls rather than
+ * wraps, and a scrollbar drawn under a pill row is noise on the viewport with the least room for it.
+ * The partially-cut last tab is the affordance instead. Scrolling itself is untouched — only its
+ * furniture is hidden, so a trackpad, a touch drag and the keyboard all behave exactly as before.
+ */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
   }
 }

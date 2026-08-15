@@ -402,6 +402,38 @@ erasure.
   10–16 MB per weight. That is a decision about the deployed image and about which market it is for.
   Right-to-left needs more than a font — the renderer's bidi behaviour is unverified.
 
+## v0.10 — "It can be written from nothing" · shipped 2026-08-15
+
+The release that stopped assuming everybody arrives with a file, plus the audit's remaining findings
+and the first measured numbers for the free tier.
+
+- ✅ **Write a CV from scratch** (`blankResume`, `origin: 'file' | 'blank'`). The editor had done full
+  add and remove on every section since v0.5 and the custom sections take any heading a life needs —
+  the feature was built and only the door was missing, which quietly excluded a first job, a return to
+  work after years out, and every trade where nobody ever wrote one down. The work was not the empty
+  document: it was that **every word of the second step is about our reading of a file**, so all of it
+  had to learn a second frame. Asks for the name first, because the schema requires one and seeding
+  "Your name" would eventually be printed by somebody in a hurry.
+- ✅ **Free-tier rewrite quality, measured** (`pnpm test:measure`, ADR-028). Nine runs across three
+  fixtures. Confirmed the audit's suspicion — the local model moved claims between employers in about
+  one run in two — and found the bigger thing nobody was looking for: 4–27% of bullets come back with
+  nothing, and the cause was undiagnosable until `SilenceReason` split one silent `unavailable` into
+  four counted ones. It is never transport; it is always the model.
+- ✅ **Signing in and the model choice, in the header.** Both were global facts about the session
+  stuck inside one tab of one screen — and `?panel=account` only exists once a CV is loaded, so the
+  landing page had no way in at all.
+- ✅ **The landing page has an argument** (DESIGN.md: the Section type level, One Dark Band, Four
+  Grounds). Seven sections alternating between two greys with identical headings is a rhythm with no
+  accent in it. Also `docs/12-competitors.md`: JobAssist, Jobscan and Enhancv walked in the browser.
+- ✅ **A malformed share token answers 404**, not the unhandled 500 it was answering — the token is a
+  `uuid` primary key and anything else reached Postgres.
+- ✅ **ADR-029** records Edd's decision on `personalDetails` in translation, so it stops being an open
+  question.
+
+**Cost:** one session. **Left open:** pricing and payments (still the last thing between here and
+v1.0), and the free tier's speed on the production box (ADR-027 — the lever is taking the model call
+off the blocking path, not a faster engine).
+
 ## Deliberately parked
 
 Recorded so they stop resurfacing as ideas:

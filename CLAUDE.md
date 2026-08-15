@@ -7,8 +7,9 @@ Read `~/Projects/ai-os/CLAUDE.md` first. This file adds project-specific rules.
 CV optimizer: ingest `.pdf`/`.docx`/`.doc`/`.txt`/`.md` → canonical `Resume` schema
 → user review → verifiably ATS-safe designed PDF via pdfcn + takumi-pdf.
 
-Status: **v0.1–v0.9 shipped** — ingestion, review, PDF and DOCX export, bullet rewriting, job
-targeting, accounts with GDPR controls, cover letters, EN/ES/DA output and expiring share links.
+Status: **v0.1–v0.10 shipped** — ingestion, review, PDF and DOCX export, bullet rewriting, job
+targeting, accounts with GDPR controls, cover letters, EN/ES/DA output, expiring share links, and
+writing a CV from nothing.
 See [docs/08-roadmap.md](docs/08-roadmap.md) for what each release contains and what it cost.
 Open: pricing and payments, non-Latin script coverage (CJK and RTL). Active Spec:
 [specs/current_spec.md](specs/current_spec.md).
@@ -120,14 +121,66 @@ the image and deliberately not on a laptop (ADR-012), so the `.doc` and OCR suit
 
 ## Commands
 
+**There is one dev environment and it is the container on `:3100`.** `vite dev` used to run alongside
+it on 3007; having both was worse than having one. The dev server reaches **no database and no model**
+— `/api/processing` answers with an empty body, extraction silently falls back to the rule engine, and
+Wording, translation, accounts and encryption-at-rest are all off — so a feature can look finished
+there and be broken in the only environment that runs it. It also cannot prove the render path at all
+(ADR-005). Do not start a second one.
+
 ```bash
-pnpm dev                    # dev server on :3000
+docker build -t hunterready:local .   # after any source change…
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d   # …then restart it
+```
+
+⚠️ Run `docker build` directly, **not** `pnpm docker:build`. A global pnpm of a different major than
+this repo's crashes in its dependency-status check before it runs the script, and prints a stack trace
+with exit code 0 — a build that never happened, reported as a success.
+
+```bash
 pnpm build && pnpm start    # the only way to trust the WASM render path
 pnpm test                   # unit suite, incl. ATS round-trip and the accuracy table
 pnpm test:docker            # the same suite WITH system binaries — nothing skips
 pnpm test:parity            # builds, boots a server, requests the real routes
 pnpm lint                   # eslint
+
+# What the free tier actually produces. Opt-in — ~26 model calls, a minute on Metal, minutes on CPU.
+OLLAMA_BASE_URL=http://localhost:11500 pnpm test:measure
 ```
+
+**The rewrite numbers move between runs, and the thresholds say so.** Four runs of identical code
+measured silence (bullets the pass could say nothing about) at 27%, 4%, 15% and 12% — temperature 0.3
+over 26 bullets is not a stable number. `rewrite-quality.test.ts` therefore gates on the **aggregate**
+with loose ceilings, and only cross-employer drift is held at a hard zero, because since ADR-028 the
+guard rejects exactly what the suite counts. Do not tighten a threshold to a single lucky run.
+
+**The local model in Docker on a Mac runs on the CPU, and that is the whole latency story.**
+Docker Desktop's Linux VM has no Metal passthrough, so the `llm` container never touches the M-series
+GPU. Measured on an M4 Pro, same model (`qwen2.5:3b-instruct`), same prompts:
+
+|                        | container (CPU) | host Ollama (Metal, `100% GPU`) |      |
+| ---------------------- | --------------- | ------------------------------- | ---- |
+| raw generation         | 17.8 tok/s      | 80 tok/s                        | 4.5× |
+| extraction, end to end | 10.9 s          | 2.5 s                           | 4.4× |
+| whole-CV translation   | 43.8 s          | 11.0 s                          | 4.0× |
+
+The fix is one line in `docker-compose.local.yml` (gitignored): point `OLLAMA_BASE_URL` at
+`http://host.docker.internal:11500`, the brew `ollama serve`. `host.docker.internal` reaches it even
+though it binds `127.0.0.1` — Docker Desktop proxies it. The container keeps running and keeps its
+config; it is simply not the one answering. Production is untouched: Coolify has no
+`docker-compose.local.yml`, and its VPS has no GPU either way.
+
+⚠️ Two traps found while measuring this. **`:11434` on this Mac is a _different_ Docker stack**, not
+the brew Ollama — benchmarking it "natively" measures another CPU container and shows no difference at
+all. Check with `lsof -nP -iTCP:11434 -sTCP:LISTEN`. And the brew service defaults to a **4096-token
+context** while the container sets 16384; the small local-refine schema fits, but raise it before
+trusting the host path for anything with a larger prompt.
+
+**vLLM is not the lever here.** Its headline 2–5× is throughput under _concurrent_ load on CUDA —
+continuous batching and PagedAttention — while this app deliberately runs one request at a time
+(`OLLAMA_NUM_PARALLEL: '1'`, because the box hosts a dozen apps). Apple Silicon GPU support exists
+only through the separate `vLLM-Metal` project, and in Docker on a Mac it could only reach the CPU,
+i.e. the 17.8 tok/s baseline. The 4× above is the GPU that was already in the machine going unused.
 
 **A `.test.tsx` file is silently ignored.** `vitest.config.ts` includes `src/**/*.test.ts` only, so a
 test written with JSX in it never runs and never complains. Use `createElement` in a `.test.ts` file.
