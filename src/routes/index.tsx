@@ -143,14 +143,17 @@ function blankResume(fullName: string): Resume {
  */
 const STEPS_HOW = [
   {
+    icon: 'file' as const,
     title: 'Start from a file, or from nothing',
     body: 'A PDF, a Word file, plain text, or a photo of a printed page — or an empty one, if this is your first. No account either way.',
   },
   {
+    icon: 'pencil' as const,
     title: 'Correct what is on the page',
     body: 'Every detail we read, with the ones we were unsure of marked and the line each came from. Written from scratch instead? Same form, empty.',
   },
   {
+    icon: 'download' as const,
     title: 'Download it',
     body: 'A clean, well-set A4 PDF — or a Word file, for the portals that ask for one. Both checked by reading the finished document back.',
   },
@@ -198,11 +201,19 @@ const MECHANISMS = [
  * the fixed sections only and the sentence under it says the rest is theirs.
  */
 const BLANK_SECTIONS = [
-  { label: 'Your name', note: 'the only one required' },
-  { label: 'What you do', note: 'one line' },
-  { label: 'Jobs', note: 'as many as you have' },
-  { label: 'Schooling', note: 'optional' },
-  { label: 'Skills', note: 'optional' },
+  {
+    icon: 'person' as const,
+    label: 'Your name',
+    note: 'the only one required',
+  },
+  { icon: 'tag' as const, label: 'What you do', note: 'one line' },
+  {
+    icon: 'briefcase' as const,
+    label: 'Jobs',
+    note: 'as many as you have',
+  },
+  { icon: 'cap' as const, label: 'Schooling', note: 'optional' },
+  { icon: 'tools' as const, label: 'Skills', note: 'optional' },
 ] as const
 
 /**
@@ -340,6 +351,14 @@ function Icon({
     | 'arrow-left'
     | 'arrow-right'
     | 'download'
+    | 'file'
+    | 'pencil'
+    | 'person'
+    | 'tag'
+    | 'briefcase'
+    | 'cap'
+    | 'tools'
+    | 'blocked'
   className?: string
 }) {
   const paths: Record<string, React.ReactNode> = {
@@ -358,6 +377,62 @@ function Icon({
     ),
     check: <path d="m5 12.5 4.5 4.5L19 7" />,
     'chevron-down': <path d="m6 9 6 6 6-6" />,
+    /*
+      One family, one stroke, one 24-grid — all of these are drawn here rather than imported.
+      `lucide-react` is in the tree but only inside the vendored calendar, and a second icon family on
+      the same screen is the slop the audit sweeps for: two stroke weights and two corner radii read
+      as two products stitched together.
+    */
+    file: (
+      <>
+        <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" />
+        <path d="M14 3v5h5" />
+      </>
+    ),
+    pencil: (
+      <>
+        <path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3Z" />
+        <path d="m15 6 3 3" />
+      </>
+    ),
+    person: (
+      <>
+        <circle cx="12" cy="8" r="3.5" />
+        <path d="M5 20a7 7 0 0 1 14 0" />
+      </>
+    ),
+    tag: (
+      <>
+        <path d="M4 12V5a1 1 0 0 1 1-1h7l8 8-8 8-8-8Z" />
+        <circle cx="8.5" cy="8.5" r="1.2" />
+      </>
+    ),
+    briefcase: (
+      <>
+        <rect x="3" y="7" width="18" height="13" rx="2" />
+        <path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" />
+        <path d="M3 12h18" />
+      </>
+    ),
+    cap: (
+      <>
+        <path d="m12 4 9 4.5-9 4.5-9-4.5L12 4Z" />
+        <path d="M7 11v4.5c0 1.4 2.2 2.5 5 2.5s5-1.1 5-2.5V11" />
+      </>
+    ),
+    tools: (
+      <>
+        <path d="M14.5 6.5a3.5 3.5 0 0 0 4.6 4.6L21 13l-8 8-2-2 8-8-1.9-1.9a3.5 3.5 0 0 0-4.6-4.6L14.5 6.5Z" />
+        <path d="m6 6 3 3" />
+      </>
+    ),
+    /** The left column of the comparison: the shape of "this cannot be checked", never a red cross. */
+    blocked: (
+      <>
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="m8 12h8" />
+      </>
+    ),
     'arrow-left': <path d="M19 12H5m0 0 6-6m-6 6 6 6" />,
     'arrow-right': <path d="M5 12h14m0 0-6-6m6 6-6 6" />,
     download: <path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14" />,
@@ -371,6 +446,11 @@ function Icon({
       strokeWidth="1.6"
       strokeLinecap="round"
       strokeLinejoin="round"
+      /*
+        Normalises every path to a length of 1 so `.draw-in`'s dash maths is the same whatever it is
+        pointed at, instead of depending on the measured length of one particular tick.
+      */
+      pathLength={1}
       className={className}
     >
       {paths[name]}
@@ -1838,11 +1918,19 @@ function HunterReady() {
               <ol className="flex flex-col divide-y divide-hairline-strong border-y border-hairline-strong">
                 {STEPS_HOW.map((step, index) => (
                   <Reveal key={step.title} delay={index * 80}>
-                    <li className="grid grid-cols-[2rem_1fr] gap-x-5 gap-y-1.5 py-6 sm:grid-cols-[3rem_1fr] sm:py-7">
-                      <span className="tally text-[13px] font-bold leading-6 text-signal sm:text-[15px]">
-                        {String(index + 1).padStart(2, '0')}
+                    <li className="row-nudge grid grid-cols-[2.5rem_1fr] gap-x-5 gap-y-1.5 py-6 sm:grid-cols-[3.5rem_1fr] sm:py-7">
+                      <span className="row-marker flex items-center gap-2 text-ink-faint">
+                        <span className="tally text-[13px] font-bold leading-6 sm:text-[15px]">
+                          {String(index + 1).padStart(2, '0')}
+                        </span>
                       </span>
-                      <h3 className="text-title text-ink">{step.title}</h3>
+                      <h3 className="flex items-center gap-2.5 text-title text-ink">
+                        <Icon
+                          name={step.icon}
+                          className="h-[18px] w-[18px] shrink-0 text-signal"
+                        />
+                        {step.title}
+                      </h3>
                       <p className="col-start-2 max-w-[58ch] text-[14px] leading-relaxed text-ink-soft">
                         {step.body}
                       </p>
@@ -1897,9 +1985,13 @@ function HunterReady() {
                     {BLANK_SECTIONS.map((item) => (
                       <li
                         key={item.label}
-                        className="flex items-baseline justify-between gap-4 py-3"
+                        className="row-nudge flex items-center justify-between gap-4 py-3"
                       >
-                        <span className="text-[15px] font-medium text-ink">
+                        <span className="flex items-center gap-3 text-[15px] font-medium text-ink">
+                          <Icon
+                            name={item.icon}
+                            className="row-marker h-[18px] w-[18px] shrink-0 text-ink-faint"
+                          />
                           {item.label}
                         </span>
                         <span className="text-meta text-ink-soft">
@@ -1941,9 +2033,9 @@ function HunterReady() {
               <div className="mt-10 flex flex-col divide-y divide-hairline border-y border-hairline">
                 {MECHANISMS.map((item, index) => (
                   <Reveal key={item.title} delay={index * 80}>
-                    <div className="grid gap-x-10 gap-y-3 py-7 lg:grid-cols-[1.15fr_0.85fr] lg:py-8">
+                    <div className="row-nudge grid gap-x-10 gap-y-3 py-7 lg:grid-cols-[1.15fr_0.85fr] lg:py-8">
                       <div className="flex gap-4">
-                        <span className="mt-0.5 shrink-0 text-signal">
+                        <span className="row-marker mt-0.5 shrink-0 text-ink-faint">
                           <Icon name={item.icon} className="h-5 w-5" />
                         </span>
                         <div className="flex flex-col gap-2">
@@ -2009,14 +2101,19 @@ function HunterReady() {
                   <Reveal key={row.here} delay={index * 70}>
                     <div className="grid gap-3 py-7 lg:grid-cols-2 lg:gap-10">
                       {/* 72% white, not the 45% the column labels use: this column recedes by size
-                          and by position, and it still has to be read. */}
-                      <p className="on-ink-soft max-w-[52ch] text-[14px] leading-relaxed">
+                          and by position, and it still has to be read. The glyph mirrors the tick
+                          opposite it, so the pairing is visible before either line is. */}
+                      <p className="on-ink-soft flex max-w-[52ch] gap-2.5 text-[14px] leading-relaxed">
+                        <Icon
+                          name="blocked"
+                          className="on-ink-faint mt-0.5 h-4 w-4 shrink-0"
+                        />
                         {row.alone}
                       </p>
                       <p className="flex max-w-[52ch] gap-2.5 text-[16px] leading-relaxed text-white">
                         <Icon
                           name="check"
-                          className="mt-1 h-4 w-4 shrink-0 text-affirm-wash"
+                          className="draw-in mt-1 h-4 w-4 shrink-0 text-affirm-wash"
                         />
                         {row.here}
                       </p>

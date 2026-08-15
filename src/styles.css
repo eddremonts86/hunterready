@@ -481,6 +481,114 @@ body {
   }
 
   /**
+   * A tick that draws itself as its row arrives.
+   *
+   * The comparison rows say "here is the answer to that". A check that is simply *there* states it;
+   * one that completes as the row appears performs it, which is the only reason this exists — the
+   * stroke lands at the moment the sentence beside it becomes readable. 320ms, once, never a loop.
+   *
+   * `pathLength="1"` normalises the geometry so the dash maths is the same for any path we draw
+   * through this class, rather than depending on the length of one particular tick.
+   */
+  .draw-in path {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    transition: stroke-dashoffset 320ms cubic-bezier(0.16, 1, 0.3, 1) 140ms;
+  }
+
+  .reveal[data-in='true'] .draw-in path {
+    stroke-dashoffset: 0;
+  }
+
+  /**
+   * A row in a ruled list that answers the cursor without becoming a button.
+   *
+   * 3px of travel and nothing else — no background, no border, no shadow. These lists have no boxes
+   * by design (a card claims an elevation these rows do not have), so the only honest hover is the
+   * row acknowledging the pointer and moving on.
+   */
+  .row-nudge {
+    transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .row-nudge:hover {
+    transform: translateX(3px);
+  }
+
+  .row-nudge:hover .row-marker {
+    color: var(--color-signal);
+  }
+
+  .row-marker {
+    transition: color 260ms ease;
+  }
+
+  /**
+   * The eyebrow's rule grows in with its section.
+   *
+   * `scaleY` from the bottom, not a height change: DESIGN.md's performance rule is transform and
+   * opacity only, and a 3px bar animating `height` is a layout pass per frame for two pixels of
+   * movement.
+   */
+  .eyebrow::before {
+    transform: scaleY(0.2);
+    transform-origin: bottom;
+    transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1) 80ms;
+  }
+
+  .reveal[data-in='true'] .eyebrow::before,
+  .rise .eyebrow::before {
+    transform: scaleY(1);
+  }
+
+  /**
+   * The primary button answers the cursor before it is pressed.
+   *
+   * Lift on hover, press on active — the two halves of one physical story, and the press already
+   * existed. Kept to 1px each way: a call-to-action that jumps is a call-to-action that looks
+   * unreliable.
+   */
+  .btn-primary {
+    transition:
+      background-color 140ms ease,
+      transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 200ms ease;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px -12px rgb(27 59 216 / 55%);
+  }
+
+  /**
+   * The FAQ answer opens instead of appearing.
+   *
+   * `::details-content` with `interpolate-size` is the only way to animate a `<details>` to its own
+   * height without measuring it in JavaScript. Where it is unsupported the answer simply appears,
+   * which is exactly what it did before — no fallback code, no layout shift, no library.
+   */
+  @supports (interpolate-size: allow-keywords) {
+    :root {
+      interpolate-size: allow-keywords;
+    }
+
+    details::details-content {
+      block-size: 0;
+      overflow: hidden;
+      opacity: 0;
+      transition:
+        block-size 300ms cubic-bezier(0.16, 1, 0.3, 1),
+        content-visibility 300ms allow-discrete,
+        opacity 240ms ease;
+    }
+
+    details[open]::details-content {
+      block-size: auto;
+      opacity: 1;
+    }
+  }
+
+  /**
    * The atmosphere behind the hero: two large, heavily blurred washes of the accent that drift very
    * slowly. The one piece of pure decoration in the system.
    *
@@ -522,6 +630,52 @@ body {
     left: -8rem;
     background: rgb(27 59 216 / 6%);
     animation: drift 26s ease-in-out infinite alternate-reverse;
+  }
+
+  /**
+   * The same atmosphere on the dark band, and it has to be built differently to read at all.
+   *
+   * On white the aurora is the accent at 9%; on Ink the accent is *darker* than the ground, so the
+   * same recipe would show as a smudge. This lifts instead: the accent at 22% over a near-black
+   * ground reads as light rather than pigment. Still under `pointer-events: none`, still the only
+   * decoration in the section.
+   */
+  .band-ink {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .band-ink::before,
+  .band-ink::after {
+    content: '';
+    position: absolute;
+    border-radius: 999px;
+    filter: blur(90px);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .band-ink::before {
+    width: 34rem;
+    height: 34rem;
+    top: -16rem;
+    right: -12rem;
+    background: rgb(27 59 216 / 22%);
+    animation: drift 24s ease-in-out infinite alternate;
+  }
+
+  .band-ink::after {
+    width: 22rem;
+    height: 22rem;
+    bottom: -14rem;
+    left: -8rem;
+    background: rgb(27 59 216 / 14%);
+    animation: drift 30s ease-in-out infinite alternate-reverse;
+  }
+
+  .band-ink > * {
+    position: relative;
+    z-index: 1;
   }
 }
 
