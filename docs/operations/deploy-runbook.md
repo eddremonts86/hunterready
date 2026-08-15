@@ -151,12 +151,19 @@ homepage, which reads as health.
 
 1. **Deploy failed, Quality green.** The image built in CI (`pnpm test:docker` builds the same
    Dockerfile), so suspect Coolify: wrong target stage, wrong port, or a missing env row.
-2. **`wasm` false.** `scripts/copy-assets.mjs` did not run or did not find the WASM. Check `pnpm build`
+1. **`"hunterready" answers on null, but PRODUCTION_URL is …`** — the application in Coolify has lost
+   its domain, so the resolve step refuses to deploy anything rather than deploy to an unknown place.
+   Seen on 2026-08-15: production was healthy on the previous release the whole time, and the release
+   simply did not go out. Fix it in Coolify (Application → Domains), then re-run the workflow —
+   `gh run rerun <id> --failed`. Remember the API quirk above if doing it over HTTP: write `domains`,
+   read `fqdn`. **Do not "fix" this by relaxing the guard.** It is the only thing standing between a
+   renamed or duplicated application and a release going somewhere nobody is looking.
+1. **`wasm` false.** `scripts/copy-assets.mjs` did not run or did not find the WASM. Check `pnpm build`
    locally, then `ls .output/server/pkg/`.
-3. **`fonts` false.** The bundled OFL fonts are missing from `.output/server/fonts`. Same script.
-4. **Health never 200.** The container is not serving. Read the Coolify build and runtime logs; the
+1. **`fonts` false.** The bundled OFL fonts are missing from `.output/server/fonts`. Same script.
+1. **Health never 200.** The container is not serving. Read the Coolify build and runtime logs; the
    healthcheck itself has a 20s start period, so a slow boot shows as retries rather than failure.
-5. **Rolling back** is redeploying the previous commit from Coolify's deployment list. There is no
+1. **Rolling back** is redeploying the previous commit from Coolify's deployment list. There is no
    database, so a rollback is complete and instant — the one genuine advantage of having no state.
 
 ## The database (v0.5, ADR-019)
