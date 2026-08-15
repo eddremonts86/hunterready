@@ -11,7 +11,7 @@
  * developer, because the audience is every sector (PRODUCT.md).
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { readAdvertWithRules } from '../advert'
+import { readAdvertWithRules, trimAdvertPayload } from '../advert'
 
 const NURSE_ADVERT = `Registered Nurse — Intensive Care
 
@@ -270,5 +270,80 @@ describe('the feature survives a model that is absent or broken', () => {
 
     expect(reading.source).toBe('rules')
     expect(reading.requirements.hardSkills).toContain('Forklift licence')
+  })
+})
+
+describe('one row that does not fit costs that row, not the reading', () => {
+  /**
+   * Production, 15 Aug 2026: `advert.fell_back` with `bad_shape:keywords.0.too_big`. The model wrote a
+   * whole sentence into the keyword list, the schema rejected the entire payload on it, and the reading
+   * silently became the rule reader's — which finds materially less. The oversized row should go. The
+   * other rows should not go with it.
+   */
+  it('drops an oversized keyword and still reads the advert with the model', async () => {
+    const readAdvert = await withModelReturning({
+      hardSkills: ['Ventilator management'],
+      softSkills: [],
+      responsibilities: [],
+      keywords: [
+        'The successful candidate will be expected to demonstrate ventilator management across a twelve-hour shift rota',
+        'Ventilator management',
+      ],
+    })
+
+    const reading = await readAdvert({
+      advert:
+        'Requirements\n- Ventilator management\n- Danish nursing authorisation\n',
+    })
+
+    expect(reading.source).toBe('model')
+    expect(reading.requirements.keywords).toEqual(['Ventilator management'])
+  })
+
+  it('drops an oversized role title without losing the requirements under it', async () => {
+    const readAdvert = await withModelReturning({
+      hardSkills: ['Ventilator management'],
+      softSkills: [],
+      responsibilities: [],
+      keywords: [],
+      roleTitle: 'Registered Nurse '.repeat(20),
+    })
+
+    const reading = await readAdvert({
+      advert: 'Requirements\n- Ventilator management\n',
+    })
+
+    expect(reading.source).toBe('model')
+    expect(reading.roleTitle).toBeUndefined()
+    expect(reading.requirements.hardSkills).toEqual(['Ventilator management'])
+  })
+})
+
+describe('trimAdvertPayload', () => {
+  it('counts what it dropped, so the caller can say so', () => {
+    const { payload, dropped } = trimAdvertPayload({
+      keywords: ['ok', '', 'x'.repeat(81), 42, 'ok'],
+    })
+
+    // The blank, the oversized one and the number. The duplicate is dedupe's job, not this one's.
+    expect(dropped).toBe(3)
+    expect((payload as { keywords: Array<string> }).keywords).toEqual([
+      'ok',
+      'ok',
+    ])
+  })
+
+  it('applies the item cap as well as the character cap', () => {
+    const { payload, dropped } = trimAdvertPayload({
+      keywords: Array.from({ length: 45 }, (_, index) => `keyword ${index}`),
+    })
+
+    expect((payload as { keywords: Array<string> }).keywords).toHaveLength(40)
+    expect(dropped).toBe(5)
+  })
+
+  it('leaves something that is not an object alone', () => {
+    expect(trimAdvertPayload(null)).toEqual({ payload: null, dropped: 0 })
+    expect(trimAdvertPayload('nope')).toEqual({ payload: 'nope', dropped: 0 })
   })
 })

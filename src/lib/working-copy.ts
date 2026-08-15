@@ -52,6 +52,8 @@ export const WorkingCopy = z.object({
    * written by a previous deploy restores as what it almost certainly was.
    */
   origin: z.enum(['file', 'blank']).default('file'),
+  /** The pre-fit document, so a reload does not lose an authored CV's only comparison baseline. */
+  fitFrom: Resume.optional(),
   /** Which stored row this came from, when it came from one. */
   savedResumeId: z.string().optional(),
 })

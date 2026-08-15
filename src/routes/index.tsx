@@ -107,6 +107,20 @@ interface Loaded {
    * So authoring is not "upload with an empty file". It is the same editor with a different frame.
    */
   origin: 'file' | 'blank'
+  /**
+   * The document as it stood immediately before "Fit my CV to this job".
+   *
+   * `original` is the as-ingested file, and for an uploaded CV that is the right "before" — the whole
+   * distance travelled is the achievement. A CV **written here** has no upload: its `original` is an
+   * empty page with a name on it, so a diff against it is "you typed all of this", which says nothing
+   * and is why the comparison is hidden for authored documents.
+   *
+   * But fitting one to a job does produce a real before and after, and hiding it left the fit with no
+   * visible answer at all — the exact dead end the audit caught on the uploaded path, reintroduced on
+   * this one. So the fit records where it started from, and that becomes the baseline when there is
+   * no upload to compare against.
+   */
+  fitFrom?: Resume
 }
 
 /**
@@ -963,6 +977,7 @@ function HunterReady() {
         method: copy.method,
         ocr: copy.ocr,
         origin: copy.origin ?? 'file',
+        ...(copy.fitFrom === undefined ? {} : { fitFrom: copy.fitFrom }),
       })
       if (copy.savedResumeId !== undefined) setSavedResumeId(copy.savedResumeId)
       return
@@ -1020,6 +1035,7 @@ function HunterReady() {
       method: loaded.method,
       ocr: loaded.ocr,
       origin: loaded.origin,
+      ...(loaded.fitFrom === undefined ? {} : { fitFrom: loaded.fitFrom }),
       ...(savedResumeId === undefined ? {} : { savedResumeId }),
     })
   }, [loaded, savedResumeId])
@@ -2369,6 +2385,8 @@ function HunterReady() {
                             ...(summary === undefined ? {} : { summary }),
                           },
                         },
+                        // Where this started, so a CV written here still has a "before" to show.
+                        fitFrom: loaded.resume,
                       })
                       /*
                         Everything downstream revalidates, not just the document (Edd: "hay que
@@ -2610,7 +2628,20 @@ function HunterReady() {
    * fields, which is nothing beside the sheet being laid out next to it, and a stale diff would offer a
    * comparison of a document that is no longer on screen.
    */
-  const changes = diffResumes(loaded.original, loaded.resume)
+  /**
+   * What the comparison compares against, and whether there is one at all.
+   *
+   * An uploaded CV is measured from the file. A CV written here is measured from the moment before
+   * the fit, because its `original` is an empty page and "you typed all of this" is not an
+   * achievement worth a side-by-side. Before it has been fitted there is nothing to compare, so the
+   * toggle does not appear — which is the honest version of hiding it.
+   */
+  const comparisonBase =
+    loaded.origin === 'blank' ? loaded.fitFrom : loaded.original
+  const changes =
+    comparisonBase === undefined
+      ? []
+      : diffResumes(comparisonBase, loaded.resume)
   /** Suggestions still awaiting a decision, for the Wording tab's badge. */
   const pendingRewrites =
     rewrites === undefined
@@ -3317,7 +3348,7 @@ function HunterReady() {
                   of everything the person has typed, presented as an achievement over a file that
                   never existed. Same falsehood as the counter and the empty states, one pane over.
                 */}
-                {changes.length > 0 && loaded.origin !== 'blank' && (
+                {changes.length > 0 && (
                   <button
                     type="button"
                     aria-pressed={comparing}
@@ -3375,13 +3406,14 @@ function HunterReady() {
               address bar. Ignoring the flag instead is the same rule the search validator follows: an
               impossible request falls back to the ordinary screen rather than to a dead end.
             */}
-            {comparing && changes.length > 0 && loaded.origin !== 'blank' ? (
+            {comparing && changes.length > 0 ? (
               <BeforeAfter
-                original={loaded.original}
+                original={comparisonBase ?? loaded.original}
                 current={loaded.resume}
                 changes={changes}
                 theme={theme}
                 Template={template.Component}
+                since={loaded.origin === 'blank' ? 'fit' : 'upload'}
               />
             ) : (
               <PaperPreview

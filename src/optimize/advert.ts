@@ -39,7 +39,7 @@ import type { JobRequirements } from './jd'
 import { stripRequirementFraming } from './jd'
 import { resolveLocalProvider, resolveProvider } from '@/structure/provider'
 import { unwrapToolInput } from '@/structure/tool-input'
-import { errorEvent } from '@/lib/log'
+import { errorEvent, event } from '@/lib/log'
 
 /** Bump on any prompt change. Same discipline as `REWRITE_PROMPT_VERSION`. */
 export const ADVERT_PROMPT_VERSION = 'advert-v2'
@@ -57,20 +57,102 @@ export const MAX_ADVERT_CHARS = 15_000
 /** Enough text to be an advert rather than a job title someone typed. */
 export const MIN_ADVERT_CHARS = 80
 
+/**
+ * What each list may hold, in one place.
+ *
+ * The schema below and `trimAdvertPayload` both read these, because two copies of "80" would drift and
+ * the drift would be invisible: the trimmer would keep a row the schema then rejected, which is exactly
+ * the failure this pair exists to prevent.
+ */
+const LIST_LIMITS = {
+  hardSkills: { chars: 120, items: 30 },
+  softSkills: { chars: 120, items: 15 },
+  responsibilities: { chars: 300, items: 20 },
+  keywords: { chars: 80, items: 40 },
+} as const
+
+/** The same, for the single-value fields. All optional, so an entry that does not fit simply goes. */
+const TEXT_LIMITS = {
+  seniority: 60,
+  roleTitle: 160,
+  company: 160,
+} as const
+
+const list = ({ chars, items }: { chars: number; items: number }) =>
+  z.array(z.string().min(1).max(chars)).max(items).default([])
+
 const AdvertPayload = z.object({
-  hardSkills: z.array(z.string().min(1).max(120)).max(30).default([]),
-  softSkills: z.array(z.string().min(1).max(120)).max(15).default([]),
-  responsibilities: z.array(z.string().min(1).max(300)).max(20).default([]),
-  seniority: z.string().max(60).optional(),
-  keywords: z.array(z.string().min(1).max(80)).max(40).default([]),
+  hardSkills: list(LIST_LIMITS.hardSkills),
+  softSkills: list(LIST_LIMITS.softSkills),
+  responsibilities: list(LIST_LIMITS.responsibilities),
+  seniority: z.string().max(TEXT_LIMITS.seniority).optional(),
+  keywords: list(LIST_LIMITS.keywords),
   /** Shown to the candidate as the advert's own words for the job, never written into the CV. */
-  roleTitle: z.string().max(160).optional(),
+  roleTitle: z.string().max(TEXT_LIMITS.roleTitle).optional(),
   /**
    * Who is hiring. Not used for matching — it exists so a saved application can answer "what did I
    * send to Herlev Hospital?", which is the question the tracker is for.
    */
-  company: z.string().max(160).optional(),
+  company: z.string().max(TEXT_LIMITS.company).optional(),
 })
+
+/**
+ * Drop the rows that do not fit, instead of refusing the whole reading.
+ *
+ * Observed in production as `advert.fell_back` with `bad_shape:keywords.0.too_big`: the model returned
+ * one sentence where a keyword belongs, the schema failed on it, and a failed schema falls back to the
+ * rule reader — which finds materially less than the model does. Thirty-nine good keywords were thrown
+ * away to punish the fortieth. One oversized row is not worth the reading.
+ *
+ * So the boundary trims first: non-strings and blanks go, anything past the character limit goes, the
+ * item caps apply, and what survives is handed to a schema that is still strict. The caller logs a
+ * count when anything was dropped, because a reading quietly missing rows is worth seeing.
+ *
+ * This loosens nothing that matters. Every surviving entry still has to be grounded in the advert by
+ * `keep()` below — the guard against invented requirements is downstream of here and untouched.
+ */
+export function trimAdvertPayload(input: unknown): {
+  payload: unknown
+  dropped: number
+} {
+  if (typeof input !== 'object' || input === null) {
+    return { payload: input, dropped: 0 }
+  }
+
+  const payload: Record<string, unknown> = {
+    ...(input as Record<string, unknown>),
+  }
+  let dropped = 0
+
+  for (const [field, limit] of Object.entries(LIST_LIMITS)) {
+    const raw = payload[field]
+    if (!Array.isArray(raw)) continue
+
+    const kept = raw
+      .filter((item): item is string => typeof item === 'string')
+      .map((item) => item.trim())
+      .filter((item) => item !== '' && item.length <= limit.chars)
+      .slice(0, limit.items)
+
+    dropped += raw.length - kept.length
+    payload[field] = kept
+  }
+
+  for (const [field, chars] of Object.entries(TEXT_LIMITS)) {
+    const raw = payload[field]
+    if (typeof raw !== 'string') continue
+
+    const trimmed = raw.trim()
+    if (trimmed === '' || trimmed.length > chars) {
+      delete payload[field]
+      dropped += 1
+      continue
+    }
+    payload[field] = trimmed
+  }
+
+  return { payload, dropped }
+}
 
 export interface AdvertReading {
   requirements: JobRequirements
@@ -689,7 +771,13 @@ export async function readAdvert(
   )
   if (toolUse === undefined) return viaRules('no_tool_use')
 
-  const parsed = AdvertPayload.safeParse(unwrapToolInput(toolUse.input))
+  const trimmed = trimAdvertPayload(unwrapToolInput(toolUse.input))
+  if (trimmed.dropped > 0) {
+    // A count, never a row. The rows are advert text.
+    event('advert.trimmed', { dropped: trimmed.dropped })
+  }
+
+  const parsed = AdvertPayload.safeParse(trimmed.payload)
   if (!parsed.success) {
     return viaRules(
       'bad_shape',
