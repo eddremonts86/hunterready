@@ -23,6 +23,18 @@ import {
 
 const KEY = 'a'.repeat(64)
 
+/**
+ * `readKey` returns `undefined` for anything it will not accept, which is the behaviour under test
+ * elsewhere in this file. Here the key is known-good, so a failure to read it is a broken test rather
+ * than a result — say so instead of asserting it away with a non-null assertion.
+ */
+function secretFrom(hex: string): Buffer {
+  const secret = readKey(hex)
+  if (secret === undefined)
+    throw new Error('the test key is not 64 hex characters')
+  return secret
+}
+
 const RESUME = {
   schemaVersion: '1.0',
   basics: { fullName: 'Marta Sørensen', email: 'marta@example.org' },
@@ -44,7 +56,7 @@ afterEach(() => {
 
 describe('the script and the application share one envelope', () => {
   it('the application reads what the script wrote', () => {
-    const secret = readKey(KEY)
+    const secret = secretFrom(KEY)
     const stored = scriptEncryptJson(RESUME, secret)
 
     expect(decryptJson(stored)).toEqual(RESUME)
@@ -66,7 +78,7 @@ describe('the script and the application share one envelope', () => {
   })
 
   it('re-encrypting is refused rather than repeated', () => {
-    const secret = readKey(KEY)
+    const secret = secretFrom(KEY)
     const once = scriptEncryptJson(RESUME, secret)
 
     // The script never reaches a second call for this row, because its own predicate excludes it.
