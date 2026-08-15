@@ -1,0 +1,119 @@
+# Read, and if asked repair, the domain on the Coolify application.
+#
+# ## Why this exists
+#
+# On 2026-08-15 the v0.10 release merged, Quality went green, and Deploy stopped at its resolve step:
+# the application named `hunterready` reported `fqdn: null`, so the guard refused to deploy to a place
+# it could not identify. Production stayed healthy on the previous release the whole time — the guard
+# working, not failing.
+#
+# Fixing it needs a Coolify credential. There is exactly one that is known good and it lives here, as
+# an Actions secret, so the repair belongs here too rather than in somebody's shell history. Nobody
+# ever has to read the token to run this.
+#
+# ## Why it is dispatch-only, and why `set` is not the default
+#
+# This writes to production infrastructure. It runs when a human asks, never on a push, and its
+# default mode only reads. `set` additionally refuses unless exactly one application matches the name,
+# because "there turned out to be two of them" is the failure this whole guard chain exists to catch.
+name: Coolify domain
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'inspect (read only) or set (write the domain from PRODUCTION_URL)'
+        type: choice
+        options: [inspect, set]
+        default: inspect
+
+jobs:
+  domain:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the configuration is present
+        env:
+          API_URL: ${{ secrets.COOLIFY_API_URL }}
+          API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+        run: |
+          missing=""
+          [ -n "$API_URL" ] || missing="$missing COOLIFY_API_URL"
+          [ -n "$API_TOKEN" ] || missing="$missing COOLIFY_API_TOKEN"
+          [ -n "$PRODUCTION_URL" ] || missing="$missing PRODUCTION_URL"
+          if [ -n "$missing" ]; then
+            echo "::error::missing:$missing"
+            exit 1
+          fi
+
+      - name: Inspect every application, and repair the one named hunterready when asked
+        env:
+          API_URL: ${{ secrets.COOLIFY_API_URL }}
+          API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+          APP_NAME: hunterready
+          MODE: ${{ inputs.mode }}
+        run: |
+          node -e '
+            const api = process.env.API_URL.replace(/\/+$/, "")
+            const headers = { authorization: `Bearer ${process.env.API_TOKEN}`, accept: "application/json" }
+            const host = (u) => String(u || "").replace(/^https?:\/\//, "").replace(/\/.*$/, "")
+
+            const get = async (path) => {
+              const r = await fetch(`${api}${path}`, { headers })
+              if (!r.ok) throw new Error(`GET ${path} → ${r.status}`)
+              return r.json()
+            }
+
+            ;(async () => {
+              const apps = await get("/api/v1/applications")
+              const list = Array.isArray(apps) ? apps : []
+              console.log(`${list.length} application(s):`)
+              for (const a of list) {
+                console.log(`  ${a.name}  uuid=${a.uuid}  fqdn=${a.fqdn ?? "(none)"}  status=${a.status ?? "?"}`)
+              }
+
+              const matches = list.filter((a) => a.name === process.env.APP_NAME)
+              if (matches.length !== 1) {
+                console.error(`::error::${matches.length} applications are named "${process.env.APP_NAME}" — expected exactly one, so nothing was changed`)
+                process.exit(1)
+              }
+              const app = matches[0]
+
+              if (host(app.fqdn) === host(process.env.PRODUCTION_URL)) {
+                console.log(`\nAlready correct: ${app.name} answers on ${app.fqdn}. Nothing to do.`)
+                return
+              }
+
+              console.log(`\n${app.name} has fqdn=${app.fqdn ?? "(none)"}, PRODUCTION_URL is ${process.env.PRODUCTION_URL}`)
+
+              if (process.env.MODE !== "set") {
+                console.log("Mode is inspect — run again with mode=set to write it.")
+                return
+              }
+
+              // `domains` on write, `fqdn` on read. The API rejects `fqdn` on a PATCH even though it is
+              // the field name it returns — see docs/operations/deploy-runbook.md.
+              const r = await fetch(`${api}/api/v1/applications/${app.uuid}`, {
+                method: "PATCH",
+                headers: { ...headers, "content-type": "application/json" },
+                body: JSON.stringify({ domains: process.env.PRODUCTION_URL }),
+              })
+              const body = await r.text()
+              if (!r.ok) {
+                console.error(`::error::PATCH → ${r.status} ${body.slice(0, 300)}`)
+                process.exit(1)
+              }
+
+              const after = await get(`/api/v1/applications/${app.uuid}`)
+              console.log(`After the write: fqdn=${after.fqdn ?? "(none)"}`)
+              if (host(after.fqdn) !== host(process.env.PRODUCTION_URL)) {
+                console.error("::error::the write was accepted but the domain did not stick")
+                process.exit(1)
+              }
+              console.log("Domain set. Re-run the Deploy workflow.")
+            })().catch((error) => {
+              console.error(`::error::${error.message}`)
+              process.exit(1)
+            })
+          '
