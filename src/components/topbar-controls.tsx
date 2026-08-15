@@ -109,7 +109,7 @@ export function AccountMenu({
               <p className="text-[13px] leading-relaxed text-ink-soft">
                 {plan === 'pro'
                   ? 'Your CVs are saved between visits, and the larger model is available to you.'
-                  : 'Your CVs are saved between visits. The larger model needs the paid plan.'}
+                  : 'Your CVs are saved between visits, and the larger model is open to everyone for now.'}
               </p>
               {onOpenAccount !== undefined && (
                 <button

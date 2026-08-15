@@ -25,7 +25,12 @@
  * API is money per document, so it is the natural line, and it happens to be the line that leaves the
  * free tier as the *more* private one — which is the opposite of how this usually goes.
  *
- * ## Anonymous means local, always
+ * ## Anonymous means local — unless the suspension is on
+ *
+ * ⚠️ `HR_THIRD_PARTY_FOR_ALL=true` suspends the plan half of this while the production box cannot
+ * serve the local model fast enough to be usable (ADR-030). Consent is not suspended: the gate simply
+ * starts appearing for everyone, because now there is a real transfer to agree to. The paragraph
+ * below describes the design and what it returns to when the switch goes off.
  *
  * There is no account to hold a plan, so there is no entitlement, so nothing leaves the server. That
  * makes the statelessness promise (ADR-004) and the transfer promise the same promise for the
@@ -39,6 +44,30 @@ import { currentUserId } from '@/lib/session'
 
 /** Plans that may use the third-party model. A set, so adding a tier is one edit. */
 const THIRD_PARTY_PLANS = new Set(['pro'])
+
+/**
+ * Suspend the plan check: everybody gets the third-party model, signed in or not (ADR-030).
+ *
+ * **Consent is untouched.** This grants entitlement, which is one half of `mayUseThirdParty`'s `&&`;
+ * the other half is still the person's own answer, and the gate now appears for everyone because
+ * `/api/processing` will name a provider they can actually reach. Nobody's CV leaves without being
+ * asked first — the difference is that the question is now worth asking.
+ *
+ * ## Why this exists, and why it is an env var rather than a code change
+ *
+ * Measured on production the same day it shipped: reading one job advert took **102 and 171 seconds**
+ * on the `cax21`, both times falling back to the rule engine, and the rule engine then matched 0 of 4
+ * requirements. "Fit my CV to this job" was not slow for an anonymous visitor — the button never
+ * appeared. A privacy default that costs the commonest visitor the feature is not a privacy default;
+ * it is an outage with a principle written on it.
+ *
+ * So this is a **temporary measure with an owner and an exit**: it is a deploy-time switch, so
+ * turning it off is one Coolify edit and a restart, not a release. See ADR-030 for the condition that
+ * ends it — the model call coming off the blocking path, which is ADR-027's actual lever.
+ */
+function thirdPartyForEveryone(): boolean {
+  return process.env.HR_THIRD_PARTY_FOR_ALL === 'true'
+}
 
 /**
  * The developer switch: every design unlocked for this **process**.
@@ -76,17 +105,28 @@ export type Entitlement = {
  * safe direction is the cheap one.
  */
 export async function entitlementFor(request: Request): Promise<Entitlement> {
-  if (!isPersistenceEnabled()) return { thirdParty: false, plan: 'anonymous' }
+  /*
+    The suspension is checked before anything else, including persistence: an anonymous visitor has no
+    session and no row to read, and they are exactly who this is for. The plan still travels, because
+    it is what the topbar chip and the logs report — only the entitlement is overridden.
+  */
+  const everyone = thirdPartyForEveryone()
+
+  if (!isPersistenceEnabled()) {
+    return { thirdParty: everyone, plan: 'anonymous' }
+  }
 
   try {
     const userId = await currentUserId(request)
-    if (userId === undefined) return { thirdParty: false, plan: 'anonymous' }
+    if (userId === undefined) {
+      return { thirdParty: everyone, plan: 'anonymous' }
+    }
 
     const plan = await getPlan(userId)
-    return { thirdParty: THIRD_PARTY_PLANS.has(plan), plan }
+    return { thirdParty: everyone || THIRD_PARTY_PLANS.has(plan), plan }
   } catch {
     // A failed lookup is not a licence to spend. See the note above about failing closed.
-    return { thirdParty: false, plan: 'free' }
+    return { thirdParty: everyone, plan: 'free' }
   }
 }
 

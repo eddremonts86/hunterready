@@ -37,6 +37,9 @@ services:
       # startup rather than assumed — and `/privacy` reads the real state so it cannot overstate.
       # LOSING THIS KEY LOSES EVERY STORED CV. There is no recovery path and there should not be one.
       DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-}
+      # ADR-030, temporary: the third-party model for everyone while the box cannot serve the local
+      # one fast enough. Consent is untouched — this grants entitlement, not permission.
+      HR_THIRD_PARTY_FOR_ALL: ${HR_THIRD_PARTY_FOR_ALL:-}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       # The local model. This is what a user gets when they decline the third-party provider — see
       # `src/structure/provider.ts` for why that is a model on our own hardware and not a regex.
