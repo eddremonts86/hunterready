@@ -18,6 +18,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/db/migrate.mjs",
     "db:retention": "node scripts/db/retention.mjs",
+    "db:reencrypt": "node scripts/db/reencrypt.mjs",
     "deploy:db": "node scripts/deploy/orchestrate.mjs",
     "test:docker": "docker build --target test -t hunterready:test . && docker run --rm hunterready:test",
     "ci:local": "bash scripts/ci/local-quality.sh",
