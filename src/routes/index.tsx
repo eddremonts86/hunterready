@@ -20,11 +20,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
+  ProcessingChoice,
   ConsentGate,
   needsConsent,
   useProcessingConsent,
 } from '@/components/consent-gate'
-import { Dropzone, useFilePicker } from '@/components/dropzone'
+import type { ConsentState } from '@/components/consent-gate'
+import { AccountMenu, ModelMenu } from '@/components/topbar-controls'
+import { useFilePicker } from '@/components/dropzone'
 import { Library } from '@/components/library'
 import { PaperPreview } from '@/components/paper-preview'
 import { ReadBackDemo } from '@/components/read-back-demo'
@@ -92,13 +95,44 @@ interface Loaded {
   method: 'llm' | 'local' | 'rules'
   /** Read off an image. Carried through because it changes what the review step asks of the user. */
   ocr: boolean
+  /**
+   * Where this document came from — and it changes what the whole second step is *for*.
+   *
+   * Every screen after the upload is written as "check what we read": flags on the fields we were
+   * unsure of, the line each one came from, a count of what is worth a second look. All of that is
+   * about **our reading of a file**. Point it at a CV nobody read and every word of it is false —
+   * there is no reading to check, no provenance to flag, and "we could not tell which fields to
+   * double-check" becomes a confession about a file that does not exist.
+   *
+   * So authoring is not "upload with an empty file". It is the same editor with a different frame.
+   */
+  origin: 'file' | 'blank'
 }
 
-const SAMPLES = [
-  { id: 'nurse-senior', label: 'Nurse · 15 yrs' },
-  { id: 'sales-junior', label: 'Sales · 3 yrs' },
-  { id: 'switcher', label: 'Career switch' },
-] as const
+/**
+ * A CV with nothing in it but the one thing a CV cannot be without.
+ *
+ * `fullName` is `min(1)` in the schema, which is right — a document with no name on it is not a CV —
+ * and it is the reason the from-scratch flow asks one question before it opens. The alternative was
+ * seeding "Your name" and hoping they replace it, which puts our words in their document and would
+ * eventually be printed by somebody in a hurry.
+ *
+ * Nothing else is seeded. An empty work row would look like help and is actually a decision made on
+ * their behalf, in a form whose empty states already say what goes in each section.
+ */
+function blankResume(fullName: string): Resume {
+  return Resume.parse({
+    schemaVersion: '1.0',
+    basics: { fullName: fullName.trim(), links: [], personalDetails: [] },
+    work: [],
+    education: [],
+    skills: [],
+    projects: [],
+    certifications: [],
+    languages: [],
+    custom: [],
+  })
+}
 
 /**
  * How it works, in three steps, with the time named.
@@ -109,16 +143,19 @@ const SAMPLES = [
  */
 const STEPS_HOW = [
   {
-    title: 'Upload what you have',
-    body: 'A PDF, a Word file, plain text, or a photo of a printed page. No account, no forms, no retyping your history.',
+    icon: 'file' as const,
+    title: 'Start from a file, or from nothing',
+    body: 'A PDF, a Word file, plain text, or a photo of a printed page — or an empty one, if this is your first. No account either way.',
   },
   {
-    title: 'Check what we read',
-    body: 'We show you every detail we pulled out and mark the ones we were not sure about, with the line each came from. You correct anything wrong.',
+    icon: 'pencil' as const,
+    title: 'Correct what is on the page',
+    body: 'Every detail we read, with the ones we were unsure of marked and the line each came from. Written from scratch instead? Same form, empty.',
   },
   {
+    icon: 'download' as const,
     title: 'Download it',
-    body: 'A clean, well-set A4 PDF — or a Word file, for the portals that ask for one. Both verified by a round-trip test that reads the document back, not by eye.',
+    body: 'A clean, well-set A4 PDF — or a Word file, for the portals that ask for one. Both checked by reading the finished document back.',
   },
 ]
 
@@ -136,17 +173,168 @@ const MECHANISMS = [
   {
     icon: 'verified' as const,
     title: 'Verified by a test, not a claim',
-    body: 'Every template is rendered, read back with an independent parser, and checked field by field in reading order. One that loses a field does not ship.',
+    body: 'Every design is rendered, read back with a separate parser, and checked field by field in reading order.',
+    how: 'A design that loses a field does not ship',
   },
   {
     icon: 'shield' as const,
     title: 'It cannot invent anything',
-    body: 'Suggestions may sharpen your own wording. A number, employer, date or outcome that is not already in your CV is blocked in code — and you accept every line by hand.',
+    body: 'Suggestions sharpen your own wording. A number, employer, date or outcome that is not already in your CV is refused.',
+    how: 'Blocked in code, not asked for in a prompt',
   },
   {
     icon: 'lock' as const,
     title: 'Your CV is not our training data',
-    body: 'Your phone number and address are stripped before any model sees the text, and you can decline the outside provider and be read by a model on our own server instead.',
+    body: 'Your phone number and street address are removed before any model sees the text, and you can keep the whole thing on our own server.',
+    how: 'Declining leaves it on this machine',
+  },
+]
+
+/**
+ * What a CV written from nothing is going to ask for, and how much of it is optional.
+ *
+ * The question somebody has before starting an empty form is not "what is this" — it is "how long is
+ * this going to take me". A list of five lines answers it in about two seconds, and three of the five
+ * say *optional*, which is the fact that gets somebody to start.
+ *
+ * Rules on the page, not a taxonomy: `resume.custom` takes any heading a life needs, so this list is
+ * the fixed sections only and the sentence under it says the rest is theirs.
+ */
+const BLANK_SECTIONS = [
+  {
+    icon: 'person' as const,
+    label: 'Your name',
+    note: 'the only one required',
+  },
+  { icon: 'tag' as const, label: 'What you do', note: 'one line' },
+  {
+    icon: 'briefcase' as const,
+    label: 'Jobs',
+    note: 'as many as you have',
+  },
+  { icon: 'cap' as const, label: 'Schooling', note: 'optional' },
+  { icon: 'tools' as const, label: 'Skills', note: 'optional' },
+] as const
+
+/**
+ * One field, and it is the only field a CV cannot do without.
+ *
+ * No longer behind a "Write one from scratch" toggle: this is now the whole point of the section it
+ * sits in, and a control that hides the one thing its section is for is a click charged for nothing.
+ * The field is simply there, focused by the person rather than by us — `autoFocus` on a section
+ * halfway down a landing page yanks the viewport to it on load.
+ */
+function StartFromScratch({
+  onStart,
+  busy,
+}: {
+  onStart: (fullName: string) => void
+  busy: boolean
+}) {
+  const [name, setName] = useState('')
+  const ready = name.trim() !== ''
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (ready && !busy) onStart(name)
+      }}
+      className="mt-1 flex flex-col gap-2"
+    >
+      <label
+        htmlFor="blank-name"
+        className="text-[13px] font-semibold text-ink"
+      >
+        Your name
+      </label>
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <input
+          id="blank-name"
+          type="text"
+          autoComplete="name"
+          placeholder="As it should read at the top of the page"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          className="field sm:flex-1"
+        />
+        <button
+          type="submit"
+          disabled={!ready || busy}
+          className="btn btn-primary shrink-0 px-6 py-3 text-[15px] disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          Start writing
+          <Icon name="arrow-right" className="h-[18px] w-[18px]" />
+        </button>
+      </div>
+      <span className="text-meta text-ink-soft">
+        Nothing else is compulsory, and you can download it at any point.
+      </span>
+    </form>
+  )
+}
+
+/**
+ * The comparison, and the rule it follows: **the left column is not a strawman.**
+ *
+ * Every competitor's version of this section makes the reader's current situation sound pathetic
+ * (docs/12). Ours opens by saying most CVs parse fine, because most do, and a page whose first claim
+ * is false to the majority of its readers has spent its credibility before the fold. What is on the
+ * left is only what genuinely cannot be checked without doing what this product does.
+ *
+ * Paired, one row at a time, rather than two lists side by side. Two lists ask the reader to do the
+ * matching themselves and most will not bother; a row that says "this happens" beside "here is the
+ * answer to that exact thing" is the same content doing the work it was written for.
+ */
+const COMPARISON = [
+  {
+    alone:
+      'You send the file and find out nothing. No reply reads the same as a mangled one.',
+    here: 'We read the finished document back and show you what survived.',
+  },
+  {
+    alone:
+      'A two-column layout looks right to you and arrives as one scrambled paragraph.',
+    here: 'You see every field we read, and correct anything wrong before it leaves.',
+  },
+  {
+    alone:
+      'A tool sharpens a line by adding a number nobody gave it — and you defend it at the interview.',
+    here: 'A claim that is not already in your CV is refused, in code.',
+  },
+  {
+    alone:
+      'Rewriting the same CV for every advert, by hand, at eleven at night.',
+    here: 'Point it at one advert and get a version for that job, with what changed listed.',
+  },
+]
+
+/**
+ * The three fears, answered where they occur.
+ *
+ * Not billing objections — this product does not have billing yet, and a FAQ that answers questions
+ * nobody asked in order to look complete is the exact amateurism this page is trying to lose.
+ */
+const FAQ = [
+  {
+    q: 'What happens to my CV?',
+    a: 'It is read, corrected by you, and rendered back. Your phone number and street address are stripped before any model sees the text. Without an account nothing is stored at all — close the tab and it is gone. With one, it is kept until you delete it or ninety days pass since your last visit, whichever comes first.',
+  },
+  {
+    q: 'Can the employer tell I used this?',
+    a: 'There is nothing to tell. What you download is your own CV, in a layout that parses cleanly, with wording you accepted line by line. We do not write claims into it — that is enforced in code, not asked for in a prompt.',
+  },
+  {
+    q: 'Do I have to pay?',
+    a: 'No. Upload, correct, and download without an account and without paying. A paid plan adds the larger model, all sixty designs and CVs remembered between visits — and it is not open yet.',
+  },
+  {
+    q: 'What does "a CV screening software can read" actually mean?',
+    a: 'Employers run your file through software that turns it back into fields before a person sees it. We do the same thing to what we produce, with an independent parser, and check every field came back in the right order. A design that loses one does not ship.',
+  },
+  {
+    q: 'What can you read?',
+    a: 'PDF, Word (.doc and .docx), plain text and Markdown. If the file is a scan or a photo of a printout we read it with OCR and tell you it was a scan, because that is when what we read is worth double-checking.',
   },
 ]
 
@@ -159,9 +347,18 @@ function Icon({
     | 'shield'
     | 'lock'
     | 'check'
+    | 'chevron-down'
     | 'arrow-left'
     | 'arrow-right'
     | 'download'
+    | 'file'
+    | 'pencil'
+    | 'person'
+    | 'tag'
+    | 'briefcase'
+    | 'cap'
+    | 'tools'
+    | 'blocked'
   className?: string
 }) {
   const paths: Record<string, React.ReactNode> = {
@@ -179,6 +376,63 @@ function Icon({
       </>
     ),
     check: <path d="m5 12.5 4.5 4.5L19 7" />,
+    'chevron-down': <path d="m6 9 6 6 6-6" />,
+    /*
+      One family, one stroke, one 24-grid — all of these are drawn here rather than imported.
+      `lucide-react` is in the tree but only inside the vendored calendar, and a second icon family on
+      the same screen is the slop the audit sweeps for: two stroke weights and two corner radii read
+      as two products stitched together.
+    */
+    file: (
+      <>
+        <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" />
+        <path d="M14 3v5h5" />
+      </>
+    ),
+    pencil: (
+      <>
+        <path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3Z" />
+        <path d="m15 6 3 3" />
+      </>
+    ),
+    person: (
+      <>
+        <circle cx="12" cy="8" r="3.5" />
+        <path d="M5 20a7 7 0 0 1 14 0" />
+      </>
+    ),
+    tag: (
+      <>
+        <path d="M4 12V5a1 1 0 0 1 1-1h7l8 8-8 8-8-8Z" />
+        <circle cx="8.5" cy="8.5" r="1.2" />
+      </>
+    ),
+    briefcase: (
+      <>
+        <rect x="3" y="7" width="18" height="13" rx="2" />
+        <path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" />
+        <path d="M3 12h18" />
+      </>
+    ),
+    cap: (
+      <>
+        <path d="m12 4 9 4.5-9 4.5-9-4.5L12 4Z" />
+        <path d="M7 11v4.5c0 1.4 2.2 2.5 5 2.5s5-1.1 5-2.5V11" />
+      </>
+    ),
+    tools: (
+      <>
+        <path d="M14.5 6.5a3.5 3.5 0 0 0 4.6 4.6L21 13l-8 8-2-2 8-8-1.9-1.9a3.5 3.5 0 0 0-4.6-4.6L14.5 6.5Z" />
+        <path d="m6 6 3 3" />
+      </>
+    ),
+    /** The left column of the comparison: the shape of "this cannot be checked", never a red cross. */
+    blocked: (
+      <>
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="m8 12h8" />
+      </>
+    ),
     'arrow-left': <path d="M19 12H5m0 0 6-6m-6 6 6 6" />,
     'arrow-right': <path d="M5 12h14m0 0-6-6m6 6-6 6" />,
     download: <path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14" />,
@@ -192,6 +446,11 @@ function Icon({
       strokeWidth="1.6"
       strokeLinecap="round"
       strokeLinejoin="round"
+      /*
+        Normalises every path to a length of 1 so `.draw-in`'s dash maths is the same whatever it is
+        pointed at, instead of depending on the measured length of one particular tick.
+      */
+      pathLength={1}
       className={className}
     >
       {paths[name]}
@@ -243,6 +502,35 @@ function PlanChip({ plan }: { plan?: string }) {
     <span className="inline-flex h-6 items-center rounded-full bg-signal px-2.5 text-[11px] font-bold uppercase tracking-[0.06em] text-white">
       Pro
     </span>
+  )
+}
+
+/**
+ * The header's right-hand cluster: what plan you are on, which model reads your CV, and the door.
+ *
+ * All three are facts about the session rather than steps in editing a document, so they belong on
+ * every screen. Before this, signing in lived behind `?panel=account` — a tab that only exists once a
+ * CV is loaded — so the landing page, which is where a returning customer arrives, had no way in at
+ * all. See `src/components/topbar-controls.tsx` for why the locked model option is drawn rather than
+ * hidden.
+ */
+function SessionControls({
+  consent,
+  onOpenAccount,
+}: {
+  consent: ConsentState
+  onOpenAccount?: () => void
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <PlanChip plan={consent.plan} />
+      <ModelMenu
+        provider={consent.provider}
+        choice={consent.choice}
+        onDecide={consent.decide}
+      />
+      <AccountMenu plan={consent.plan} onOpenAccount={onOpenAccount} />
+    </div>
   )
 }
 
@@ -405,11 +693,32 @@ function Segmented<T extends string>({
   onChange,
 }: {
   label: string
-  options: ReadonlyArray<{ id: T; label: string; hint?: string }>
+  /**
+   * `disabled` renders the option **visibly** and refuses the click.
+   *
+   * Hiding an option a person cannot use would answer "what am I missing?" with silence; showing it
+   * greyed answers it, and the hint says what would unlock it. Used by the processing control, where
+   * an anonymous visitor must be able to see that a second model exists without being offered a
+   * choice the server would quietly overrule (ADR-023).
+   */
+  options: ReadonlyArray<{
+    id: T
+    label: string
+    hint?: string
+    disabled?: boolean
+  }>
   value: T
   onChange: (id: T) => void
 }) {
-  const chosen = options.find((option) => option.id === value)
+  /*
+    The hint follows the chosen option, except when an option is disabled — then its hint is the more
+    useful one, because "why can I not pick that?" is the question actually being asked.
+  */
+  const blocked = options.find((option) => option.disabled === true)
+  const chosen =
+    blocked?.hint !== undefined
+      ? blocked
+      : options.find((option) => option.id === value)
   return (
     <fieldset className="flex min-w-0 flex-col gap-1">
       <legend className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-soft">
@@ -418,11 +727,13 @@ function Segmented<T extends string>({
       <div className="flex flex-wrap gap-0.5 rounded-full bg-band p-0.5">
         {options.map((option) => {
           const on = option.id === value
+          const off = option.disabled === true
           return (
             <button
               key={option.id}
               type="button"
               aria-pressed={on}
+              disabled={off}
               /*
                 Four signals on the chosen segment, as DESIGN.md requires: surface, border, text colour
                 and weight. No check mark — in a control this tight the glyph costs more width than it
@@ -430,11 +741,16 @@ function Segmented<T extends string>({
               */
               className={[
                 'rounded-full px-3 py-1.5 text-[13px] transition-colors',
-                on
-                  ? 'border border-signal-edge bg-ground font-semibold text-signal'
-                  : 'border border-transparent font-medium text-ink-soft hover:text-ink',
+                off
+                  ? 'cursor-not-allowed border border-transparent font-medium text-ink-faint'
+                  : on
+                    ? 'border border-signal-edge bg-ground font-semibold text-signal'
+                    : 'border border-transparent font-medium text-ink-soft hover:text-ink',
               ].join(' ')}
-              onClick={() => onChange(option.id)}
+              onClick={() => {
+                if (off) return
+                onChange(option.id)
+              }}
             >
               {option.label}
             </button>
@@ -478,10 +794,22 @@ function PanelTabs({
   badges: Partial<Record<PanelId, { text: string; tone: 'signal' | 'caution' }>>
 }) {
   return (
+    /*
+      One row, always — scrolling rather than wrapping.
+
+      `flex-wrap` put four tabs on the first line and stranded "Account" alone and centred beneath
+      them at 375px, which reads as a rendering fault rather than a fifth tab. A tab strip is a single
+      axis by definition: the fix is to let it scroll, not to let it fold. `scrollbar-none` because a
+      visible bar under a pill row is noise on the one viewport with the least room for it, and the
+      partially-cut last tab is itself the affordance that says "there is more this way".
+
+      `min-w-0` on the buttons, and `flex-1` only from `sm` up: below that they take their natural
+      width so the labels never truncate; above it they share the row as before, where they fit.
+    */
     <div
       role="tablist"
       aria-label="CV panels"
-      className="flex shrink-0 flex-wrap gap-1 rounded-full bg-band p-1"
+      className="scrollbar-none flex shrink-0 gap-1 overflow-x-auto rounded-full bg-band p-1"
     >
       {PANELS.map((panel) => {
         const on = panel.id === active
@@ -494,7 +822,7 @@ function PanelTabs({
             aria-selected={on}
             onClick={() => onChange(panel.id)}
             className={[
-              'flex flex-1 items-center justify-center gap-1.5 rounded-full px-2.5 py-1.5 text-[13px] transition-colors',
+              'flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1.5 text-[13px] transition-colors sm:flex-1 sm:shrink',
               on
                 ? 'border border-signal-edge bg-ground font-semibold text-signal'
                 : 'border border-transparent font-medium text-ink-soft hover:text-ink',
@@ -604,6 +932,8 @@ function HunterReady() {
         warnings: [],
         method: 'rules',
         ocr: false,
+        // A stored CV was a file once, whatever it was authored from. It is not being authored now.
+        origin: 'file',
       })
       setSavedResumeId(id)
     },
@@ -632,6 +962,7 @@ function HunterReady() {
         warnings: copy.warnings,
         method: copy.method,
         ocr: copy.ocr,
+        origin: copy.origin ?? 'file',
       })
       if (copy.savedResumeId !== undefined) setSavedResumeId(copy.savedResumeId)
       return
@@ -688,6 +1019,7 @@ function HunterReady() {
       warnings: loaded.warnings,
       method: loaded.method,
       ocr: loaded.ocr,
+      origin: loaded.origin,
       ...(savedResumeId === undefined ? {} : { savedResumeId }),
     })
   }, [loaded, savedResumeId])
@@ -840,6 +1172,7 @@ function HunterReady() {
                 ? 'local'
                 : 'llm',
           ocr: payload.ocr === true,
+          origin: 'file',
         })
       } catch {
         setError(
@@ -1172,6 +1505,31 @@ function HunterReady() {
     [loaded, consent.choice],
   )
 
+  /**
+   * Start with nothing but a name.
+   *
+   * Until now this product could only *correct* a CV, which quietly excluded the person who most needs
+   * one: a first job, a return to work after years out, a trade where nobody ever wrote one down. The
+   * editor has done full add/remove on every section since v0.5 and the custom sections take any
+   * heading a life needs — so the feature was already built and only the door was missing.
+   *
+   * It asks for the name because the schema requires one (`fullName` is `min(1)`, correctly: a document
+   * with no name on it is not a CV), and asking beats seeding "Your name" and hoping it gets replaced
+   * before somebody in a hurry prints it.
+   */
+  const startBlank = useCallback((fullName: string) => {
+    const resume = blankResume(fullName)
+    setLoaded({
+      resume,
+      original: resume,
+      provenance: [],
+      warnings: [],
+      method: 'rules',
+      ocr: false,
+      origin: 'blank',
+    })
+  }, [])
+
   const loadSample = useCallback(async (id: string) => {
     setBusy(true)
     setError(undefined)
@@ -1186,6 +1544,7 @@ function HunterReady() {
           warnings: [],
           method: 'rules',
           ocr: false,
+          origin: 'file',
         })
       }
     } catch {
@@ -1247,78 +1606,120 @@ function HunterReady() {
           <div aria-hidden className="aurora" />
           <StepBar />
           <div className="relative z-[1] flex flex-1 items-center justify-center px-4 py-12 sm:px-6">
-            <div
-              className="rise flex w-full max-w-md flex-col items-center gap-6 text-center"
-              role="status"
-              aria-live="polite"
-            >
-              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-signal-wash text-signal">
-                <Spinner className="h-7 w-7" />
-              </span>
+            <div className="rise flex w-full max-w-lg flex-col gap-6">
+              {/*
+                Left-aligned, not centred, and that is the whole redesign in one decision.
 
-              <div className="flex flex-col gap-3">
+                The old screen centred a headline, a big spinner and an indeterminate bar above a
+                left-aligned list of stages — four axes fighting, and the bar read as a progress meter
+                stuck at zero rather than as motion. DESIGN.md forbids "a percentage we were not given";
+                a thin line with a dot at its left end is that percentage drawn anyway. The stages ARE
+                the progress, so they get the weight and everything else lines up behind them.
+              */}
+              <div className="flex flex-col gap-2">
                 <h1 className="text-display text-balance text-ink">
                   Reading your CV
                   <span className="text-signal">…</span>
                 </h1>
+                {/*
+                  The shape of the wait, never a duration — DESIGN.md's rule, which the old copy broke.
+                  "A few seconds" was measured at fifty on the production box, and a promise that has
+                  already expired is how a working request starts looking broken.
+                */}
                 <p className="text-lead text-ink-soft">
-                  A few seconds — longer for a scan or a photo of a printed
-                  page.
+                  However long your document needs. A scan or a photo takes the
+                  longest, and nothing is lost while you wait.
                 </p>
               </div>
 
-              <div
-                aria-hidden
-                className="h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-band"
-              >
-                <div
-                  data-motion="essential"
-                  className="indeterminate h-full w-1/3 rounded-full bg-signal"
-                />
-              </div>
-
               {/*
-                The narrated wait. Each stage the server reports appears here as it starts — a tick when
-                it finishes, a spinner and a live page/attempt counter while it runs. The labels come
-                from the pipeline itself (src/lib/progress.ts), so this list cannot drift from what the
-                code actually does the way a hardcoded "step 2 of 4" would.
+                The work itself, as an object on the page (DESIGN.md's two-layer elevation): one row per
+                stage the server has actually reported, a tick when it finishes, a spinner and a live
+                counter on the one running. The labels come from the pipeline (src/lib/progress.ts), so
+                this list cannot drift from what the code does the way a hardcoded "step 2 of 4" would —
+                and it never claims a step that has not started.
               */}
-              {stages.length > 0 && (
-                <ol className="flex w-full max-w-xs flex-col gap-1.5 text-left">
-                  {stages.map((stage, index) => (
-                    <li
-                      key={index}
-                      className="flex items-center gap-2 text-[13px]"
-                    >
+              <ol
+                className="card flex flex-col divide-y divide-hairline"
+                role="status"
+                aria-live="polite"
+              >
+                {(stages.length > 0
+                  ? stages
+                  : [
+                      {
+                        label: 'Sending your file',
+                        done: false,
+                        at: Date.now(),
+                        detail: undefined,
+                      },
+                    ]
+                ).map((stage, index) => (
+                  <li
+                    key={index}
+                    className="flex items-start gap-3 px-4 py-3.5"
+                  >
+                    <span className="mt-px flex h-5 w-5 shrink-0 items-center justify-center">
                       {stage.done ? (
                         <svg
                           aria-hidden
                           viewBox="0 0 24 24"
                           fill="none"
                           stroke="currentColor"
-                          strokeWidth="2.4"
+                          strokeWidth="2.6"
                           strokeLinecap="round"
-                          className="h-3.5 w-3.5 shrink-0 text-affirm"
+                          className="h-4 w-4 text-affirm"
                         >
                           <path d="m5 12.5 4.5 4.5L19 7" />
                         </svg>
                       ) : (
-                        <Spinner className="h-3 w-3 shrink-0 text-signal" />
+                        <Spinner className="h-4 w-4 text-signal" />
                       )}
+                    </span>
+
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span
                         className={
-                          stage.done ? 'text-ink-faint' : 'text-ink-soft'
+                          stage.done
+                            ? 'text-[14px] text-ink-faint'
+                            : 'text-[14px] font-semibold text-ink'
                         }
                       >
                         {stage.label}
-                        {stage.detail === undefined ? '' : ` — ${stage.detail}`}
                       </span>
-                    </li>
-                  ))}
-                </ol>
-              )}
+                      {stage.detail !== undefined && (
+                        <span className="text-meta text-ink-soft">
+                          {stage.detail}
+                        </span>
+                      )}
+                    </span>
 
-              <p className="text-meta text-ink-soft">
+                    {/*
+                      Seconds on the running stage — measured, never predicted, and the difference
+                      matters: an elapsed count is a fact about what has happened, where an estimate is
+                      a promise about what has not. It answers the only question a long wait provokes
+                      ("is this stuck?") without pretending to know the end.
+
+                      `aria-hidden` because the row is inside a live region: a screen reader announcing
+                      a new number every second would bury the stage name it exists to convey.
+                    */}
+                    {!stage.done && (
+                      <span
+                        aria-hidden
+                        className="tally mt-0.5 shrink-0 text-meta text-ink-faint"
+                      >
+                        {Math.max(
+                          0,
+                          Math.round((Date.now() - stage.at) / 1000),
+                        )}
+                        s
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ol>
+
+              <p className="text-meta leading-relaxed text-ink-soft">
                 Your phone number and street address were removed before the
                 text was sent.
               </p>
@@ -1333,12 +1734,21 @@ function HunterReady() {
         {picker.input}
         <StepBar
           right={
-            <a
-              href="/privacy"
-              className="text-meta font-medium text-ink-soft transition-colors hover:text-signal"
-            >
-              Privacy
-            </a>
+            <div className="flex items-center gap-3">
+              <a
+                href="/privacy"
+                className="hidden text-meta font-medium text-ink-soft transition-colors hover:text-signal sm:inline"
+              >
+                Privacy
+              </a>
+              {/*
+                The landing page is where a returning customer arrives, and until now it was the one
+                screen with no way to sign in — the form lived in a tab that only exists after an
+                upload. So the person who had already saved a CV had to upload another one to find
+                the door back to it.
+              */}
+              <SessionControls consent={consent} />
+            </div>
           }
         />
 
@@ -1436,10 +1846,16 @@ function HunterReady() {
                   className="rise flex flex-wrap gap-x-5 gap-y-2"
                   style={{ animationDelay: '280ms' }}
                 >
+                  {/*
+                    Proof beside the promise, which is the one structural thing every competitor does
+                    in the hero and we did not (docs/12). "Free to try" was a price, not evidence, and
+                    it is said twice more further down the page; the parse check is the claim nobody
+                    else in this category makes about *your* file, so it belongs in the first viewport.
+                  */}
                   {[
+                    'Checked by reading the PDF back',
                     'No account needed',
                     'PDF, Word, or a photo',
-                    'Free to try',
                   ].map((item) => (
                     <li
                       key={item}
@@ -1471,96 +1887,166 @@ function HunterReady() {
             </div>
           </section>
 
-          {/* How it works — three steps, because the product is three steps and saying so removes
-              the main reason somebody hesitates: not knowing how long this will take. */}
-          <section className="border-b border-hairline bg-band">
-            <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
-              <Reveal>
-                <h2 className="max-w-2xl text-display text-balance text-ink">
-                  Three steps, about five minutes
-                  <span className="text-signal">.</span>
-                </h2>
-              </Reveal>
-              <div className="mt-10 grid gap-4 md:grid-cols-3">
-                {STEPS_HOW.map((step, index) => (
-                  <Reveal key={step.title} delay={index * 90}>
-                    <div className="card hover-lift flex h-full flex-col gap-3 p-6">
-                      <span className="tally flex h-9 w-9 items-center justify-center rounded-full bg-signal text-[15px] font-bold text-white">
-                        {index + 1}
-                      </span>
-                      <h3 className="text-title text-ink">{step.title}</h3>
-                      <p className="text-[14px] leading-relaxed text-ink-soft">
-                        {step.body}
-                      </p>
-                    </div>
-                  </Reveal>
-                ))}
-              </div>
-            </div>
-          </section>
+          {/*
+            How it works. A numbered rail, not three cards in a row.
 
-          {/* The upload section proper: the drop target, the formats, the consent sentence, and the
-              samples — everything that needs room to explain itself. */}
-          <section id="upload" className="border-b border-hairline bg-ground">
-            <div className="mx-auto w-full max-w-xl px-4 py-16 sm:px-6 lg:py-20">
+            Two card rows ran back to back on this page — this one and the proof section below — so
+            the eye met the identical rhythm twice and read neither. Neither needed a box either:
+            DESIGN.md gives a card an elevation, and elevation says "this sits above that", which is
+            false of three equal steps. Hairlines group them for nothing.
+
+            The heading holds the left column and stays put while the steps scroll past it, which is
+            what a heading is for when its list is long enough to leave it behind.
+          */}
+          <section className="border-b border-hairline bg-band">
+            <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20 lg:px-8 lg:py-16">
               <Reveal>
-                <div className="mb-8 flex flex-col gap-3 text-center">
-                  <h2 className="text-display text-balance text-ink">
-                    Start with the CV you already have
+                <div className="flex flex-col gap-4 lg:sticky lg:top-24">
+                  <span className="eyebrow">How it goes</span>
+                  <h2 className="text-section text-balance text-ink">
+                    Three steps, about five minutes
                     <span className="text-signal">.</span>
                   </h2>
-                  <p className="text-lead text-ink-soft">
-                    Even if it is years old, in Word, or a photo of a printed
-                    page.
+                  <p className="max-w-xs text-[15px] leading-relaxed text-ink-soft">
+                    The commonest reason people put this off is not doubting it
+                    works — it is not knowing whether they are starting a
+                    two-minute job or a two-hour one.
                   </p>
                 </div>
               </Reveal>
 
-              <Reveal delay={80}>
-                <Dropzone onFile={upload} onPick={picker.open} busy={busy} />
+              <ol className="flex flex-col divide-y divide-hairline-strong border-y border-hairline-strong">
+                {STEPS_HOW.map((step, index) => (
+                  <Reveal key={step.title} delay={index * 80}>
+                    <li className="row-nudge grid grid-cols-[2.5rem_1fr] gap-x-5 gap-y-1.5 py-6 sm:grid-cols-[3.5rem_1fr] sm:py-7">
+                      <span className="row-marker flex items-center gap-2 text-ink-faint">
+                        <span className="tally text-[13px] font-bold leading-6 sm:text-[15px]">
+                          {String(index + 1).padStart(2, '0')}
+                        </span>
+                      </span>
+                      <h3 className="flex items-center gap-2.5 text-title text-ink">
+                        <Icon
+                          name={step.icon}
+                          className="h-[18px] w-[18px] shrink-0 text-signal"
+                        />
+                        {step.title}
+                      </h3>
+                      <p className="col-start-2 max-w-[58ch] text-[14px] leading-relaxed text-ink-soft">
+                        {step.body}
+                      </p>
+                    </li>
+                  </Reveal>
+                ))}
+              </ol>
+            </div>
+          </section>
+
+          {/*
+            The other way in, and now the only thing this section does.
+
+            It used to be the upload section, and it had stopped making sense: a drop target, a
+            consent sentence, a from-scratch prompt and three sample buttons, in a stack — four
+            offers competing in one column, and two of them (upload, samples) repeats of the hero
+            twenty lines above. One section, one decision.
+
+            Uploading did not move; it stayed in the hero where it belongs, and `Dropzone` is
+            untouched in `src/components/dropzone.tsx` for wherever it earns its place next. What
+            leaves the page with it is the drag-and-drop target — the picker button remains.
+
+            Asymmetric on purpose: the invitation and its one field on the left, and on the right the
+            shape of what is about to be filled in. That column is not decoration. The question
+            somebody asks before starting a form from nothing is "how much is this going to ask of
+            me", and the honest answer is a short list where most of it is optional.
+          */}
+          <section id="upload" className="border-b border-hairline bg-ground">
+            <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16 lg:px-8 lg:py-24">
+              <Reveal>
+                <div className="flex max-w-lg flex-col gap-5">
+                  <span className="eyebrow">No CV yet</span>
+                  <h2 className="text-display text-balance text-ink">
+                    Write one from nothing
+                    <span className="text-signal">.</span>
+                  </h2>
+                  <p className="text-lead text-ink-soft">
+                    A first job, a return to work after years out, a trade where
+                    nobody ever wrote one down. Same editor, same checked
+                    document at the end — it just starts empty.
+                  </p>
+                  <StartFromScratch onStart={startBlank} busy={busy} />
+                </div>
               </Reveal>
 
-              <Reveal delay={140}>
-                <div className="mt-8 flex flex-col items-center gap-2.5">
-                  <span className="text-meta text-ink-soft">
-                    Or look at a finished example first
+              <Reveal delay={90}>
+                <div className="flex flex-col gap-3 lg:pt-2">
+                  <span className="text-meta font-semibold uppercase tracking-[0.08em] text-ink-faint">
+                    What it will ask for
                   </span>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    {SAMPLES.map((sample) => (
-                      <button
-                        key={sample.id}
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void loadSample(sample.id)}
-                        className="btn btn-quiet px-3.5 py-1.5 text-[13px]"
+                  <ul className="flex flex-col divide-y divide-hairline border-y border-hairline">
+                    {BLANK_SECTIONS.map((item) => (
+                      <li
+                        key={item.label}
+                        className="row-nudge flex items-center justify-between gap-4 py-3"
                       >
-                        {sample.label}
-                      </button>
+                        <span className="flex items-center gap-3 text-[15px] font-medium text-ink">
+                          <Icon
+                            name={item.icon}
+                            className="row-marker h-[18px] w-[18px] shrink-0 text-ink-faint"
+                          />
+                          {item.label}
+                        </span>
+                        <span className="text-meta text-ink-soft">
+                          {item.note}
+                        </span>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
+                  <p className="text-meta leading-relaxed text-ink-soft">
+                    Add sections of your own for anything this list does not
+                    cover — courses, references, licences, publications.
+                  </p>
                 </div>
               </Reveal>
             </div>
           </section>
 
-          <section className="bg-band">
-            <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
+          {/*
+            The proof section, as a ledger.
+
+            This is the page's whole argument — everyone in this category says "ATS-friendly" and
+            only this one checks the file it just produced (docs/12) — and it was three identical
+            boxes with a circled icon each, indistinguishable at a glance from the three steps above.
+
+            Now each claim carries the mechanism that enforces it on the same line, in plain words
+            rather than a file path: the audience is every sector, not this one, and a nurse does not
+            want a source reference. It is the one place on the page where saying HOW is more
+            persuasive than saying WHAT.
+          */}
+          <section className="border-b border-hairline bg-band">
+            <div className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
               <Reveal>
-                <h2 className="max-w-2xl text-display text-balance text-ink">
+                <span className="eyebrow">Evidence</span>
+                <h2 className="mt-4 max-w-2xl text-section text-balance text-ink">
                   Three things we can prove, not just say
                   <span className="text-signal">.</span>
                 </h2>
               </Reveal>
-              <div className="mt-10 grid gap-4 md:grid-cols-3">
+              <div className="mt-10 flex flex-col divide-y divide-hairline border-y border-hairline">
                 {MECHANISMS.map((item, index) => (
-                  <Reveal key={item.title} delay={index * 90}>
-                    <div className="card hover-lift flex h-full flex-col gap-3 p-6">
-                      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-signal-wash text-signal">
-                        <Icon name={item.icon} />
-                      </span>
-                      <h3 className="text-title text-ink">{item.title}</h3>
-                      <p className="text-[14px] leading-relaxed text-ink-soft">
-                        {item.body}
+                  <Reveal key={item.title} delay={index * 80}>
+                    <div className="row-nudge grid gap-x-10 gap-y-3 py-7 lg:grid-cols-[1.15fr_0.85fr] lg:py-8">
+                      <div className="flex gap-4">
+                        <span className="row-marker mt-0.5 shrink-0 text-ink-faint">
+                          <Icon name={item.icon} className="h-5 w-5" />
+                        </span>
+                        <div className="flex flex-col gap-2">
+                          <h3 className="text-title text-ink">{item.title}</h3>
+                          <p className="max-w-[52ch] text-[14px] leading-relaxed text-ink-soft">
+                            {item.body}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-[14px] font-medium leading-relaxed text-ink lg:pt-1 lg:text-right">
+                        {item.how}
                       </p>
                     </div>
                   </Reveal>
@@ -1569,39 +2055,239 @@ function HunterReady() {
             </div>
           </section>
 
-          {/* One last door, for the reader who scrolled the whole page before deciding. */}
-          <section className="border-t border-hairline bg-ground">
-            <div className="mx-auto w-full max-w-6xl px-4 py-16 text-center sm:px-6 lg:px-8">
+          {/*
+            The cost of doing it yourself, paired with the answer to each line of it.
+
+            Two boxes side by side made the reader do the matching, and most will not: the left list
+            and the right list were about the same four things and nothing said so. Row by row, each
+            problem meets its own answer, and the boxes go — a card promises elevation, and these two
+            columns sit on the same plane by definition.
+
+            The left column deliberately does not exaggerate. "Your CV probably parses fine" is in the
+            lead, because for most people it does, and a page that opens by telling somebody their
+            document is broken has already lied to the majority of its readers.
+
+            **This is the page's one dark band, and its only Hero-sized heading after the hero.** Seven
+            sections alternating between two greys is a rhythm with no accent in it — the reader has no
+            way to tell which one the product is actually about. Everything else on the page is a
+            feature or a reassurance; this is the argument. It gets the tonal event, and nothing else
+            may have one (see `.band-ink`).
+          */}
+          <section className="band-ink">
+            <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6 lg:px-8 lg:py-32">
               <Reveal>
-                <div className="flex flex-col items-center gap-5">
+                <span className="eyebrow text-white">The problem</span>
+                <h2 className="mt-5 max-w-3xl text-hero text-balance text-white">
+                  What you cannot check on your own
+                  <span className="text-signal-edge">.</span>
+                </h2>
+                <p className="on-ink-soft mt-6 max-w-2xl text-lead">
+                  Your CV probably parses fine. The problem is that there is no
+                  way to find out before you send it — and the ways it fails are
+                  invisible in the document you are looking at.
+                </p>
+              </Reveal>
+
+              <div className="mt-14 flex flex-col divide-y divide-white/12 border-y border-white/12">
+                <div className="hidden gap-10 py-3 lg:grid lg:grid-cols-2">
+                  <span className="on-ink-faint text-[12px] font-semibold uppercase tracking-[0.1em]">
+                    On your own
+                  </span>
+                  <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-affirm-wash">
+                    Here
+                  </span>
+                </div>
+                {COMPARISON.map((row, index) => (
+                  <Reveal key={row.here} delay={index * 70}>
+                    <div className="grid gap-3 py-7 lg:grid-cols-2 lg:gap-10">
+                      {/* 72% white, not the 45% the column labels use: this column recedes by size
+                          and by position, and it still has to be read. The glyph mirrors the tick
+                          opposite it, so the pairing is visible before either line is. */}
+                      <p className="on-ink-soft flex max-w-[52ch] gap-2.5 text-[14px] leading-relaxed">
+                        <Icon
+                          name="blocked"
+                          className="on-ink-faint mt-0.5 h-4 w-4 shrink-0"
+                        />
+                        {row.alone}
+                      </p>
+                      <p className="flex max-w-[52ch] gap-2.5 text-[16px] leading-relaxed text-white">
+                        <Icon
+                          name="check"
+                          className="draw-in mt-1 h-4 w-4 shrink-0 text-affirm-wash"
+                        />
+                        {row.here}
+                      </p>
+                    </div>
+                  </Reveal>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/*
+            The questions somebody asks before they trust a stranger with their employment history.
+
+            Every competitor has this section and every one of them uses it to handle objections about
+            *billing*. Ours answers the three things a person actually hesitates over — where the file
+            goes, whether the employer can tell, and whether they have to pay — because those are the
+            ones that stop somebody starting, and a page that dodges them is asking for trust it has
+            not offered anything for.
+
+            Five identical white pills in a narrow column, with the right half of the page empty, was
+            a wall of sameness with nothing to aim at. The heading takes that empty half; the
+            questions are a plain divided list, because a question is a line of text and does not need
+            a container to be one.
+
+            `<details>` rather than a JS accordion: it works before hydration, it is keyboard-operable
+            for free, and find-in-page can reach inside a closed one.
+          */}
+          <section className="border-b border-hairline bg-ground">
+            <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20 lg:px-8 lg:py-16">
+              <Reveal>
+                <div className="flex flex-col gap-4 lg:sticky lg:top-24">
+                  <span className="eyebrow">Straight answers</span>
+                  <h2 className="text-section text-balance text-ink">
+                    Before you start
+                    <span className="text-signal">.</span>
+                  </h2>
+                  <p className="max-w-xs text-[15px] leading-relaxed text-ink-soft">
+                    The three that actually stop people, answered straight.
+                    Anything still unclear is worth an email.
+                  </p>
+                </div>
+              </Reveal>
+
+              <div className="flex flex-col divide-y divide-hairline border-y border-hairline">
+                {FAQ.map((item, index) => (
+                  <Reveal key={item.q} delay={index * 60}>
+                    <details className="group py-5">
+                      <summary className="flex cursor-pointer list-none items-baseline justify-between gap-6 text-[16px] font-semibold text-ink transition-colors hover:text-signal">
+                        {item.q}
+                        <Icon
+                          name="chevron-down"
+                          className="mt-1 h-4 w-4 shrink-0 text-ink-faint transition-transform duration-200 group-open:rotate-180"
+                        />
+                      </summary>
+                      <p className="mt-3 max-w-[68ch] text-[14px] leading-relaxed text-ink-soft">
+                        {item.a}
+                      </p>
+                    </details>
+                  </Reveal>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* One last door, for the reader who scrolled the whole page before deciding.
+
+              On Signal Wash rather than white: it is the only section whose job is a single action,
+              and the accent's own tint says so without a second button or a louder word. It is also
+              the fourth ground on a page that had two, which is what stops the last screen before the
+              footer reading as more of the same. */}
+          <section className="bg-signal-wash">
+            <div className="mx-auto w-full max-w-6xl px-4 py-20 text-center sm:px-6 lg:px-8 lg:py-24">
+              <Reveal>
+                <div className="flex flex-col items-center gap-6">
                   <h2 className="max-w-xl text-display text-balance text-ink">
                     Ready to see what the software sees
                     <span className="text-signal">?</span>
                   </h2>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={picker.open}
-                    className="btn btn-primary px-7 py-3.5 text-[16px]"
-                  >
-                    Add your CV
-                    <Icon name="arrow-right" className="h-[18px] w-[18px]" />
-                  </button>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={picker.open}
+                      className="btn btn-primary px-7 py-3.5 text-[16px]"
+                    >
+                      Add your CV
+                      <Icon name="arrow-right" className="h-[18px] w-[18px]" />
+                    </button>
+                    <a
+                      href="#upload"
+                      className="btn btn-quiet bg-ground px-6 py-3.5 text-[15px]"
+                    >
+                      Or write one from nothing
+                    </a>
+                  </div>
                 </div>
               </Reveal>
             </div>
           </section>
         </main>
 
+        {/*
+          A footer somebody can find something in.
+
+          Two links was not a footer, it was the end of the page. Every competitor's carries the four
+          things a person looks for before they trust a stranger with their employment history, and
+          the absence of them reads as a site that has not thought about being answerable to anyone.
+
+          Nothing here is invented: it links only to pages that exist, and it says out loud that this
+          product has no company behind it yet, which is a fact a reader is entitled to before they
+          upload. When there is one, this is where its name goes.
+        */}
         <footer className="border-t border-hairline bg-band">
-          <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-6 sm:px-6">
-            <Wordmark className="text-[15px]" />
-            <a
-              href="/privacy"
-              className="text-meta font-medium text-signal underline decoration-signal/30 underline-offset-4 hover:decoration-signal"
-            >
-              What we do with your data
-            </a>
+          <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1.4fr_1fr_1fr] lg:px-8">
+            <div className="flex flex-col gap-3">
+              <Wordmark className="text-[17px]" />
+              <p className="max-w-xs text-[13px] leading-relaxed text-ink-soft">
+                A CV that automated screening can actually read — checked by
+                parsing it back, not by claiming it parses.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2.5">
+              <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
+                The product
+              </span>
+              <button
+                type="button"
+                onClick={picker.open}
+                className="self-start text-[13px] text-ink-soft transition-colors hover:text-signal"
+              >
+                Add your CV
+              </button>
+              <button
+                type="button"
+                onClick={() => void loadSample('nurse-senior')}
+                className="self-start text-[13px] text-ink-soft transition-colors hover:text-signal"
+              >
+                See a finished example
+              </button>
+              <a
+                href="#upload"
+                className="text-[13px] text-ink-soft transition-colors hover:text-signal"
+              >
+                What we can read
+              </a>
+            </div>
+
+            <div className="flex flex-col gap-2.5">
+              <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
+                Straight answers
+              </span>
+              <a
+                href="/privacy"
+                className="text-[13px] text-ink-soft transition-colors hover:text-signal"
+              >
+                What we do with your data
+              </a>
+              <a
+                href="mailto:hello@hunterready.dev"
+                className="text-[13px] text-ink-soft transition-colors hover:text-signal"
+              >
+                Ask us something
+              </a>
+            </div>
+          </div>
+          <div className="border-t border-hairline">
+            <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
+              <p className="text-meta leading-relaxed text-ink-faint">
+                HunterReady is in development and free to use. There is no
+                company behind it yet and no paid plan open — when there is,
+                both will be named here.
+              </p>
+            </div>
           </div>
         </footer>
       </div>
@@ -1692,17 +2378,27 @@ function HunterReady() {
                         UX hat: their {workIndex, highlightIndex} coordinates point at pre-reorder
                         positions, so accepting one after the fit would overwrite the WRONG bullet.
                         Stale advice that misfires is worse than asking again.
-
-                        The panel stays on Job on purpose: the gap report, the score and the move list
-                        all recompute against the fitted CV the moment state lands, so the person
-                        watches their own match improve — the move list collapsing to "Nothing worth
-                        moving. Your CV already leads with what this job asks for" IS the revalidation,
-                        visible. The fit estimate and the measured page count re-run on their own.
                       */
                       setRewrites(undefined)
                       setAccepted(new Set())
                       setRewriteNote(undefined)
                       setComparing(true)
+                      /*
+                        And come back to the document, because targeting is a separate top-level view
+                        that has no comparison surface in it.
+
+                        Leaving the person there was the bug the audit caught: `setComparing(true)`
+                        set the state and the URL, `diffResumes` had correctly found the changes, and
+                        none of it could be drawn — the only visible answer to "fit my CV" was a move
+                        list collapsing to "Nothing worth moving", which reads as nothing having
+                        happened. (The first diagnosis blamed `diffResumes` for ignoring array order.
+                        It does not; `diffList` detects a reorder. The view was the problem.)
+
+                        The gap report is not lost by leaving: it recomputed against the fitted CV on
+                        the way out, `reading` is still held, and "Back to this job" returns to it
+                        with one click.
+                      */
+                      setTargeting(false)
                     }}
                     onAcceptSummary={(summary) =>
                       setLoaded({
@@ -1970,7 +2666,12 @@ function HunterReady() {
           */
           void navigate({ replace: true, search: {} })
         }}
-        right={<PlanChip plan={consent.plan} />}
+        right={
+          <SessionControls
+            consent={consent}
+            onOpenAccount={() => setPanel('account')}
+          />
+        }
       />
 
       {/*
@@ -1990,14 +2691,25 @@ function HunterReady() {
       <div className="mx-auto flex w-full flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:h-[calc(100vh-3.5rem-2px)] lg:min-h-0 lg:flex-none lg:px-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-col gap-1">
+            {/*
+              Two headings, because there are two situations and one of them was being lied to.
+
+              "Check what we read" is about our reading of a file. Somebody who started from nothing has
+              no file and no reading — telling them to check it, and counting details we were unsure of
+              in a document nobody parsed, is a sentence with no referent.
+            */}
             <h1 className="text-display text-ink">
-              Check what we read
+              {loaded.origin === 'blank'
+                ? 'Write your CV'
+                : 'Check what we read'}
               <span className="text-signal">.</span>
             </h1>
             <p className="text-[14px] text-ink-soft">
-              {toCheck > 0
-                ? `${toCheck} ${toCheck === 1 ? 'detail is' : 'details are'} worth your eyes. Everything else looked clear.`
-                : 'Your dates and job titles are the ones worth a second look.'}
+              {loaded.origin === 'blank'
+                ? 'Fill in what you have. The page on the right is the document as it will arrive.'
+                : toCheck > 0
+                  ? `${toCheck} ${toCheck === 1 ? 'detail is' : 'details are'} worth your eyes. Everything else looked clear.`
+                  : 'Your dates and job titles are the ones worth a second look.'}
             </p>
           </div>
         </div>
@@ -2058,6 +2770,7 @@ function HunterReady() {
                   resume={loaded.resume}
                   provenance={loaded.provenance}
                   ocr={loaded.ocr}
+                  authoring={loaded.origin === 'blank'}
                   /*
                 The provenance comes back on structural edits, and taking it is not optional: adding or
                 removing a row renumbers every index-based path after it, so keeping the old list would
@@ -2385,19 +3098,35 @@ function HunterReady() {
               database, so a deployment that cannot keep an account never offers one.
             */}
               {panel === 'account' && (
-                <Library
-                  resume={loaded.resume}
-                  /*
+                <div className="flex flex-col gap-4">
+                  {/*
+                    The standing answer to "who reads my CV", reachable at any moment.
+
+                    It lives here rather than beside a button because it is a fact about the person,
+                    not about one action — it governs reading, rewriting, targeting, the letter and
+                    the translation alike. The gate still asks once on the first upload; this is
+                    where the answer lives afterwards, which is what makes the gate's promise true.
+                  */}
+                  <ProcessingChoice
+                    provider={consent.provider}
+                    choice={consent.choice}
+                    onDecide={consent.decide}
+                    Control={Segmented}
+                  />
+                  <Library
+                    resume={loaded.resume}
+                    /*
                 A CV opened from the library gets a fresh `original`, because it is a different
                 document. Keeping the old one would compare a stored CV against a file uploaded earlier
                 in the same session, and "before and after" would show a distance nobody travelled.
               */
-                  onLoad={(resume) =>
-                    setLoaded({ ...loaded, resume, original: resume })
-                  }
-                  savedId={savedResumeId}
-                  onSavedIdChange={setSavedResumeId}
-                />
+                    onLoad={(resume) =>
+                      setLoaded({ ...loaded, resume, original: resume })
+                    }
+                    savedId={savedResumeId}
+                    onSavedIdChange={setSavedResumeId}
+                  />
+                </div>
               )}
 
               {/*
@@ -2579,7 +3308,16 @@ function HunterReady() {
                   freshly uploaded CV this is simply not here, and it appears the moment the first
                   correction or accepted suggestion lands.
                 */}
-                {changes.length > 0 && (
+                {/*
+                  And never on a CV written here, whatever the diff says.
+
+                  Found in the browser walk: authoring one from scratch put "5 changes since you
+                  uploaded it" over a blank sheet labelled "the file you already had". Nothing was
+                  uploaded and there is no before — the diff against an empty document is just a list
+                  of everything the person has typed, presented as an achievement over a file that
+                  never existed. Same falsehood as the counter and the empty states, one pane over.
+                */}
+                {changes.length > 0 && loaded.origin !== 'blank' && (
                   <button
                     type="button"
                     aria-pressed={comparing}
@@ -2637,7 +3375,7 @@ function HunterReady() {
               address bar. Ignoring the flag instead is the same rule the search validator follows: an
               impossible request falls back to the ordinary screen rather than to a dead end.
             */}
-            {comparing && changes.length > 0 ? (
+            {comparing && changes.length > 0 && loaded.origin !== 'blank' ? (
               <BeforeAfter
                 original={loaded.original}
                 current={loaded.resume}

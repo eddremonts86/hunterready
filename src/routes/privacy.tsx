@@ -153,22 +153,52 @@ function Privacy() {
           ) : (
             <>
               <p>
-                To read a CV well we send its text to{' '}
+                We send your CV's text to{' '}
                 <strong className="font-semibold text-ink">{provider}</strong>,
-                the company that runs the AI model we use. That is the only
-                place it goes.
+                the company that runs the AI model we use.{' '}
+                <strong className="font-semibold text-ink">
+                  That is the only place it goes
+                </strong>{' '}
+                — never to an advertiser, a recruiter, a job board, or anyone
+                else.
+              </p>
+              {/*
+                The purposes, enumerated, because "to read a CV" stopped being the whole truth the
+                moment this product could also rewrite, aim, write and translate. GDPR asks for the
+                purposes and not only the recipient, and a reader who agreed to "reading" has not
+                agreed to "translating". Anything added to src/optimize/ that calls a model belongs on
+                this list on the same day it ships.
+              */}
+              <p className="text-ink-soft">
+                It goes there for the things you ask for, and only those:
+                reading your file into fields, suggesting stronger wording for a
+                bullet, aiming your summary at an advert you pasted, reading
+                that advert, drafting a cover letter, and translating your
+                document when you switch its language. Nothing runs on its own —
+                each of those starts with a button you press.
               </p>
               <p className="text-ink-soft">
-                Your phone number and street address are removed before the text
-                is sent. They do not help a model read a CV, so they never leave
-                our server.
+                Your phone number and street address are removed{' '}
+                <strong className="font-semibold text-ink">
+                  when we first read your file
+                </strong>
+                . They do not help a model read a CV, so they never leave our
+                server. The later features send only the part they work on — a
+                bullet, your summary, the section being translated — and your
+                phone number, email address and links are not among them.
               </p>
               <p className="text-ink-soft">
-                You can decline. We ask before your first upload, and if you say
-                no, your CV is read by a model running on our own server instead
-                — it never leaves our machines, and no other company sees it. It
-                is a smaller model, so you may have a little more to correct.
-                That option stays available every time.
+                You can decline, and you can change your mind at any time under{' '}
+                <strong className="font-semibold text-ink">Account</strong>. If
+                you say no, everything above runs on a model on our own server
+                instead — it never leaves our machines, and no other company
+                sees it. It is a smaller model, so you may have a little more to
+                correct.
+              </p>
+              <p className="text-ink-soft">
+                Without an account on a paid plan, none of this happens at all:
+                your CV is read here whatever you pick, because the choice needs
+                both a plan and your consent to send anything outward.
               </p>
             </>
           )}

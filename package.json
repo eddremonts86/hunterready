@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:parity": "vitest run --config vitest.parity.config.ts",
+    "test:measure": "HR_MEASURE_REWRITE=1 vitest run rewrite-quality",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/db/migrate.mjs",
     "db:retention": "node scripts/db/retention.mjs",

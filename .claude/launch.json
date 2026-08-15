@@ -2,24 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "//": "Port 3007, not 3000: 3000 is held by the Hermes WhatsApp bridge on this machine. vite invoked directly rather than through `pnpm dev`, for the same reason recorded in builderhunt's config: going through pnpm makes the dev server depend on which pnpm is on PATH, and a global pnpm of a different major refuses to run any script until it has purged node_modules — which it cannot confirm without a TTY. The binary is already on disk; use it.",
-      "name": "hunterready-dev",
-      "runtimeExecutable": "./node_modules/.bin/vite",
-      "runtimeArgs": ["dev", "--port", "3007"],
-      "port": 3007,
-      "autoPort": false
-    },
-    {
-      "//": "A second port so a parallel session can run its own server instead of failing on a taken 3000.",
-      "name": "hunterready-dev-3008",
-      "runtimeExecutable": "./node_modules/.bin/vite",
-      "runtimeArgs": ["dev", "--port", "3008"],
-      "port": 3008,
-      "autoPort": false
-    },
-    {
-      "//": "The real stack, attached rather than launched: the app image plus Postgres plus the local model. `vite dev` cannot prove the render path — the WASM bug in Block 1 passed dev and failed a real build (ADR-005) — and since v0.5 it cannot prove much else either, because accounts, encryption at rest and the local-by-default model (ADR-023) are all services rather than code. Start it first with `pnpm docker:build`, then: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d. NOT `pnpm docker:run` — that starts the app alone, with no database and no model, so persistence reports itself off and every generated text silently falls back to regular expressions. 3100 because Hermes' WhatsApp bridge holds 127.0.0.1:3000 while Docker publishes on *:3000, and a URL that resolves to one of two servers depending on v4/v6 order is not something to debug twice.",
-      "name": "hunterready-container",
+      "//": "ONE dev environment, deliberately. This attaches to the real stack — the app image plus Postgres plus the model — started with `pnpm docker:build` then `docker compose -f docker-compose.yml -f docker-compose.local.yml up -d`. NOT `pnpm docker:run`, which starts the app alone with no database and no model, so persistence reports itself off and every generated text silently falls back to regular expressions. 3100 because Hermes' WhatsApp bridge holds 127.0.0.1:3000 while Docker publishes on *:3000, and a URL that resolves to one of two servers depending on v4/v6 order is not something to debug twice.",
+      "//2": "There used to be `vite dev` entries here on 3007 and 3008 as well, and having both was worse than having one. `vite dev` reaches no database and no model: /api/processing answered with an empty body, extraction fell back to the rule engine, and Wording, translation, accounts and encryption-at-rest were all quietly off — so a feature could look fine there and be broken in the only environment that runs it. It also cannot prove the render path at all (ADR-005: the Block 1 spike passed vite dev AND `pnpm build`, then 500'd in production because Rollup never emitted the renderer's WASM). Two servers on two ports, one of them lying about half the product, is noise. Do not add them back.",
+      "//3": "The cost is the inner loop: a source change needs `pnpm docker:build` and a restart of the app service, about a minute. Pay it. The alternative is verifying against a server that cannot run the feature.",
+      "name": "hunterready",
       "url": "http://localhost:3100"
     }
   ]

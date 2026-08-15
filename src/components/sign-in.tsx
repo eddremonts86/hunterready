@@ -16,7 +16,21 @@ import { RETENTION_DAYS } from '@/db/retention-policy'
 
 type Mode = 'signIn' | 'signUp'
 
-export function SignIn({ onSignedIn }: { onSignedIn?: () => void }) {
+export function SignIn({
+  onSignedIn,
+  compact = false,
+}: {
+  onSignedIn?: () => void
+  /**
+   * The header popover, where the panel version does not fit.
+   *
+   * Same form, same copy order, smaller type and three sentences instead of five — a display heading
+   * and four paragraphs in a 22rem dropdown reads as a page that has fallen out of its frame. The two
+   * facts that must survive the trim are what an account is *for* and that you do not need one; those
+   * are the whole reason this copy exists.
+   */
+  compact?: boolean
+}) {
   const [mode, setMode] = useState<Mode>('signIn')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -65,31 +79,50 @@ export function SignIn({ onSignedIn }: { onSignedIn?: () => void }) {
   return (
     <form
       onSubmit={(event) => void submit(event)}
-      className="mx-auto flex w-full max-w-md flex-col gap-5"
+      className={`flex w-full flex-col ${compact ? 'gap-3' : 'mx-auto max-w-md gap-5'}`}
     >
-      <div className="flex flex-col gap-3">
-        <h2 className="text-display text-ink">
+      <div className={`flex flex-col ${compact ? 'gap-2' : 'gap-3'}`}>
+        <h2
+          className={
+            compact ? 'text-[17px] font-bold text-ink' : 'text-display text-ink'
+          }
+        >
           {mode === 'signIn' ? 'Come back to your CV' : 'Keep your CV here'}
           <span className="text-signal">.</span>
         </h2>
-        <p className="text-[15px] leading-relaxed text-ink-soft">
+        <p
+          className={`leading-relaxed text-ink-soft ${compact ? 'text-[13px]' : 'text-[15px]'}`}
+        >
           An account means we remember your CV between visits, so you can come
           back to it and keep a version of what you sent to each employer.
         </p>
-        <p className="text-meta leading-relaxed text-ink-soft">
-          We keep it for {RETENTION_DAYS} days after your last visit, then
-          delete it — and you can delete it yourself at any time.{' '}
-          <a
-            href="/privacy"
-            className="font-medium text-signal underline decoration-signal/30 underline-offset-4 hover:decoration-signal"
-          >
-            What we do with your data
-          </a>
-        </p>
+        {!compact && (
+          <p className="text-meta leading-relaxed text-ink-soft">
+            We keep it for {RETENTION_DAYS} days after your last visit, then
+            delete it — and you can delete it yourself at any time.{' '}
+            <a
+              href="/privacy"
+              className="font-medium text-signal underline decoration-signal/30 underline-offset-4 hover:decoration-signal"
+            >
+              What we do with your data
+            </a>
+          </p>
+        )}
         {/* The exit, said plainly. An account the person did not need is data we did not need. */}
         <p className="rounded-field bg-band px-3 py-2 text-meta leading-relaxed text-ink-soft">
           You do not need one. Everything except remembering works without an
           account, and nothing is stored if you skip this.
+          {compact && (
+            <>
+              {' '}
+              <a
+                href="/privacy"
+                className="font-medium text-signal underline decoration-signal/30 underline-offset-4 hover:decoration-signal"
+              >
+                What we do with your data
+              </a>
+            </>
+          )}
         </p>
       </div>
 

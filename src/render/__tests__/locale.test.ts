@@ -90,6 +90,19 @@ describe('dates take the document’s language', () => {
     expect(formatRange('2019-03', null, 'da')).toBe('mar. 2019 – Nu')
   })
 
+  it('says nothing at all about a job with no dates yet', () => {
+    /*
+      `endDate: null` means "current" only next to a start date. Alone it is the schema's default,
+      and printing "Present" for it claimed the person holds a role they had only just typed the name
+      of — found while writing a CV from scratch, where every new entry starts in this state.
+    */
+    for (const locale of OUTPUT_LOCALES) {
+      expect(formatRange(undefined, null, locale)).toBe('')
+    }
+    // An end with no start still says what it knows.
+    expect(formatRange(undefined, '2019-03', 'en')).toBe('Mar 2019')
+  })
+
   it('leaves a year-only date alone in every language', () => {
     // The schema allows `2019` with no month, and there is nothing to localize about a number.
     for (const locale of OUTPUT_LOCALES) {

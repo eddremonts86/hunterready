@@ -24,6 +24,7 @@ import {
   findFabrications,
 } from './fabrication'
 import type { FabricationFinding, GroundingSet } from './fabrication'
+import { findCrossJobDrift } from './drift'
 import { unwrapToolInput } from '@/structure/tool-input'
 import {
   buildRewritePrompt,
@@ -62,10 +63,25 @@ const RewritePayload = z.object({
    * remain as sanity bounds against a runaway response.
    */
   rationale: z.string().max(4000).default(''),
-  questions: z.array(z.string().min(1).max(2000)).max(2).default([]),
+  /**
+   * `.catch` on both, and it is the same argument the paragraph above makes about length, applied to
+   * shape — because the local model made it a live bug rather than a hypothetical one.
+   *
+   * A 3B model asked for `changed: ['verb'|'structure'|'concision'|'jargon']` frequently answers with
+   * the *schema* instead of a value — `[{"items":[…],"type":"array"}]` was observed verbatim. Zod then
+   * rejected the entire payload, the outcome became `unavailable`, and a perfectly good suggestion was
+   * thrown away because its decorative metadata was malformed. Measured on the local path: **14 of 14
+   * bullets failed this way**, which is exactly what Edd meant by "el wording a mí no me funciona".
+   *
+   * Neither field ever reaches the CV. `changed` colours a label and `questions` prompts a follow-up,
+   * so a malformed one costs a chip, not a claim. Falling back to empty keeps the suggestion — which
+   * IS the product — and the fabrication guard still inspects it exactly as before.
+   */
+  questions: z.array(z.string().min(1).max(2000)).max(2).catch([]).default([]),
   changed: z
     .array(z.enum(['verb', 'structure', 'concision', 'jargon']))
     .max(4)
+    .catch([])
     .default([]),
 })
 
@@ -87,6 +103,25 @@ export type RewriteOutcome =
   /** No provider configured, or the call failed. The original is kept. */
   | 'unavailable'
 
+/**
+ * Why a bullet came back with nothing — four causes that used to be one silent `unavailable`.
+ *
+ * Content-free by construction: a fixed label from this file, never a fragment of the answer or of
+ * the CV (docs/07). It exists because "27% of bullets on the local path say nothing" was measurable
+ * and undiagnosable at the same time — the three exits in `rewriteOne` were indistinguishable, so a
+ * transport failure, a model that ignored the tool, and a malformed payload all read alike. Knowing
+ * which one is happening is the difference between fixing the prompt and fixing the plumbing.
+ */
+export type SilenceReason =
+  /** The call threw: transport, timeout, model not loaded. */
+  | 'call-failed'
+  /** The model answered in prose instead of calling the tool it was given.  */
+  | 'no-tool-call'
+  /** It called the tool with something the schema refuses — usually a missing suggestion. */
+  | 'malformed'
+  /** Nothing was configured to ask. Not a failure; the feature is simply off. */
+  | 'no-provider'
+
 export interface BulletRewrite {
   /** Where it lives, so the UI can apply an accepted suggestion without searching. */
   workIndex: number
@@ -101,6 +136,8 @@ export interface BulletRewrite {
   outcome: RewriteOutcome
   /** Populated when a suggestion was thrown away, for logs and for the honest UI note. */
   rejected?: Array<FabricationFinding>
+  /** Why nothing came back. Set only when `outcome === 'unavailable'`. */
+  silence?: SilenceReason
 }
 
 /** Cache key. The prompt version is in it so a prompt change invalidates every entry. */
@@ -149,14 +186,36 @@ interface RewriteOneInput {
   siblings: Array<string>
   context: string
   grounding: GroundingSet
+  /**
+   * Claims this suggestion took from a *different* employer — bound to the bullet's own job.
+   *
+   * Passed as a function rather than a set because the check needs the résumé's shape, not just its
+   * words, and because it is the same code the measurement suite scores with: the guard rejects
+   * exactly what `rewrite-quality` counts, so the number cannot drift away from the rule.
+   */
+  foreignClaims: (suggestion: string) => Array<FabricationFinding>
   provider: { client: Anthropic; model: string }
   signal?: AbortSignal
+}
+
+/** One entry per claim. The retry message names the violations, and naming one twice reads as noise. */
+function dedupe(
+  findings: Array<FabricationFinding>,
+): Array<FabricationFinding> {
+  const seen = new Set<string>()
+  return findings.filter((finding) => {
+    const key = `${finding.kind} ${finding.value.toLowerCase()}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 async function rewriteOne(input: RewriteOneInput): Promise<{
   payload?: z.infer<typeof RewritePayload>
   outcome: RewriteOutcome
   rejected?: Array<FabricationFinding>
+  silence?: SilenceReason
 }> {
   const messages: Array<Anthropic.MessageParam> = [
     {
@@ -197,7 +256,7 @@ async function rewriteOne(input: RewriteOneInput): Promise<{
         { signal: input.signal },
       )
     } catch {
-      return { outcome: 'unavailable' }
+      return { outcome: 'unavailable', silence: 'call-failed' }
     }
 
     // MiniMax has been observed sending `content: null` against a type that says array.
@@ -205,10 +264,36 @@ async function rewriteOne(input: RewriteOneInput): Promise<{
     const toolUse = blocks.find(
       (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use',
     )
-    if (toolUse === undefined) return { outcome: 'unavailable' }
+    /**
+     * The model answered in prose instead of calling the tool it was handed. Ask again.
+     *
+     * `tool_choice` says it must, and a 3B model through Ollama's compatibility endpoint sometimes
+     * does not — measured as the single largest cause of the free tier saying nothing: `no-tool-call`
+     * was every silent bullet in one run and 3 of 4 in another. It used to give up here, while the
+     * one-invention-away case next door got a second attempt. There is no reason for that asymmetry:
+     * the retry is the same one call, and the failure is at least as recoverable.
+     */
+    if (toolUse === undefined) {
+      if (attempt + 1 >= MAX_ATTEMPTS) {
+        return { outcome: 'unavailable', silence: 'no-tool-call' }
+      }
+      // An empty `content` (MiniMax has sent null) leaves nothing to quote back, and the API refuses
+      // an empty assistant turn. Retrying the identical request is still a fresh sample at 0.3.
+      if (blocks.length > 0) {
+        messages.push(
+          { role: 'assistant', content: blocks },
+          {
+            role: 'user',
+            content:
+              'Answer by calling the submit_rewrite tool. Do not reply in prose — the rewritten bullet has to come back as the tool input.',
+          },
+        )
+      }
+      continue
+    }
 
     const parsed = RewritePayload.safeParse(unwrapToolInput(toolUse.input))
-    if (!parsed.success) return { outcome: 'unavailable' }
+    if (!parsed.success) return { outcome: 'unavailable', silence: 'malformed' }
 
     /**
      * The guard runs before anything else looks at the suggestion — and it treats the two kinds of
@@ -223,14 +308,25 @@ async function rewriteOne(input: RewriteOneInput): Promise<{
      * number — "Was that the 25% growth year?" plants a figure the candidate may then type in
      * themselves — so numbers stay checked.
      */
-    const findings = [
+    const findings = dedupe([
       ...findFabrications(parsed.data.suggestion, input.grounding),
+      /**
+       * And what belongs to a *different* employer — see ADR-028.
+       *
+       * Whole-résumé grounding is right for the candidate's own words: a tool from the skills list
+       * resurfacing in a bullet is theirs (docs/06). It is wrong for another job's facts. Measured
+       * across the fixtures, the local model moved them between employers in roughly one run in two
+       * — one pass took "40 accounts" and "ten" onto a Northgate bullet, another attached the name of
+       * a previous employer to a Herlev one. Nothing was invented, every token was in the document,
+       * and the sentence was still false. That is the failure a reader would call lying.
+       */
+      ...input.foreignClaims(parsed.data.suggestion),
       ...findFabrications(
         [parsed.data.rationale, ...parsed.data.questions].join('\n'),
         input.grounding,
         { numbersOnly: true },
       ),
-    ]
+    ])
 
     if (findings.length === 0) {
       return {
@@ -296,6 +392,14 @@ export interface RewriteResult {
   /** Counts by outcome. `fabricated` rising is the signal that the prompt or model has drifted. */
   tally: Record<RewriteOutcome, number>
   /**
+   * Counts by cause, for the `unavailable` ones.
+   *
+   * Measured across the fixtures on the local path, an eighth of bullets came back with nothing and
+   * there was no way to tell a dropped connection from a model answering in prose. These four numbers
+   * are the difference between "the free tier is unreliable" and a defect somebody can act on.
+   */
+  silence: Record<SilenceReason, number>
+  /**
    * How many suggestions still read as machine-written, and how many phrases in total.
    *
    * **Measured here, not retried.** The summary and the cover letter get a second attempt when they trip
@@ -324,6 +428,7 @@ export async function rewriteBullets(
   const answers = (request.answers ?? []).filter((text) => text.trim() !== '')
   // The candidate's answers are source material, exactly like the CV itself.
   const grounding = buildGrounding(resume, answers.join('\n'))
+
   const context =
     answers.length === 0
       ? resumeContext(resume)
@@ -383,6 +488,7 @@ export async function rewriteBullets(
         questions: [],
         changed: [],
         outcome: 'unavailable',
+        silence: 'no-provider',
       })
       continue
     }
@@ -394,6 +500,13 @@ export async function rewriteBullets(
       siblings: job.highlights.filter((_, i) => i !== target.highlightIndex),
       context,
       grounding,
+      foreignClaims: (suggestion) =>
+        findCrossJobDrift(
+          suggestion,
+          resume,
+          target.workIndex,
+          answers.join('\n'),
+        ),
       provider,
       signal: request.signal,
     })
@@ -411,6 +524,7 @@ export async function rewriteBullets(
       changed: result.payload?.changed ?? [],
       outcome: result.outcome,
       rejected: result.rejected,
+      silence: result.silence,
     }
     if (rewrite.suggestion !== undefined) {
       const tells = countAiTells(rewrite.suggestion)
@@ -424,5 +538,27 @@ export async function rewriteBullets(
     rewrites.push(rewrite)
   }
 
-  return { rewrites, promptVersion: REWRITE_PROMPT_VERSION, tally, voice }
+  /*
+    Counted from the finished list rather than incremented along the way, because there are three
+    routes to a rewrite — the cache, the no-provider shortcut and an actual call — and a counter
+    maintained on each of them is a counter that will silently miss one the next time a fourth is
+    added.
+  */
+  const silence: Record<SilenceReason, number> = {
+    'call-failed': 0,
+    'no-tool-call': 0,
+    malformed: 0,
+    'no-provider': 0,
+  }
+  for (const rewrite of rewrites) {
+    if (rewrite.silence !== undefined) silence[rewrite.silence]++
+  }
+
+  return {
+    rewrites,
+    promptVersion: REWRITE_PROMPT_VERSION,
+    tally,
+    silence,
+    voice,
+  }
 }
