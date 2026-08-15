@@ -120,8 +120,23 @@ the image and deliberately not on a laptop (ADR-012), so the `.doc` and OCR suit
 
 ## Commands
 
+**There is one dev environment and it is the container on `:3100`.** `vite dev` used to run alongside
+it on 3007; having both was worse than having one. The dev server reaches **no database and no model**
+— `/api/processing` answers with an empty body, extraction silently falls back to the rule engine, and
+Wording, translation, accounts and encryption-at-rest are all off — so a feature can look finished
+there and be broken in the only environment that runs it. It also cannot prove the render path at all
+(ADR-005). Do not start a second one.
+
 ```bash
-pnpm dev                    # dev server on :3000
+docker build -t hunterready:local .   # after any source change…
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d   # …then restart it
+```
+
+⚠️ Run `docker build` directly, **not** `pnpm docker:build`. A global pnpm of a different major than
+this repo's crashes in its dependency-status check before it runs the script, and prints a stack trace
+with exit code 0 — a build that never happened, reported as a success.
+
+```bash
 pnpm build && pnpm start    # the only way to trust the WASM render path
 pnpm test                   # unit suite, incl. ATS round-trip and the accuracy table
 pnpm test:docker            # the same suite WITH system binaries — nothing skips
