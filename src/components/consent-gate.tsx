@@ -339,6 +339,10 @@ export function ProcessingChoice({
             hint: entitled
               ? `The larger model. Its text goes to ${provider} and nowhere else; we keep no copy.`
               : 'The larger model needs an account on the paid plan. Until then your CV is read here and never leaves this machine — which is the more private half of the deal, not the lesser one.',
+            /*
+              Both branches stay. `entitled` is the server's answer, so while ADR-030's suspension is
+              on nobody sees the second one — and when the switch goes off it is true again, unedited.
+            */
           },
         ]}
       />
