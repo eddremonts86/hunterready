@@ -50,8 +50,16 @@ jobs:
       # whichever app was provisioned when it was written. Deploying the wrong uuid restarts somebody
       # else's production app, and **Coolify reports success**. There is no error to notice.
       #
-      # So: match on name, then assert the app's own `fqdn` is the host we expect. Two independent
+      # So: match on name, then assert the app really answers on the host we expect. Two independent
       # facts have to agree before a deploy is triggered.
+      #
+      # **Where that host lives depends on the build pack**, and getting this wrong cost a release.
+      # A Dockerfile application keeps it in `fqdn`. A **docker compose** application — which this is,
+      # because the stack is app + Postgres + the local model — keeps it per service in
+      # `docker_compose_domains` and leaves `fqdn` **null**. On 2026-08-15 this step read `fqdn` only,
+      # so the first run after it shipped refused a perfectly good release with
+      # `"hunterready" answers on null`. Production was healthy the whole time and the domain had never
+      # moved. Read both, and say which one answered.
       - name: Resolve the application by name, and verify it is the right one
         id: resolve
         env:
@@ -83,18 +91,37 @@ jobs:
                 process.exit(1)
               }
               const app = matches[0]
-              // The second, independent fact. A name collision across environments is exactly how the
-              // wrong app gets deployed, and the fqdn is what a user would actually visit.
               const host = (url) => String(url || "").replace(/^https?:\/\//, "").replace(/\/.*$/, "")
-              if (host(app.fqdn) !== host(process.env.EXPECTED)) {
-                console.error(`::error::"${wanted}" answers on ${app.fqdn}, but PRODUCTION_URL is ${process.env.EXPECTED} — one of the two is wrong, so nothing was deployed`)
+
+              // Every host this application answers on, wherever Coolify happens to keep it.
+              // `fqdn` is comma-separated when an app carries more than one.
+              const hosts = new Set()
+              for (const one of String(app.fqdn || "").split(",")) {
+                if (one.trim() !== "") hosts.add(host(one))
+              }
+              try {
+                const perService = JSON.parse(app.docker_compose_domains || "{}")
+                for (const service of Object.values(perService)) {
+                  for (const one of String(service?.domain || "").split(",")) {
+                    if (one.trim() !== "") hosts.add(host(one))
+                  }
+                }
+              } catch {
+                // Malformed JSON in that column is not a reason to deploy blind; it just contributes
+                // no hosts, and the assertion below fails with the empty list printed.
+              }
+
+              // The second, independent fact. A name collision across environments is exactly how the
+              // wrong app gets deployed, and the host is what a user would actually visit.
+              if (!hosts.has(host(process.env.EXPECTED))) {
+                console.error(`::error::"${wanted}" (${app.build_pack}) answers on [${[...hosts].join(", ") || "nothing"}], but PRODUCTION_URL is ${process.env.EXPECTED} — one of the two is wrong, so nothing was deployed`)
                 process.exit(1)
               }
               process.stdout.write(app.uuid)
             })
           ')
           echo "app_uuid=$uuid" >> "$GITHUB_OUTPUT"
-          echo "Resolved $COOLIFY_APP_NAME to an application whose fqdn matches PRODUCTION_URL."
+          echo "Resolved $COOLIFY_APP_NAME to an application that answers on PRODUCTION_URL."
 
       - name: Trigger deployment
         id: trigger

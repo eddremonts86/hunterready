@@ -151,12 +151,32 @@ homepage, which reads as health.
 
 1. **Deploy failed, Quality green.** The image built in CI (`pnpm test:docker` builds the same
    Dockerfile), so suspect Coolify: wrong target stage, wrong port, or a missing env row.
-2. **`wasm` false.** `scripts/copy-assets.mjs` did not run or did not find the WASM. Check `pnpm build`
+1. **`"hunterready" (dockercompose) answers on […], but PRODUCTION_URL is …`** — the resolve step
+   could not find the expected host among the ones the application actually answers on, so it refused
+   to deploy somewhere it cannot identify. **Check the application in Coolify before touching
+   anything:** production may be perfectly healthy on the previous release, which is exactly what the
+   guard is for.
+
+   **Where that host lives depends on the build pack, and this cost a release on 2026-08-15.** A
+   Dockerfile application keeps it in `fqdn`. A **docker compose** application — which this one is,
+   since the stack is app plus Postgres plus the local model — keeps it per service in
+   `docker_compose_domains` and leaves `fqdn` **null**. The guard read `fqdn` only, so its first run
+   refused a good release with `answers on null` while the domain had never moved. It now reads both
+   and prints what it found.
+
+   Two things worth more than the fix: the API also refuses a `domains` write on a compose application
+   (`use docker_compose_domains instead`), and _"the infrastructure lost its config"_ is a far more
+   expensive thing to believe than to check — one `GET /api/v1/applications/<uuid>` settles it.
+
+   **Do not "fix" a genuine one by relaxing the guard.** It is the only thing standing between a
+   renamed or duplicated application and a release going somewhere nobody is looking.
+
+1. **`wasm` false.** `scripts/copy-assets.mjs` did not run or did not find the WASM. Check `pnpm build`
    locally, then `ls .output/server/pkg/`.
-3. **`fonts` false.** The bundled OFL fonts are missing from `.output/server/fonts`. Same script.
-4. **Health never 200.** The container is not serving. Read the Coolify build and runtime logs; the
+1. **`fonts` false.** The bundled OFL fonts are missing from `.output/server/fonts`. Same script.
+1. **Health never 200.** The container is not serving. Read the Coolify build and runtime logs; the
    healthcheck itself has a 20s start period, so a slow boot shows as retries rather than failure.
-5. **Rolling back** is redeploying the previous commit from Coolify's deployment list. There is no
+1. **Rolling back** is redeploying the previous commit from Coolify's deployment list. There is no
    database, so a rollback is complete and instant — the one genuine advantage of having no state.
 
 ## The database (v0.5, ADR-019)
