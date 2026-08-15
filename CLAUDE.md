@@ -7,8 +7,9 @@ Read `~/Projects/ai-os/CLAUDE.md` first. This file adds project-specific rules.
 CV optimizer: ingest `.pdf`/`.docx`/`.doc`/`.txt`/`.md` → canonical `Resume` schema
 → user review → verifiably ATS-safe designed PDF via pdfcn + takumi-pdf.
 
-Status: **v0.1–v0.9 shipped** — ingestion, review, PDF and DOCX export, bullet rewriting, job
-targeting, accounts with GDPR controls, cover letters, EN/ES/DA output and expiring share links.
+Status: **v0.1–v0.10 shipped** — ingestion, review, PDF and DOCX export, bullet rewriting, job
+targeting, accounts with GDPR controls, cover letters, EN/ES/DA output, expiring share links, and
+writing a CV from nothing.
 See [docs/08-roadmap.md](docs/08-roadmap.md) for what each release contains and what it cost.
 Open: pricing and payments, non-Latin script coverage (CJK and RTL). Active Spec:
 [specs/current_spec.md](specs/current_spec.md).
