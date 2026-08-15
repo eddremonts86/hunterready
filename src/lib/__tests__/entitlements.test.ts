@@ -23,8 +23,13 @@ async function withWorld(world: {
   userId?: string
   plan?: string
   planThrows?: boolean
+  /** Deploy-time switches, restored after the test by the `afterEach` below. */
+  env?: Record<string, string>
 }) {
   vi.resetModules()
+  for (const [key, value] of Object.entries(world.env ?? {})) {
+    vi.stubEnv(key, value)
+  }
   vi.doMock('@/db/client', () => ({
     isPersistenceEnabled: () => world.persistence !== false,
   }))
@@ -41,6 +46,7 @@ async function withWorld(world: {
 }
 
 afterEach(() => {
+  vi.unstubAllEnvs()
   vi.doUnmock('@/db/client')
   vi.doUnmock('@/lib/session')
   vi.doUnmock('@/db/repository')
@@ -121,11 +127,45 @@ describe('it fails closed on every uncertainty', () => {
   })
 })
 
+describe('the suspension moves one capability and only one', () => {
+  /*
+    ADR-030 opens the third-party model to everyone while the production box cannot serve the local
+    one. It shipped reading a single flag that the design gate also read, so it gave all forty-eight
+    paid designs away to anonymous visitors — caught by reading `/api/processing` in production after
+    the deploy, not by any test. This is that test.
+  */
+  it('opens the model to an anonymous visitor without opening the catalogue', async () => {
+    const { entitlementFor } = await withWorld({
+      userId: undefined,
+      env: { HR_THIRD_PARTY_FOR_ALL: 'true' },
+    })
+    expect(await entitlementFor(REQUEST)).toEqual({
+      thirdParty: true,
+      paidDesigns: false,
+      plan: 'anonymous',
+    })
+  })
+
+  it('leaves a paying account with both', async () => {
+    const { entitlementFor } = await withWorld({
+      userId: 'u1',
+      plan: 'pro',
+      env: { HR_THIRD_PARTY_FOR_ALL: 'true' },
+    })
+    expect(await entitlementFor(REQUEST)).toEqual({
+      thirdParty: true,
+      paidDesigns: true,
+      plan: 'pro',
+    })
+  })
+})
+
 describe('what the interface is told', () => {
   it('reports the plan so the UI can offer the upgrade', async () => {
     const { entitlementFor } = await withWorld({ userId: 'u1', plan: 'pro' })
     expect(await entitlementFor(REQUEST)).toEqual({
       thirdParty: true,
+      paidDesigns: true,
       plan: 'pro',
     })
   })
@@ -136,6 +176,7 @@ describe('what the interface is told', () => {
     const { entitlementFor } = await withWorld({ userId: undefined })
     expect(await entitlementFor(REQUEST)).toEqual({
       thirdParty: false,
+      paidDesigns: false,
       plan: 'anonymous',
     })
   })

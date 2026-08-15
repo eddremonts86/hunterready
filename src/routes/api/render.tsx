@@ -77,8 +77,13 @@ async function refuseUnlessEntitled(
   // The developer switch (see entitlements.ts): a catalogue you cannot try is one you cannot test.
   if (designsUnlocked()) return undefined
 
-  const { thirdParty, plan } = await entitlementFor(request)
-  if (thirdParty) return undefined
+  /*
+    `paidDesigns`, never `thirdParty`. They were the same flag until ADR-030's suspension opened the
+    model to everyone and handed all forty-eight paid designs away with it — through this exact line,
+    which is the gate itself and not the padlock drawing.
+  */
+  const { paidDesigns, plan } = await entitlementFor(request)
+  if (paidDesigns) return undefined
 
   /**
    * 402, not 403. "Payment required" is the accurate status for a thing that exists, works, and is not
