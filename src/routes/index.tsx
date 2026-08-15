@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
+  ProcessingChoice,
   ConsentGate,
   needsConsent,
   useProcessingConsent,
@@ -405,11 +406,32 @@ function Segmented<T extends string>({
   onChange,
 }: {
   label: string
-  options: ReadonlyArray<{ id: T; label: string; hint?: string }>
+  /**
+   * `disabled` renders the option **visibly** and refuses the click.
+   *
+   * Hiding an option a person cannot use would answer "what am I missing?" with silence; showing it
+   * greyed answers it, and the hint says what would unlock it. Used by the processing control, where
+   * an anonymous visitor must be able to see that a second model exists without being offered a
+   * choice the server would quietly overrule (ADR-023).
+   */
+  options: ReadonlyArray<{
+    id: T
+    label: string
+    hint?: string
+    disabled?: boolean
+  }>
   value: T
   onChange: (id: T) => void
 }) {
-  const chosen = options.find((option) => option.id === value)
+  /*
+    The hint follows the chosen option, except when an option is disabled — then its hint is the more
+    useful one, because "why can I not pick that?" is the question actually being asked.
+  */
+  const blocked = options.find((option) => option.disabled === true)
+  const chosen =
+    blocked?.hint !== undefined
+      ? blocked
+      : options.find((option) => option.id === value)
   return (
     <fieldset className="flex min-w-0 flex-col gap-1">
       <legend className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-soft">
@@ -418,11 +440,13 @@ function Segmented<T extends string>({
       <div className="flex flex-wrap gap-0.5 rounded-full bg-band p-0.5">
         {options.map((option) => {
           const on = option.id === value
+          const off = option.disabled === true
           return (
             <button
               key={option.id}
               type="button"
               aria-pressed={on}
+              disabled={off}
               /*
                 Four signals on the chosen segment, as DESIGN.md requires: surface, border, text colour
                 and weight. No check mark — in a control this tight the glyph costs more width than it
@@ -430,11 +454,16 @@ function Segmented<T extends string>({
               */
               className={[
                 'rounded-full px-3 py-1.5 text-[13px] transition-colors',
-                on
-                  ? 'border border-signal-edge bg-ground font-semibold text-signal'
-                  : 'border border-transparent font-medium text-ink-soft hover:text-ink',
+                off
+                  ? 'cursor-not-allowed border border-transparent font-medium text-ink-faint'
+                  : on
+                    ? 'border border-signal-edge bg-ground font-semibold text-signal'
+                    : 'border border-transparent font-medium text-ink-soft hover:text-ink',
               ].join(' ')}
-              onClick={() => onChange(option.id)}
+              onClick={() => {
+                if (off) return
+                onChange(option.id)
+              }}
             >
               {option.label}
             </button>
@@ -2427,19 +2456,35 @@ function HunterReady() {
               database, so a deployment that cannot keep an account never offers one.
             */}
               {panel === 'account' && (
-                <Library
-                  resume={loaded.resume}
-                  /*
+                <div className="flex flex-col gap-4">
+                  {/*
+                    The standing answer to "who reads my CV", reachable at any moment.
+
+                    It lives here rather than beside a button because it is a fact about the person,
+                    not about one action — it governs reading, rewriting, targeting, the letter and
+                    the translation alike. The gate still asks once on the first upload; this is
+                    where the answer lives afterwards, which is what makes the gate's promise true.
+                  */}
+                  <ProcessingChoice
+                    provider={consent.provider}
+                    choice={consent.choice}
+                    onDecide={consent.decide}
+                    Control={Segmented}
+                  />
+                  <Library
+                    resume={loaded.resume}
+                    /*
                 A CV opened from the library gets a fresh `original`, because it is a different
                 document. Keeping the old one would compare a stored CV against a file uploaded earlier
                 in the same session, and "before and after" would show a distance nobody travelled.
               */
-                  onLoad={(resume) =>
-                    setLoaded({ ...loaded, resume, original: resume })
-                  }
-                  savedId={savedResumeId}
-                  onSavedIdChange={setSavedResumeId}
-                />
+                    onLoad={(resume) =>
+                      setLoaded({ ...loaded, resume, original: resume })
+                    }
+                    savedId={savedResumeId}
+                    onSavedIdChange={setSavedResumeId}
+                  />
+                </div>
               )}
 
               {/*

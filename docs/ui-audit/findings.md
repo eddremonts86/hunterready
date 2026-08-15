@@ -11,17 +11,17 @@ dark-theme pass is not applicable rather than skipped.
 
 ## Route inventory
 
-| Route | File | Auth | Kind | Main job | Visited |
-| --- | --- | --- | --- | --- | --- |
-| `/` | `routes/index.tsx` | public | landing → workspace | upload a CV, correct it, download it | ✅ |
-| `/?panel=check` | idem | public | panel | verify what was read | ✅ |
-| `/?panel=wording` | idem | public | panel | accept stronger bullets; switch language | ✅ |
-| `/?panel=design` | idem | public | panel | choose one of 60 designs | ✅ |
-| `/?panel=job` | idem | public | panel | target an advert, fit the CV, draft a letter | ✅ |
-| `/?panel=account` | idem | session | panel | save, list and reopen CVs | ✅ |
-| `/?compare=true` | idem | public | overlay | before/after | ✅ |
-| `/privacy` | `routes/privacy.tsx` | public | content | say what happens to a CV | ✅ |
-| `/s/$token` | `routes/s.$token.tsx` | public | shared doc | read someone's shared CV | ⚠️ invalid token only |
+| Route             | File                  | Auth    | Kind                | Main job                                     | Visited               |
+| ----------------- | --------------------- | ------- | ------------------- | -------------------------------------------- | --------------------- |
+| `/`               | `routes/index.tsx`    | public  | landing → workspace | upload a CV, correct it, download it         | ✅                    |
+| `/?panel=check`   | idem                  | public  | panel               | verify what was read                         | ✅                    |
+| `/?panel=wording` | idem                  | public  | panel               | accept stronger bullets; switch language     | ✅                    |
+| `/?panel=design`  | idem                  | public  | panel               | choose one of 60 designs                     | ✅                    |
+| `/?panel=job`     | idem                  | public  | panel               | target an advert, fit the CV, draft a letter | ✅                    |
+| `/?panel=account` | idem                  | session | panel               | save, list and reopen CVs                    | ✅                    |
+| `/?compare=true`  | idem                  | public  | overlay             | before/after                                 | ✅                    |
+| `/privacy`        | `routes/privacy.tsx`  | public  | content             | say what happens to a CV                     | ✅                    |
+| `/s/$token`       | `routes/s.$token.tsx` | public  | shared doc          | read someone's shared CV                     | ⚠️ invalid token only |
 
 ---
 
@@ -31,7 +31,7 @@ dark-theme pass is not applicable rather than skipped.
 
 **Route** `/privacy` · **File** `src/routes/privacy.tsx` ("Where it goes")
 
-The page says: *"To read a CV well we send its text to MiniMax… That is the only place it goes."*
+The page says: _"To read a CV well we send its text to MiniMax… That is the only place it goes."_
 The destination claim is still true. The **purpose** claim is not complete: the same text now also
 goes to MiniMax to rewrite bullets, tailor a summary, draft a cover letter, and — added today —
 **translate the entire document**, field by field, including sections the reader never sees on
@@ -90,7 +90,7 @@ recorded like the accuracy table.
 
 ### P2 — 5. An invalid share token answers `200`
 
-**Route** `/s/no-existe` — returns HTTP 200. What it *renders* was not confirmed (the page is
+**Route** `/s/no-existe` — returns HTTP 200. What it _renders_ was not confirmed (the page is
 client-rendered and the check was a `curl` grep).
 
 **Fix** confirm the rendered state first; a "this link has expired" page at 200 is a legitimate
@@ -98,15 +98,59 @@ choice, a blank frame is not.
 
 ---
 
+## Anonymous / free walk — second pass
+
+Signed out for real (the first attempt cleared `document.cookie` and got nowhere: the session cookie
+is `httpOnly`, so the "anonymous" walk was still `plan: pro` and nearly produced a false finding).
+Dev unlock turned off. What the commonest visitor (ADR-023) actually meets:
+
+**Good, and worth not breaking.** The landing page comes first — no gate, no sign-in wall — because
+`needsConsent` requires a non-empty `provider` and an anonymous visitor has none. Nothing will leave
+the server for them, so there is nothing to consent to, and the product correctly asks nothing. The
+upload works, the review works, the download works, with no account.
+
+### P0 — 6. The consent gate promised a change of mind it never allowed *(fixed)*
+
+**File** `src/components/consent-gate.tsx`
+
+The gate said *"You can change your mind on the next upload."* The answer is persisted to
+`localStorage`, `needsConsent` requires the answer to be **absent**, and `reset` was exported and
+called from **nowhere in the app** (`grep` across every screen: no hits). So the single decision this
+product asks a person to make about their own data was permanent and invisible, and the sentence
+promising otherwise was false — in the product whose entire proposition is being straight about this.
+
+Fixed in this pass: a standing **"Who reads your CV"** control in the Account panel, changeable at any
+moment, and the gate's copy now points at it instead of promising a question that never comes.
+
+### P0 — 7. The third-party option was offered to people the server would overrule *(fixed)*
+
+**File** `src/components/consent-gate.tsx`, `src/lib/entitlements.ts`
+
+`mayUseThirdParty` is an `&&` of plan **and** consent, so without an entitled account the server sends
+nothing outward whatever the client asked. The gate offered the choice anyway. A visitor could pick
+the larger model, watch the local one run, and never be told — a button that lies, in the one place
+this product cannot afford one.
+
+Fixed: the option is drawn, plainly **disabled**, with the reason under it, and the control shows the
+**effective** state rather than the stored one — a stale `granted` on an account that lost its plan
+reads as local, because local is what will happen.
+
+### P2 — 8. Free-tier speed is the experience, and it is not set up for
+
+Anonymous means the local model, which on the production `cax21` measured **50.2s** for one extraction
+and would be minutes for a Wording pass. The narrated stages make the wait legible but do not make it
+short. See ADR-027: the lever is taking the model call off the blocking path where the rule engine
+already scores 100%, not a faster engine.
+
 ## Fixed during this pass (not counted as open findings)
 
-| | Route | Evidence |
-| --- | --- | --- |
-| Duplicate stage row on the waiting screen | `/` uploading | `520faf1` |
-| "A few seconds" — a duration promise DESIGN.md forbids, measured at 50s in production | `/` uploading | `520faf1` |
-| Indeterminate bar reading as progress stuck at 0% | `/` uploading | `520faf1` |
-| Every local Wording bullet failing (`unavailable` × 14) | `/?panel=wording` | `900eded` |
-| The rewrite prompt defeating the KV cache (3.6×) | — | `900eded` |
+|                                                                                       | Route             | Evidence  |
+| ------------------------------------------------------------------------------------- | ----------------- | --------- |
+| Duplicate stage row on the waiting screen                                             | `/` uploading     | `520faf1` |
+| "A few seconds" — a duration promise DESIGN.md forbids, measured at 50s in production | `/` uploading     | `520faf1` |
+| Indeterminate bar reading as progress stuck at 0%                                     | `/` uploading     | `520faf1` |
+| Every local Wording bullet failing (`unavailable` × 14)                               | `/?panel=wording` | `900eded` |
+| The rewrite prompt defeating the KV cache (3.6×)                                      | —                 | `900eded` |
 
 ## Slop sweep
 
@@ -117,9 +161,8 @@ competing primaries.
 
 ## Gaps — what this pass did not cover
 
-1. **The free and anonymous experience.** Everything above was seen as a `pro` account with the
-   developer design unlock on. The commonest visitor (ADR-023) sees padlocks on 48 designs and a
-   slower local model, and none of that was walked. **This is the largest gap.**
+1. ~~The free and anonymous experience.~~ **Closed** — walked in the second pass above, signed out
+   with the dev unlock off. It produced the two P0s numbered 6 and 7.
 2. **Ingestion error states.** `no_text_layer`, `image_unreadable`, `parse_failed`,
    `legacy_office_unsupported` and four more exist in `src/ingest/`; none were provoked.
 3. **`/s/$token` with a valid link.** Only the invalid-token path was touched.
