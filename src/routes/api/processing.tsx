@@ -47,7 +47,7 @@ export const Route = createFileRoute('/api/processing')({
          * itself, because `needsConsent` requires a named provider — and asking permission for a
          * transfer that cannot happen is theatre.
          */
-        const { thirdParty, plan } = await entitlementFor(request)
+        const { thirdParty, paidDesigns, plan } = await entitlementFor(request)
         const provider = thirdParty ? resolveProvider() : undefined
 
         return Response.json(
@@ -78,15 +78,15 @@ export const Route = createFileRoute('/api/processing')({
             /**
              * Whether this caller may use the paid designs.
              *
-             * The same `thirdParty` entitlement, deliberately: one plan buys the outside model *and* the
-             * paid half of the catalogue, so two fields reading the same flag is honest rather than
-             * redundant — the interface asks a different question of it in each place, and the day the
-             * plans split, the endpoint is where that gets expressed once.
+             * Its **own** entitlement, not `thirdParty`. One plan buys both today, and reading one flag
+             * for both was still wrong: ADR-030's suspension opened the model to everyone and handed
+             * the paid catalogue away with it, silently, until `/api/processing` was read in
+             * production. A switch aimed at one capability must not be able to move another.
              *
              * The gallery uses it to draw padlocks. It is **not** the gate — `/api/render` is, because
              * this endpoint's answer is advisory and a client can ignore it.
              */
-            paidDesigns: designsUnlocked() || thirdParty,
+            paidDesigns: designsUnlocked() || paidDesigns,
           },
           { headers: { 'cache-control': 'no-store' } },
         )

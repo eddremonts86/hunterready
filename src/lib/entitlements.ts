@@ -93,6 +93,20 @@ export function designsUnlocked(): boolean {
 export type Entitlement = {
   /** Whether the account may use the third-party model at all, before consent is considered. */
   thirdParty: boolean
+  /**
+   * Whether this caller may render a paid design. **Not the same flag as `thirdParty`.**
+   *
+   * They used to be one, on the argument that one plan buys both — true, and it made ADR-030's
+   * suspension hand all forty-eight paid designs to every anonymous visitor the moment it went live.
+   * Caught in production by reading `/api/processing` after the deploy: `paidDesigns: true` for
+   * `plan: "anonymous"`.
+   *
+   * The lesson is not "be careful with flags". It is that a temporary switch aimed at one capability
+   * must not be able to move a second one, and two fields reading one variable is exactly how it can.
+   * The runbook already warns that `HR_UNLOCK_DESIGNS` in production "would give the paid catalogue
+   * away silently" — this was that failure arriving through a different door.
+   */
+  paidDesigns: boolean
   /** For copy and diagnostics. Never shown as a reason to a visitor who has no account. */
   plan: 'anonymous' | string
 }
@@ -113,20 +127,22 @@ export async function entitlementFor(request: Request): Promise<Entitlement> {
   const everyone = thirdPartyForEveryone()
 
   if (!isPersistenceEnabled()) {
-    return { thirdParty: everyone, plan: 'anonymous' }
+    return { thirdParty: everyone, paidDesigns: false, plan: 'anonymous' }
   }
 
   try {
     const userId = await currentUserId(request)
     if (userId === undefined) {
-      return { thirdParty: everyone, plan: 'anonymous' }
+      return { thirdParty: everyone, paidDesigns: false, plan: 'anonymous' }
     }
 
     const plan = await getPlan(userId)
-    return { thirdParty: everyone || THIRD_PARTY_PLANS.has(plan), plan }
+    const paid = THIRD_PARTY_PLANS.has(plan)
+    // The suspension moves `thirdParty` and nothing else. `paidDesigns` stays on the plan, always.
+    return { thirdParty: everyone || paid, paidDesigns: paid, plan }
   } catch {
     // A failed lookup is not a licence to spend. See the note above about failing closed.
-    return { thirdParty: everyone, plan: 'free' }
+    return { thirdParty: everyone, paidDesigns: false, plan: 'free' }
   }
 }
 
