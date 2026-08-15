@@ -153,6 +153,57 @@ const MECHANISMS = [
   },
 ]
 
+/**
+ * The comparison, and the rule it follows: **the left column is not a strawman.**
+ *
+ * Every competitor's version of this section makes the reader's current situation sound pathetic
+ * (docs/12). Ours opens by saying most CVs parse fine, because most do, and a page whose first claim
+ * is false to the majority of its readers has spent its credibility before the fold. What is on the
+ * left is only what genuinely cannot be checked without doing what this product does.
+ */
+const ALONE = [
+  'You send the file and find out nothing. No reply is the same signal as a mangled file.',
+  'A two-column layout looks right to you and arrives as one scrambled paragraph.',
+  'A tool sharpens a bullet by adding a number nobody gave it — and you defend it in the interview.',
+  'Rewriting the same CV for every advert, by hand, at eleven at night.',
+]
+
+const WITH_US = [
+  'We render your PDF, read it back with a separate parser, and show you what survived.',
+  'You see every field we read and correct anything wrong before it leaves.',
+  'Nothing can be invented: a claim not already in your CV is rejected in code, not discouraged in a prompt.',
+  'Point it at one advert and get a version for that job, with what changed listed line by line.',
+]
+
+/**
+ * The three fears, answered where they occur.
+ *
+ * Not billing objections — this product does not have billing yet, and a FAQ that answers questions
+ * nobody asked in order to look complete is the exact amateurism this page is trying to lose.
+ */
+const FAQ = [
+  {
+    q: 'What happens to my CV?',
+    a: 'It is read, corrected by you, and rendered back. Your phone number and street address are stripped before any model sees the text. Without an account nothing is stored at all — close the tab and it is gone. With one, it is kept until you delete it or ninety days pass since your last visit, whichever comes first.',
+  },
+  {
+    q: 'Can the employer tell I used this?',
+    a: 'There is nothing to tell. What you download is your own CV, in a layout that parses cleanly, with wording you accepted line by line. We do not write claims into it — that is enforced in code, not asked for in a prompt.',
+  },
+  {
+    q: 'Do I have to pay?',
+    a: 'No. Upload, correct, and download without an account and without paying. A paid plan adds the larger model, all sixty designs and CVs remembered between visits — and it is not open yet.',
+  },
+  {
+    q: 'What does "a CV screening software can read" actually mean?',
+    a: 'Employers run your file through software that turns it back into fields before a person sees it. We do the same thing to what we produce, with an independent parser, and check every field came back in the right order. A design that loses one does not ship.',
+  },
+  {
+    q: 'What can you read?',
+    a: 'PDF, Word (.doc and .docx), plain text and Markdown. If the file is a scan or a photo of a printout we read it with OCR and tell you it was a scan, because that is when what we read is worth double-checking.',
+  },
+]
+
 function Icon({
   name,
   className = 'h-5 w-5',
@@ -162,6 +213,7 @@ function Icon({
     | 'shield'
     | 'lock'
     | 'check'
+    | 'chevron-down'
     | 'arrow-left'
     | 'arrow-right'
     | 'download'
@@ -182,6 +234,7 @@ function Icon({
       </>
     ),
     check: <path d="m5 12.5 4.5 4.5L19 7" />,
+    'chevron-down': <path d="m6 9 6 6 6-6" />,
     'arrow-left': <path d="M19 12H5m0 0 6-6m-6 6 6 6" />,
     'arrow-right': <path d="M5 12h14m0 0-6-6m6 6-6 6" />,
     download: <path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14" />,
@@ -1692,6 +1745,119 @@ function HunterReady() {
             </div>
           </section>
 
+          {/*
+            The cost of doing it yourself, beside the cost of not.
+
+            Taken from the clearest section on any competitor's site (docs/12): JobAssist's two-column
+            "Doing it alone / With JobAssist". The structure works because it names the reader's
+            current evening rather than our feature list — and ours writes itself, because every row
+            on the left is a real failure this product was built after watching.
+
+            The left column deliberately does not exaggerate. "Your CV probably parses fine" is on it,
+            because for most people it does, and a page that opens by telling somebody their document
+            is broken has already lied to the majority of its readers.
+          */}
+          <section className="border-b border-hairline bg-ground">
+            <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
+              <Reveal>
+                <h2 className="max-w-2xl text-display text-balance text-ink">
+                  What you cannot check on your own
+                  <span className="text-signal">.</span>
+                </h2>
+                <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-ink-soft">
+                  Your CV probably parses fine. The problem is that there is no
+                  way to find out before you send it — and the ways it fails are
+                  invisible in the document you are looking at.
+                </p>
+              </Reveal>
+              <div className="mt-10 grid gap-4 md:grid-cols-2">
+                <Reveal>
+                  <div className="flex h-full flex-col gap-4 rounded-card border border-hairline bg-band p-6">
+                    <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
+                      On your own
+                    </span>
+                    <ul className="flex flex-col gap-3">
+                      {ALONE.map((item) => (
+                        <li
+                          key={item}
+                          className="flex gap-2.5 text-[14px] leading-relaxed text-ink-soft"
+                        >
+                          <span
+                            aria-hidden
+                            className="mt-2 h-[3px] w-[3px] shrink-0 rounded-full bg-ink-faint"
+                          />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </Reveal>
+                <Reveal delay={90}>
+                  <div className="lift flex h-full flex-col gap-4 rounded-card border border-signal-edge bg-ground p-6">
+                    <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-signal">
+                      Here
+                    </span>
+                    <ul className="flex flex-col gap-3">
+                      {WITH_US.map((item) => (
+                        <li
+                          key={item}
+                          className="flex gap-2.5 text-[14px] leading-relaxed text-ink"
+                        >
+                          <Icon
+                            name="check"
+                            className="mt-0.5 h-4 w-4 shrink-0 text-affirm"
+                          />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </Reveal>
+              </div>
+            </div>
+          </section>
+
+          {/*
+            The questions somebody asks before they trust a stranger with their employment history.
+
+            Every competitor has this section and every one of them uses it to handle objections about
+            *billing*. Ours answers the three things a person actually hesitates over — where the file
+            goes, whether the employer can tell, and whether they have to pay — because those are the
+            ones that stop somebody uploading, and a page that dodges them is asking for trust it has
+            not offered anything for.
+
+            `<details>` rather than a JS accordion: it works before hydration, it is keyboard-operable
+            for free, and the browser's find-in-page can reach into a closed one.
+          */}
+          <section className="border-b border-hairline bg-band">
+            <div className="mx-auto w-full max-w-3xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
+              <Reveal>
+                <h2 className="text-display text-balance text-ink">
+                  Before you upload anything
+                  <span className="text-signal">.</span>
+                </h2>
+              </Reveal>
+              <div className="mt-8 flex flex-col gap-2">
+                {FAQ.map((item, index) => (
+                  <Reveal key={item.q} delay={index * 60}>
+                    <details className="card group px-5 py-4">
+                      <summary className="flex cursor-pointer items-center justify-between gap-4 text-[15px] font-semibold text-ink">
+                        {item.q}
+                        <Icon
+                          name="chevron-down"
+                          className="h-4 w-4 shrink-0 text-ink-faint transition-transform group-open:rotate-180"
+                        />
+                      </summary>
+                      <p className="mt-3 text-[14px] leading-relaxed text-ink-soft">
+                        {item.a}
+                      </p>
+                    </details>
+                  </Reveal>
+                ))}
+              </div>
+            </div>
+          </section>
+
           {/* One last door, for the reader who scrolled the whole page before deciding. */}
           <section className="border-t border-hairline bg-ground">
             <div className="mx-auto w-full max-w-6xl px-4 py-16 text-center sm:px-6 lg:px-8">
@@ -1716,15 +1882,79 @@ function HunterReady() {
           </section>
         </main>
 
+        {/*
+          A footer somebody can find something in.
+
+          Two links was not a footer, it was the end of the page. Every competitor's carries the four
+          things a person looks for before they trust a stranger with their employment history, and
+          the absence of them reads as a site that has not thought about being answerable to anyone.
+
+          Nothing here is invented: it links only to pages that exist, and it says out loud that this
+          product has no company behind it yet, which is a fact a reader is entitled to before they
+          upload. When there is one, this is where its name goes.
+        */}
         <footer className="border-t border-hairline bg-band">
-          <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-6 sm:px-6">
-            <Wordmark className="text-[15px]" />
-            <a
-              href="/privacy"
-              className="text-meta font-medium text-signal underline decoration-signal/30 underline-offset-4 hover:decoration-signal"
-            >
-              What we do with your data
-            </a>
+          <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1.4fr_1fr_1fr] lg:px-8">
+            <div className="flex flex-col gap-3">
+              <Wordmark className="text-[17px]" />
+              <p className="max-w-xs text-[13px] leading-relaxed text-ink-soft">
+                A CV that automated screening can actually read — checked by
+                parsing it back, not by claiming it parses.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2.5">
+              <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
+                The product
+              </span>
+              <button
+                type="button"
+                onClick={picker.open}
+                className="self-start text-[13px] text-ink-soft transition-colors hover:text-signal"
+              >
+                Add your CV
+              </button>
+              <button
+                type="button"
+                onClick={() => void loadSample('nurse-senior')}
+                className="self-start text-[13px] text-ink-soft transition-colors hover:text-signal"
+              >
+                See a finished example
+              </button>
+              <a
+                href="#upload"
+                className="text-[13px] text-ink-soft transition-colors hover:text-signal"
+              >
+                What we can read
+              </a>
+            </div>
+
+            <div className="flex flex-col gap-2.5">
+              <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
+                Straight answers
+              </span>
+              <a
+                href="/privacy"
+                className="text-[13px] text-ink-soft transition-colors hover:text-signal"
+              >
+                What we do with your data
+              </a>
+              <a
+                href="mailto:hello@hunterready.dev"
+                className="text-[13px] text-ink-soft transition-colors hover:text-signal"
+              >
+                Ask us something
+              </a>
+            </div>
+          </div>
+          <div className="border-t border-hairline">
+            <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
+              <p className="text-meta leading-relaxed text-ink-faint">
+                HunterReady is in development and free to use. There is no
+                company behind it yet and no paid plan open — when there is,
+                both will be named here.
+              </p>
+            </div>
           </div>
         </footer>
       </div>
