@@ -507,10 +507,22 @@ function PanelTabs({
   badges: Partial<Record<PanelId, { text: string; tone: 'signal' | 'caution' }>>
 }) {
   return (
+    /*
+      One row, always — scrolling rather than wrapping.
+
+      `flex-wrap` put four tabs on the first line and stranded "Account" alone and centred beneath
+      them at 375px, which reads as a rendering fault rather than a fifth tab. A tab strip is a single
+      axis by definition: the fix is to let it scroll, not to let it fold. `scrollbar-none` because a
+      visible bar under a pill row is noise on the one viewport with the least room for it, and the
+      partially-cut last tab is itself the affordance that says "there is more this way".
+
+      `min-w-0` on the buttons, and `flex-1` only from `sm` up: below that they take their natural
+      width so the labels never truncate; above it they share the row as before, where they fit.
+    */
     <div
       role="tablist"
       aria-label="CV panels"
-      className="flex shrink-0 flex-wrap gap-1 rounded-full bg-band p-1"
+      className="scrollbar-none flex shrink-0 gap-1 overflow-x-auto rounded-full bg-band p-1"
     >
       {PANELS.map((panel) => {
         const on = panel.id === active
@@ -523,7 +535,7 @@ function PanelTabs({
             aria-selected={on}
             onClick={() => onChange(panel.id)}
             className={[
-              'flex flex-1 items-center justify-center gap-1.5 rounded-full px-2.5 py-1.5 text-[13px] transition-colors',
+              'flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1.5 text-[13px] transition-colors sm:flex-1 sm:shrink',
               on
                 ? 'border border-signal-edge bg-ground font-semibold text-signal'
                 : 'border border-transparent font-medium text-ink-soft hover:text-ink',

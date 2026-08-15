@@ -27,7 +27,7 @@ dark-theme pass is not applicable rather than skipped.
 
 ## Findings
 
-### P0 — 1. `/privacy` understates what the CV is used for
+### P0 — 1. `/privacy` understates what the CV is used for *(fixed)*
 
 **Route** `/privacy` · **File** `src/routes/privacy.tsx` ("Where it goes")
 
@@ -48,7 +48,7 @@ translate), and say that declining still gives all of them on the local model ex
 **Acceptance** the section names every model-touching feature that exists in `src/optimize/` and
 `src/structure/`. **Risk** none — copy only.
 
-### P1 — 2. Mobile tab bar orphans "Account" onto its own line
+### P1 — 2. Mobile tab bar orphans "Account" onto its own line *(fixed)*
 
 **Route** `/` at 375px · **Evidence** observed live in the review session; screenshot not
 retained on disk.
@@ -109,11 +109,11 @@ Dev unlock turned off. What the commonest visitor (ADR-023) actually meets:
 the server for them, so there is nothing to consent to, and the product correctly asks nothing. The
 upload works, the review works, the download works, with no account.
 
-### P0 — 6. The consent gate promised a change of mind it never allowed *(fixed)*
+### P0 — 6. The consent gate promised a change of mind it never allowed _(fixed)_
 
 **File** `src/components/consent-gate.tsx`
 
-The gate said *"You can change your mind on the next upload."* The answer is persisted to
+The gate said _"You can change your mind on the next upload."_ The answer is persisted to
 `localStorage`, `needsConsent` requires the answer to be **absent**, and `reset` was exported and
 called from **nowhere in the app** (`grep` across every screen: no hits). So the single decision this
 product asks a person to make about their own data was permanent and invisible, and the sentence
@@ -122,7 +122,7 @@ promising otherwise was false — in the product whose entire proposition is bei
 Fixed in this pass: a standing **"Who reads your CV"** control in the Account panel, changeable at any
 moment, and the gate's copy now points at it instead of promising a question that never comes.
 
-### P0 — 7. The third-party option was offered to people the server would overrule *(fixed)*
+### P0 — 7. The third-party option was offered to people the server would overrule _(fixed)_
 
 **File** `src/components/consent-gate.tsx`, `src/lib/entitlements.ts`
 
@@ -158,6 +158,21 @@ Clean. No emoji-as-icon, no colours outside tokens (the one hex in `index.tsx` i
 quoting DESIGN.md), one icon family, no nested cards, no badge that changes no decision. The two
 `btn-primary` on the landing page are the **same** action repeated down a long page, not two
 competing primaries.
+
+## Open question for Edd, found while correcting the privacy copy
+
+`redactForLlm` — the pass that strips a phone number and street address before anything is sent —
+runs **only in `src/structure/extract.ts`**, on the first read of a file. Rewriting, targeting, the
+letter and the translation do not call it. In practice they send less: the rewrite context is the
+headline, summary and bullets; the translation's slot list deliberately excludes name, employer,
+institution, email and URL.
+
+But the translation **does** send `basics.personalDetails` — which on a European CV is exactly where
+date of birth, nationality and marital status live. That is defensible (the person asked for their
+whole document in another language, and those lines are printed on it) and it is more sensitive than
+the phone number the product goes out of its way to strip. The new copy says what is sent rather
+than implying redaction everywhere, so nothing on the page is false — but whether those fields
+should travel at all is a product decision, not mine.
 
 ## Gaps — what this pass did not cover
 

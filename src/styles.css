@@ -534,3 +534,20 @@ body {
     animation-iteration-count: infinite !important;
   }
 }
+
+/**
+ * A scroll container with no visible bar.
+ *
+ * For the panel tab strip on a narrow screen: the row must stay one axis, so it scrolls rather than
+ * wraps, and a scrollbar drawn under a pill row is noise on the viewport with the least room for it.
+ * The partially-cut last tab is the affordance instead. Scrolling itself is untouched — only its
+ * furniture is hidden, so a trackpad, a touch drag and the keyboard all behave exactly as before.
+ */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
