@@ -25,6 +25,8 @@ import {
   needsConsent,
   useProcessingConsent,
 } from '@/components/consent-gate'
+import type { ConsentState } from '@/components/consent-gate'
+import { AccountMenu, ModelMenu } from '@/components/topbar-controls'
 import { Dropzone, useFilePicker } from '@/components/dropzone'
 import { Library } from '@/components/library'
 import { PaperPreview } from '@/components/paper-preview'
@@ -244,6 +246,35 @@ function PlanChip({ plan }: { plan?: string }) {
     <span className="inline-flex h-6 items-center rounded-full bg-signal px-2.5 text-[11px] font-bold uppercase tracking-[0.06em] text-white">
       Pro
     </span>
+  )
+}
+
+/**
+ * The header's right-hand cluster: what plan you are on, which model reads your CV, and the door.
+ *
+ * All three are facts about the session rather than steps in editing a document, so they belong on
+ * every screen. Before this, signing in lived behind `?panel=account` — a tab that only exists once a
+ * CV is loaded — so the landing page, which is where a returning customer arrives, had no way in at
+ * all. See `src/components/topbar-controls.tsx` for why the locked model option is drawn rather than
+ * hidden.
+ */
+function SessionControls({
+  consent,
+  onOpenAccount,
+}: {
+  consent: ConsentState
+  onOpenAccount?: () => void
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <PlanChip plan={consent.plan} />
+      <ModelMenu
+        provider={consent.provider}
+        choice={consent.choice}
+        onDecide={consent.decide}
+      />
+      <AccountMenu plan={consent.plan} onOpenAccount={onOpenAccount} />
+    </div>
   )
 }
 
@@ -1416,12 +1447,21 @@ function HunterReady() {
         {picker.input}
         <StepBar
           right={
-            <a
-              href="/privacy"
-              className="text-meta font-medium text-ink-soft transition-colors hover:text-signal"
-            >
-              Privacy
-            </a>
+            <div className="flex items-center gap-3">
+              <a
+                href="/privacy"
+                className="hidden text-meta font-medium text-ink-soft transition-colors hover:text-signal sm:inline"
+              >
+                Privacy
+              </a>
+              {/*
+                The landing page is where a returning customer arrives, and until now it was the one
+                screen with no way to sign in — the form lived in a tab that only exists after an
+                upload. So the person who had already saved a CV had to upload another one to find
+                the door back to it.
+              */}
+              <SessionControls consent={consent} />
+            </div>
           }
         />
 
@@ -2063,7 +2103,12 @@ function HunterReady() {
           */
           void navigate({ replace: true, search: {} })
         }}
-        right={<PlanChip plan={consent.plan} />}
+        right={
+          <SessionControls
+            consent={consent}
+            onOpenAccount={() => setPanel('account')}
+          />
+        }
       />
 
       {/*
