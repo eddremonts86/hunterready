@@ -27,7 +27,7 @@ dark-theme pass is not applicable rather than skipped.
 
 ## Findings
 
-### P0 — 1. `/privacy` understates what the CV is used for *(fixed)*
+### P0 — 1. `/privacy` understates what the CV is used for _(fixed)_
 
 **Route** `/privacy` · **File** `src/routes/privacy.tsx` ("Where it goes")
 
@@ -48,7 +48,7 @@ translate), and say that declining still gives all of them on the local model ex
 **Acceptance** the section names every model-touching feature that exists in `src/optimize/` and
 `src/structure/`. **Risk** none — copy only.
 
-### P1 — 2. Mobile tab bar orphans "Account" onto its own line *(fixed)*
+### P1 — 2. Mobile tab bar orphans "Account" onto its own line _(fixed)_
 
 **Route** `/` at 375px · **Evidence** observed live in the review session; screenshot not
 retained on disk.
@@ -60,20 +60,26 @@ rendering fault rather than a fifth tab.
 `Segmented` already handles wrapping elsewhere — check it covers this before adding anything.
 **Acceptance** at 320–430px the five tabs are on one line or one scrollable row, never 4+1.
 
-### P1 — 3. "Fit my CV to this job" can look like it did nothing
+### P1 — 3. "Fit my CV to this job" looked like it did nothing *(fixed)*
 
-**Route** `/?panel=job` · **File** `src/routes/index.tsx` (`onFitCv`), `src/optimize/variant-diff.ts`
+**Route** `/?panel=job` · **File** `src/routes/index.tsx` (`onFitCv`)
 
-When the only tailoring move is a **skills reorder**, `diffResumes` reports zero changes — it
-compares values, not array order. `onFitCv` sets `compare=true`, the guard added earlier today
-correctly refuses to draw an empty comparison, and the result is: the URL changes, the move list
-collapses to "Nothing worth moving", and nothing else visibly happens. Observed live.
+`if (targeting)` is a **separate top-level view** that returns before the workspace, so `BeforeAfter`
+— which lives in the workspace's document pane — could not be drawn from it. `onFitCv` set
+`compare=true`, `diffResumes` had correctly found the changes, and none of it was reachable: the only
+visible answer to "fit my CV" was the move list collapsing to "Nothing worth moving", which reads as
+nothing having happened.
 
-**Damaged job** knowing whether the thing you asked for happened.
-**Fix** either count order changes in `diffResumes` (they are real changes to what a recruiter
-reads first), or confirm in place — "Reordered your skills to lead with what this job asks for".
-The first is truer. **Acceptance** every `applyTailoring` move produces either a visible diff or a
-stated confirmation. **Risk** low; `diffResumes` is covered by tests.
+**The first diagnosis was wrong and is kept here on purpose.** It blamed `diffResumes` for ignoring
+array order. It does not — `diffList` calls `isReorder` and reports a `reordered` change, for bullets
+and for skills alike. The evidence that corrected it was already in the session: after leaving the
+targeting view manually, the toggle read "Just the new one · 2". The view was the problem, not the
+diff, and fixing the diff would have been a change to working code in service of a symptom.
+
+**Fixed** the fit now leaves the targeting view. The person lands on their own document with the
+comparison already open; `reading` is retained and "Back to this job" returns in one click.
+**Verified** advert pasted → Fit my CV → lands on the workspace showing "2 changes since you uploaded
+it", with the reworded summary and "Moved up · Clinical skills" itemised underneath.
 
 ### P2 — 4. Free-tier rewrite quality is unmeasured after today's fix
 

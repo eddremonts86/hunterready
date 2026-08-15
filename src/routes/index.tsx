@@ -1775,17 +1775,27 @@ function HunterReady() {
                         UX hat: their {workIndex, highlightIndex} coordinates point at pre-reorder
                         positions, so accepting one after the fit would overwrite the WRONG bullet.
                         Stale advice that misfires is worse than asking again.
-
-                        The panel stays on Job on purpose: the gap report, the score and the move list
-                        all recompute against the fitted CV the moment state lands, so the person
-                        watches their own match improve — the move list collapsing to "Nothing worth
-                        moving. Your CV already leads with what this job asks for" IS the revalidation,
-                        visible. The fit estimate and the measured page count re-run on their own.
                       */
                       setRewrites(undefined)
                       setAccepted(new Set())
                       setRewriteNote(undefined)
                       setComparing(true)
+                      /*
+                        And come back to the document, because targeting is a separate top-level view
+                        that has no comparison surface in it.
+
+                        Leaving the person there was the bug the audit caught: `setComparing(true)`
+                        set the state and the URL, `diffResumes` had correctly found the changes, and
+                        none of it could be drawn — the only visible answer to "fit my CV" was a move
+                        list collapsing to "Nothing worth moving", which reads as nothing having
+                        happened. (The first diagnosis blamed `diffResumes` for ignoring array order.
+                        It does not; `diffList` detects a reorder. The view was the problem.)
+
+                        The gap report is not lost by leaving: it recomputed against the fitted CV on
+                        the way out, `reading` is still held, and "Back to this job" returns to it
+                        with one click.
+                      */
+                      setTargeting(false)
                     }}
                     onAcceptSummary={(summary) =>
                       setLoaded({
