@@ -756,6 +756,61 @@ line.
 
 ---
 
+## ADR-027 — vLLM is the wrong lever on a 4-vCPU ARM box; the model is not where the time goes
+
+**2026-08-15 · Accepted · measured**
+
+Edd asked whether swapping Ollama for vLLM would buy the advertised 2–5×. It would not, and
+measuring produced a more useful answer than the question expected.
+
+### The box
+
+Production is a Hetzner `cax21`: **ARM64 (Ampere Altra), 4 vCPU, 8 GB RAM**, shared with a dozen
+other apps. Measured there today: **50.2 s** for one local extraction of the nurse fixture.
+
+### Why vLLM cannot help here
+
+- **Architecture.** vLLM's CPU speed comes from AVX512/AMX on x86. On ARM it asks only for NEON and
+  is the least-optimised path. Apple Silicon GPU support exists solely in the separate `vLLM-Metal`
+  project, which is irrelevant to a Linux VPS.
+- **Memory.** The CPU backend takes FP32/FP16/BF16 plus AWQ/GPTQ — **no GGUF**. `qwen2.5-3b` in
+  bf16 is ~6 GB, plus a 4 GB default KV cache, against 8 GB total shared with Postgres and the app.
+  Ollama's GGUF Q4 is 1.9 GB. The arithmetic does not close.
+- **Its actual advantage does not apply.** Continuous batching wins when compute sits idle. Measured
+  on ARM64 at 4 threads, running the real 14-bullet Wording pass: sequential 9.1 s → concurrent
+  12.5 s on 3b (**0.7×**), 5.6 s → 4.5 s on 1.5b (1.2×). Four cores are already saturated by one
+  request.
+
+### What was measured instead (ARM64, 4 threads, same architecture as production)
+
+| Lever | Effect |
+| --- | --- |
+| `qwen2.5:3b` → `1.5b` | **1.7×** (60 → 102 tok/s) |
+| `3b` → `0.5b` | 3.1× — quality too low to use |
+| 14 separate calls → one batched call | 1.5× on 3b, 1.0× on 1.5b |
+| Concurrency | 1.0×, and 0.7× on 3b |
+| `OLLAMA_FLASH_ATTENTION` + `KV_CACHE_TYPE=q8_0` | no measurable effect (prompts are short) |
+| `qwen3:1.7b` | 1.5× faster, but emits reasoning tokens through this API even with `/no_think` — not a drop-in |
+
+### The finding that matters more than any of them
+
+`accuracy.test.ts` scores the **rule engine alone at 100% on all six fixtures**, including both
+two-column layouts. The local model's job on the extraction path is to file corrections onto that
+baseline — and it costs 50 s of somebody's first impression to do it. The lever is not which engine
+runs the model; it is **whether that model call belongs in the blocking path at all**.
+
+⚠️ Before acting on that: the fixtures are synthetic and grew up alongside the rule engine
+(ADR-016), so 100% may flatter it. Verify against a wider corpus of real documents before moving
+the model off the critical path.
+
+### Decision
+
+Keep Ollama. Do not adopt vLLM on this hardware. If the local path needs to be faster, in order:
+right-size the model to `1.5b`, take the model call out of the blocking path where rules already
+answer, batch multi-item work into single calls, and only then buy cores (`cax31` doubles them).
+A benchmark that uses `--cpus` to simulate a smaller box is invalid — Docker's CFS quota throttled
+llama.cpp 40× (46 → 1.1 tok/s) and made every model look identical. Limit threads instead.
+
 ## ADR-026 — The sidebar layout exists, honestly rated, with the DOM fighting for the parser
 
 **2026-08-15 · Accepted · Edd's decision**
