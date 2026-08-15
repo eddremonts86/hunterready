@@ -756,6 +756,63 @@ line.
 
 ---
 
+## ADR-030 — The third-party model is open to everyone, until the box can serve the local one
+
+**2026-08-15 · Accepted · temporary, with a stated exit**
+
+ADR-023 made the third-party model the paid capability and our own hardware the default, and gave the
+free tier the more private half of the deal. That is still the design this product wants. It is
+suspended, not repealed, behind `HR_THIRD_PARTY_FOR_ALL=true`.
+
+### What forced it
+
+Measured on production the day v0.10 shipped, as an anonymous visitor, twice:
+
+|                                   |                                                                                                                           |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Reading one job advert            | **102 s**, then **171 s**                                                                                                 |
+| Result both times                 | fell back to the rule engine, and said so on screen                                                                       |
+| Requirements matched by the rules | **0 of 4** — including "Experience running a picking floor" against a CV saying "Ran the late shift on the picking floor" |
+| "Fit my CV to this job"           | **never appeared** — the button needs matches to act on                                                                   |
+
+That is the part worth being precise about. The free tier was not slow; the feature **did not exist**
+for the commonest visitor. A privacy default that costs somebody the product is not a privacy
+default, it is an outage with a principle written on it.
+
+### What is suspended, and what is not
+
+**Suspended:** the plan half of `mayUseThirdParty`. Everyone is now entitled, account or not.
+
+**Not suspended — and this is the whole of why this is acceptable:** consent. `mayUseThirdParty` is
+still `consented && entitled`, and the gate now _appears_ for everyone, because `/api/processing`
+names a provider only to somebody who can reach it. Nobody's CV goes anywhere without them being
+asked; the change is that the question is now worth asking. Declining still lands on our own model,
+still works, and still costs only accuracy and time.
+
+The copy moved with the decision rather than after it. `/privacy` said the transfer could not happen
+without a paid plan, full stop — false for the commonest visitor the moment this shipped, and a
+privacy notice carrying a comforting sentence that no longer holds is worse than one that never made
+the promise.
+
+### An env var, not a code change
+
+Turning this off is one Coolify edit and a restart, not a release. That is deliberate: a temporary
+measure that needs a deploy to undo stops being temporary.
+
+### The exit
+
+Set `HR_THIRD_PARTY_FOR_ALL=false` when the local model can serve an advert read in a few seconds.
+ADR-027 already named the lever and it is not a faster engine: **take the model call off the blocking
+path**, where the rule engine already scores 100% on the extraction fixtures. Until that lands, this
+switch is what stands between an anonymous visitor and a feature they cannot use.
+
+### What it costs
+
+Every anonymous visitor now spends third-party tokens. `/api/rewrite` already rate-limits; ingestion
+does not, and that is the next thing to watch if the bill moves.
+
+---
+
 ## ADR-029 — Translation sends `personalDetails`, and the page says so
 
 **2026-08-15 · Accepted · Edd's decision, and it is closed**

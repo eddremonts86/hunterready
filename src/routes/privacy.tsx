@@ -92,7 +92,17 @@ function Privacy() {
    * Same discipline as naming the provider: a statement about what this server does comes from the
    * server (ADR-021).
    */
-  const encrypted = consent.encryptsAtRest === true
+  /**
+   * Three states, not two, and the third one is why this is a `?:` rather than a boolean.
+   *
+   * `encryptsAtRest` is `undefined` until `/api/processing` answers. Collapsing that to `false` made
+   * the page assert *"this installation stores your CV without encryption"* for the second or two
+   * before the server replied — on an installation that encrypts. A privacy notice briefly saying the
+   * worse of two things about itself is still a privacy notice saying something untrue, and it fooled
+   * me during a production walk, which is exactly the audience it must not fool.
+   */
+  const encrypted = consent.encryptsAtRest
+  const knowsEncryption = encrypted !== undefined
   const provider =
     typeof consent.provider === 'string' && consent.provider !== ''
       ? consent.provider
@@ -195,10 +205,28 @@ function Privacy() {
                 sees it. It is a smaller model, so you may have a little more to
                 correct.
               </p>
+              {/*
+                This paragraph used to say the transfer could not happen without a paid plan, full
+                stop. While ADR-030's suspension is on that is **false for the commonest visitor**, and
+                a privacy notice carrying a comforting sentence that no longer holds is worse than one
+                that never made the promise. It reads the same server answer the consent gate does:
+                `provider` is named only to somebody who can actually reach it.
+              */}
               <p className="text-ink-soft">
-                Without an account on a paid plan, none of this happens at all:
-                your CV is read here whatever you pick, because the choice needs
-                both a plan and your consent to send anything outward.
+                {consent.plan === 'pro' ? (
+                  'Your plan includes the larger model, so this choice is yours to make and to change.'
+                ) : (
+                  <>
+                    This is offered to everyone at the moment, account or not.
+                    It is normally part of the paid plan — we have opened it up
+                    while the model on our own server is too slow on the machine
+                    it runs on to be worth waiting for.{' '}
+                    <strong className="font-semibold text-ink">
+                      Declining still works exactly as described above
+                    </strong>
+                    , and costs you only some accuracy and some time.
+                  </>
+                )}
               </p>
             </>
           )}
@@ -245,12 +273,15 @@ function Privacy() {
               data, so this protects a stolen copy and not someone who has
               broken into the server itself.
             </p>
-          ) : (
+          ) : knowsEncryption ? (
             <p>
               This installation stores your CV without encryption. That is worth
               knowing rather than hiding: it means a copy of our database would
               be readable.
             </p>
+          ) : (
+            /* Neither claim, until the server has made one. "Checking" is the only true sentence here. */
+            <p className="text-ink-soft">Checking how this server stores it…</p>
           )}
         </Section>
 
