@@ -285,15 +285,33 @@ Coolify UI does not come from a compose stack at all. Copying its answers here w
 `DATA_ENCRYPTION_KEY` — 64 hex characters, `openssl rand -hex 32`. Set it in Coolify's environment for
 the stack, exactly like the database passwords.
 
-**It was empty in production from the first deploy until 15 Aug 2026**, so everything stored before
-that date is plaintext and stays that way — `decryptJson` passes a non-envelope through untouched, and
-there is no re-encryption pass in `scripts/db/`. Write one before claiming the whole table is
-encrypted. The live key is now set for both the production and preview scopes, and its copy lives in
-the AI-OS master `.env` as `HUNTERREADY_DATA_ENCRYPTION_KEY`. That file is one laptop; point 1 below is
-still owed.
+**It was empty in production from the first deploy until 15 Aug 2026.** The live key is now set for
+both the production and preview scopes, and its copy lives in the AI-OS master `.env` as
+`HUNTERREADY_DATA_ENCRYPTION_KEY`. That file is one laptop; point 1 below is still owed.
 
 Confirm the state from outside rather than from the log, which only speaks on first use:
 `curl -s https://hunterready.eduardoinerarte.dk/api/processing` reports `encryptsAtRest`.
+
+### Everything stored before the key existed is still plaintext
+
+Turning the key on fixed the future and nothing else. `encryptJson` runs on a write, so a CV nobody
+edits again is never encrypted, and `decryptJson` passes a non-envelope straight through — which is
+what keeps those rows readable and also what makes them easy to forget.
+
+```bash
+pnpm db:reencrypt --check   # count what is still plaintext, change nothing
+pnpm db:reencrypt           # encrypt it
+```
+
+Runs as the owner, is safe to run twice, and covers the three encrypted columns: `resumes.document`,
+`variants.document`, `variants.gap_report`. Its predicate is "not an envelope", so an already-encrypted
+row is never selected and never double-wrapped.
+
+The script re-implements the envelope, because `scripts/` is plain `.mjs` and this repo has no
+TypeScript runner, so `crypto.ts` cannot be imported into it. That is the same second-copy trap
+`retention.mjs` documents, and what holds the two together is
+`src/db/__tests__/reencrypt-envelope.test.ts`, which reads across the boundary in both directions.
+Change the envelope on either side and that test fails. Do not delete it to make a change pass.
 
 ```bash
 openssl rand -hex 32
