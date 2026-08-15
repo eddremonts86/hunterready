@@ -3148,7 +3148,16 @@ function HunterReady() {
                   freshly uploaded CV this is simply not here, and it appears the moment the first
                   correction or accepted suggestion lands.
                 */}
-                {changes.length > 0 && (
+                {/*
+                  And never on a CV written here, whatever the diff says.
+
+                  Found in the browser walk: authoring one from scratch put "5 changes since you
+                  uploaded it" over a blank sheet labelled "the file you already had". Nothing was
+                  uploaded and there is no before — the diff against an empty document is just a list
+                  of everything the person has typed, presented as an achievement over a file that
+                  never existed. Same falsehood as the counter and the empty states, one pane over.
+                */}
+                {changes.length > 0 && loaded.origin !== 'blank' && (
                   <button
                     type="button"
                     aria-pressed={comparing}
@@ -3206,7 +3215,7 @@ function HunterReady() {
               address bar. Ignoring the flag instead is the same rule the search validator follows: an
               impossible request falls back to the ordinary screen rather than to a dead end.
             */}
-            {comparing && changes.length > 0 ? (
+            {comparing && changes.length > 0 && loaded.origin !== 'blank' ? (
               <BeforeAfter
                 original={loaded.original}
                 current={loaded.resume}

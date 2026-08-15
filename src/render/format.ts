@@ -53,6 +53,15 @@ export function formatRange(
     endDate === null ? local.present : formatYearMonth(endDate, locale)
 
   if (start === '' && end === '') return ''
+  /**
+   * No start and no recorded end is **nothing known**, not "still there".
+   *
+   * `endDate: null` means "current" only in relation to a start date. On its own it is just the
+   * schema's default, so a job the person has only just added — before they have typed a single
+   * date — was printing "Present" on their document and claiming they hold the role today. Found
+   * writing a CV from scratch in the browser, where every new entry begins in exactly that state.
+   */
+  if (start === '' && endDate === null) return ''
   if (start === '') return end
   if (end === '') return start
   return `${start}${local.rangeSeparator}${end}`
