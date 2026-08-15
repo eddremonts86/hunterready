@@ -19,6 +19,14 @@ Enforcement, in layers (prompting alone is not enforcement):
 2. **Post-check:** extract every number, proper noun and acronym from the rewritten
    text; assert each appears in the source bullet or elsewhere in the same resume.
    Violations are rejected and retried once, then the original is kept.
+   **And it has to belong to the job it is claimed for** (ADR-028): a figure must be
+   grounded in that job, and a name must not be another employer's identity — its
+   company, its job title, its tools. Everything belonging to the _person_ — summary,
+   skills, education, certifications, their own typed answers — stays grounded across
+   the whole document, which is the case this whole-resume rule exists for. Measured:
+   before the narrowing, the local model moved a claim to the wrong employer in about
+   one run in two, and the guard passed every one of them because the token was, in
+   the strict sense, in the document.
 3. **UI:** every rewrite is shown as a side-by-side diff. Nothing is applied until
    the user accepts it. Bulk-accept exists but defaults off.
 

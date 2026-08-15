@@ -756,6 +756,63 @@ line.
 
 ---
 
+## ADR-028 — A claim has to belong to the job it is claimed for
+
+**2026-08-15 · Accepted · measured**
+
+The anti-fabrication guard grounds a rewrite on the **whole résumé**, and ADR-017 and docs/06 are
+right about why: if somebody's skills list says `Salesforce` and a bullet about their pipeline
+mentions it, that is their own word resurfacing, not an invention. Narrowing the grounding to the
+single bullet would reject the useful half of the feature.
+
+That decision has a blind spot with a precise shape, and this ADR closes it.
+
+### What was measured
+
+`src/optimize/__tests__/rewrite-quality.test.ts` — the local model, one call per bullet, across the
+three fixtures (26 bullets). Four runs before this change:
+
+|       | drift observed                                                           |
+| ----- | ------------------------------------------------------------------------ |
+| run 1 | `Plejecenter`, `Sølund` — a previous employer's name, on a Herlev bullet |
+| run 2 | none                                                                     |
+| run 3 | `40`, `ten` — another job's figures, on a Northgate bullet               |
+| run 4 | none                                                                     |
+
+Roughly **one run in two**, one suggestion each time. Every token was in the document, so the guard
+passed all of them. Nothing was invented and each sentence was still false — a claim moved to the
+wrong employer is the failure a reader would call lying, and it is the failure this product exists to
+not commit.
+
+### The rule
+
+A **number** must be grounded in the bullet's own job. A **name** must not be another job's
+identifying material — its employer, its job title, its tools.
+
+Everything belonging to the _person_ stays grounded exactly as before: summary, skills, education,
+certifications, and anything they typed into an answer. Only the other employers' facts are withdrawn.
+
+### Why the check and the metric are the same function
+
+`findCrossJobDrift` is called by the guard **and** by the measurement suite. A metric that
+paraphrases the rule it measures drifts away from it silently; sharing the code means the suite's
+`drifted: 0` is a statement about the guard rather than about a second implementation of it.
+
+### The false positive that shaped the definition
+
+The first version counted every capitalised word the narrowed grounding did not cover, and flagged
+**"Led"** — an ordinary verb, grounded in the full résumé only because another bullet opens with it.
+A metric that counts vocabulary reports drift forever while pointing at nothing. Hence "identifying
+material" rather than "any word from another job", with the case kept as a test.
+
+### Cost
+
+A rejection costs one retry and, at worst, the candidate's own wording — the same trade the guard
+already makes, and the one docs/06 states plainly: a false positive costs a better sentence, a false
+negative costs somebody their credibility in an interview.
+
+---
+
 ## ADR-027 — vLLM is the wrong lever on a 4-vCPU ARM box; the model is not where the time goes
 
 **2026-08-15 · Accepted · measured**
@@ -783,14 +840,14 @@ other apps. Measured there today: **50.2 s** for one local extraction of the nur
 
 ### What was measured instead (ARM64, 4 threads, same architecture as production)
 
-| Lever | Effect |
-| --- | --- |
-| `qwen2.5:3b` → `1.5b` | **1.7×** (60 → 102 tok/s) |
-| `3b` → `0.5b` | 3.1× — quality too low to use |
-| 14 separate calls → one batched call | 1.5× on 3b, 1.0× on 1.5b |
-| Concurrency | 1.0×, and 0.7× on 3b |
-| `OLLAMA_FLASH_ATTENTION` + `KV_CACHE_TYPE=q8_0` | no measurable effect (prompts are short) |
-| `qwen3:1.7b` | 1.5× faster, but emits reasoning tokens through this API even with `/no_think` — not a drop-in |
+| Lever                                           | Effect                                                                                         |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `qwen2.5:3b` → `1.5b`                           | **1.7×** (60 → 102 tok/s)                                                                      |
+| `3b` → `0.5b`                                   | 3.1× — quality too low to use                                                                  |
+| 14 separate calls → one batched call            | 1.5× on 3b, 1.0× on 1.5b                                                                       |
+| Concurrency                                     | 1.0×, and 0.7× on 3b                                                                           |
+| `OLLAMA_FLASH_ATTENTION` + `KV_CACHE_TYPE=q8_0` | no measurable effect (prompts are short)                                                       |
+| `qwen3:1.7b`                                    | 1.5× faster, but emits reasoning tokens through this API even with `/no_think` — not a drop-in |
 
 ### The finding that matters more than any of them
 
