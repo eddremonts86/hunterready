@@ -127,17 +127,26 @@ pnpm test                   # unit suite, incl. ATS round-trip and the accuracy 
 pnpm test:docker            # the same suite WITH system binaries — nothing skips
 pnpm test:parity            # builds, boots a server, requests the real routes
 pnpm lint                   # eslint
+
+# What the free tier actually produces. Opt-in — ~26 model calls, a minute on Metal, minutes on CPU.
+OLLAMA_BASE_URL=http://localhost:11500 pnpm test:measure
 ```
+
+**The rewrite numbers move between runs, and the thresholds say so.** Four runs of identical code
+measured silence (bullets the pass could say nothing about) at 27%, 4%, 15% and 12% — temperature 0.3
+over 26 bullets is not a stable number. `rewrite-quality.test.ts` therefore gates on the **aggregate**
+with loose ceilings, and only cross-employer drift is held at a hard zero, because since ADR-028 the
+guard rejects exactly what the suite counts. Do not tighten a threshold to a single lucky run.
 
 **The local model in Docker on a Mac runs on the CPU, and that is the whole latency story.**
 Docker Desktop's Linux VM has no Metal passthrough, so the `llm` container never touches the M-series
 GPU. Measured on an M4 Pro, same model (`qwen2.5:3b-instruct`), same prompts:
 
-| | container (CPU) | host Ollama (Metal, `100% GPU`) | |
-| --- | --- | --- | --- |
-| raw generation | 17.8 tok/s | 80 tok/s | 4.5× |
-| extraction, end to end | 10.9 s | 2.5 s | 4.4× |
-| whole-CV translation | 43.8 s | 11.0 s | 4.0× |
+|                        | container (CPU) | host Ollama (Metal, `100% GPU`) |      |
+| ---------------------- | --------------- | ------------------------------- | ---- |
+| raw generation         | 17.8 tok/s      | 80 tok/s                        | 4.5× |
+| extraction, end to end | 10.9 s          | 2.5 s                           | 4.4× |
+| whole-CV translation   | 43.8 s          | 11.0 s                          | 4.0× |
 
 The fix is one line in `docker-compose.local.yml` (gitignored): point `OLLAMA_BASE_URL` at
 `http://host.docker.internal:11500`, the brew `ollama serve`. `host.docker.internal` reaches it even
@@ -145,13 +154,13 @@ though it binds `127.0.0.1` — Docker Desktop proxies it. The container keeps r
 config; it is simply not the one answering. Production is untouched: Coolify has no
 `docker-compose.local.yml`, and its VPS has no GPU either way.
 
-⚠️ Two traps found while measuring this. **`:11434` on this Mac is a *different* Docker stack**, not
+⚠️ Two traps found while measuring this. **`:11434` on this Mac is a _different_ Docker stack**, not
 the brew Ollama — benchmarking it "natively" measures another CPU container and shows no difference at
 all. Check with `lsof -nP -iTCP:11434 -sTCP:LISTEN`. And the brew service defaults to a **4096-token
 context** while the container sets 16384; the small local-refine schema fits, but raise it before
 trusting the host path for anything with a larger prompt.
 
-**vLLM is not the lever here.** Its headline 2–5× is throughput under *concurrent* load on CUDA —
+**vLLM is not the lever here.** Its headline 2–5× is throughput under _concurrent_ load on CUDA —
 continuous batching and PagedAttention — while this app deliberately runs one request at a time
 (`OLLAMA_NUM_PARALLEL: '1'`, because the box hosts a dozen apps). Apple Silicon GPU support exists
 only through the separate `vLLM-Metal` project, and in Docker on a Mac it could only reach the CPU,

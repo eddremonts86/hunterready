@@ -60,7 +60,7 @@ rendering fault rather than a fifth tab.
 `Segmented` already handles wrapping elsewhere — check it covers this before adding anything.
 **Acceptance** at 320–430px the five tabs are on one line or one scrollable row, never 4+1.
 
-### P1 — 3. "Fit my CV to this job" looked like it did nothing *(fixed)*
+### P1 — 3. "Fit my CV to this job" looked like it did nothing _(fixed)_
 
 **Route** `/?panel=job` · **File** `src/routes/index.tsx` (`onFitCv`)
 
@@ -81,26 +81,68 @@ comparison already open; `reading` is retained and "Back to this job" returns in
 **Verified** advert pasted → Fit my CV → lands on the workspace showing "2 changes since you uploaded
 it", with the reworded summary and "Moved up · Clinical skills" itemised underneath.
 
-### P2 — 4. Free-tier rewrite quality is unmeasured after today's fix
+### P2 — 4. Free-tier rewrite quality is unmeasured after today's fix _(measured, and it found two things)_
 
-**File** `src/optimize/rewrite.ts`
+**File** `src/optimize/rewrite.ts` · **Suite** `src/optimize/__tests__/rewrite-quality.test.ts`
 
-The local path returned `unavailable` for every bullet until today; now it returns suggestions
-(13/14 on the nurse fixture, 0 fabrications). In one earlier 5-bullet sample a suggestion imported
-content from a different job — the guard passed it because grounding is the **whole** résumé, so a
-claim from another employer is "supported". One observation is not a rate.
+Now measured: the local model, one call per bullet, across all three fixtures (26 bullets), run nine
+times. `pnpm test:measure`.
 
-**Fix** measure across fixtures before trusting it; if it recurs, ground each bullet on its own job
-plus the summary rather than the whole document. **Acceptance** a measured cross-job drift rate,
-recorded like the accuracy table.
+**The suspicion was right, and it is worse than "imports content".** Four runs before the fix:
 
-### P2 — 5. An invalid share token answers `200`
+| run | what drifted                                                                 |
+| --- | ---------------------------------------------------------------------------- |
+| 1   | `Plejecenter`, `Sølund` — a previous employer's **name**, on a Herlev bullet |
+| 2   | none                                                                         |
+| 3   | `40`, `ten` — another job's **figures**, on a Northgate bullet               |
+| 4   | none                                                                         |
 
-**Route** `/s/no-existe` — returns HTTP 200. What it _renders_ was not confirmed (the page is
-client-rendered and the check was a `curl` grep).
+About one run in two, one suggestion each time. Every token was in the document, so the guard passed
+all of them: nothing invented, and the sentence still false. **Fixed** — ADR-028 narrows the grounding
+for exactly two things (a figure must belong to the job claiming it; a name must not be another
+employer's identity) and leaves everything belonging to the person grounded across the whole document.
+The guard and the measurement now call the same function, so the metric cannot drift away from the
+rule. Three runs after: **0**.
 
-**Fix** confirm the rendered state first; a "this link has expired" page at 200 is a legitimate
-choice, a blank frame is not.
+**The bigger number was not the one being looked for.** Across nine runs, **4%–27%** of bullets came
+back with nothing at all — and the cause was undiagnosable, because a dropped connection, a model
+answering in prose instead of calling its tool, and a payload the schema refuses were one silent
+`unavailable`. They are now four counted reasons (`SilenceReason`), on the result and in
+`rewrite.done`. Never a transport failure in any run; always the model — `no-tool-call` (it replied in
+prose) or `malformed` (it called the tool with something the schema refuses).
+
+`no-tool-call` used to give up immediately while the one-invention-away case next door got a second
+attempt. It now retries too, and **the retry did not measurably move the aggregate**: 15%, 4% and 19%
+after, against 12%, 15%, 15% and 4% before, which is the same spread. Kept because it is one cheap
+call and strictly more chances, but it is not the lever, and saying otherwise would be reading noise.
+The honest next step is the `malformed` half — which keys the model got wrong, recorded as key names
+(fixed labels, no content) rather than guessed at.
+
+**Also measured, and worth not misreading:** a `fabricated` outcome is the guard **working** — an
+invention caught, the candidate's own wording kept. 0–2 per run. The first version of this suite
+asserted `fabricated === 0`, which would have made the safety mechanism doing its job a failing test.
+
+**Left open** the thresholds are loose on purpose (aggregate, not per fixture) and the honest reason is
+in the suite header: identical code measured silence at 27%, 4%, 15% and 12%. This gates the
+regression that actually happened — every bullet failing, silently, for weeks — not a stable quality
+number, because there is not one.
+
+### P2 — 5. An invalid share token answers `200` _(confirmed, and it was hiding a 500)_
+
+**Route** `/s/no-existe` · **File** `src/db/repository.ts`
+
+The 200 is fine: the page is client-rendered, and what it draws is the correct "This link is no longer
+open" — confirmed in the browser, not by grep. Underneath it, `/api/shared?token=no-existe` was
+answering **500**, not the 404 the route is written to give.
+
+The token is a `uuid` primary key. `no-existe` reached Postgres, raised `22P02`, threw, and the
+framework returned an unhandled 500 — so a truncated link and an unknown-but-well-formed one got
+**different answers**, in the one endpoint whose stated rule is that every failure looks alike. The
+driver also puts the offending parameter in the error it logs, which is the token this module goes out
+of its way never to log.
+
+**Fixed** guarded at the repository, which is the layer that knows the column is a uuid, so
+`revokeShare` is covered too. Verified against a real Postgres (25 tests).
 
 ---
 
@@ -147,6 +189,26 @@ Anonymous means the local model, which on the production `cax21` measured **50.2
 and would be minutes for a Wording pass. The narrated stages make the wait legible but do not make it
 short. See ADR-027: the lever is taking the model call off the blocking path where the rule engine
 already scores 100%, not a faster engine.
+
+### P1 — 9. The editable line and the button that deletes it, side by side _(fixed)_
+
+**Route** `/?panel=check` · **File** `src/components/review-form.tsx` · **Reported by Edd**, with a
+screenshot.
+
+A bullet's textarea had "Remove" pinned to its right. So the longest thing on the page — a sentence
+somebody is writing about their own work — got the least width, and the control that deletes it sat
+nearest the cursor writing it. The custom-section lines had the same shape with a bare `✕` where
+every other remove in the form is the same drawn bin: two icon families for one action, and the odd
+one out was the closest to the text.
+
+**Fixed** each line is now a tinted bubble: the text across the full column, the remove underneath,
+and a container that separates one line from the next. Flat and recessed, never a `.card` — these sit
+_inside_ an open section, and a nested card would claim an elevation it does not have.
+
+**And the defect the bubble made visible:** `rows={2}` hid the third line of a bullet behind a
+scrollbar at 375px, in the panel whose entire job is checking what we read. You cannot check a line
+you cannot see. Every textarea in the form now grows to its content, two rows being the floor.
+**Verified** at 1207px and at 375px: no textarea in the form clips its own text (17 of 17).
 
 ## Fixed during this pass (not counted as open findings)
 
