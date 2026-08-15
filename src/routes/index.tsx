@@ -27,7 +27,7 @@ import {
 } from '@/components/consent-gate'
 import type { ConsentState } from '@/components/consent-gate'
 import { AccountMenu, ModelMenu } from '@/components/topbar-controls'
-import { Dropzone, useFilePicker } from '@/components/dropzone'
+import { useFilePicker } from '@/components/dropzone'
 import { Library } from '@/components/library'
 import { PaperPreview } from '@/components/paper-preview'
 import { ReadBackDemo } from '@/components/read-back-demo'
@@ -134,12 +134,6 @@ function blankResume(fullName: string): Resume {
   })
 }
 
-const SAMPLES = [
-  { id: 'nurse-senior', label: 'Nurse · 15 yrs' },
-  { id: 'sales-junior', label: 'Sales · 3 yrs' },
-  { id: 'switcher', label: 'Career switch' },
-] as const
-
 /**
  * How it works, in three steps, with the time named.
  *
@@ -191,11 +185,30 @@ const MECHANISMS = [
 ]
 
 /**
- * "I do not have one" — one field, and it is the only field a CV cannot do without.
+ * What a CV written from nothing is going to ask for, and how much of it is optional.
  *
- * Closed until asked for, because the upload is still the right first answer for most people and a
- * second form competing with the dropzone would blunt both. Open, it is one question with its reason
- * under it — the shape the competitors' twenty-screen quizzes get right and then abuse (docs/12).
+ * The question somebody has before starting an empty form is not "what is this" — it is "how long is
+ * this going to take me". A list of five lines answers it in about two seconds, and three of the five
+ * say *optional*, which is the fact that gets somebody to start.
+ *
+ * Rules on the page, not a taxonomy: `resume.custom` takes any heading a life needs, so this list is
+ * the fixed sections only and the sentence under it says the rest is theirs.
+ */
+const BLANK_SECTIONS = [
+  { label: 'Your name', note: 'the only one required' },
+  { label: 'What you do', note: 'one line' },
+  { label: 'Jobs', note: 'as many as you have' },
+  { label: 'Schooling', note: 'optional' },
+  { label: 'Skills', note: 'optional' },
+] as const
+
+/**
+ * One field, and it is the only field a CV cannot do without.
+ *
+ * No longer behind a "Write one from scratch" toggle: this is now the whole point of the section it
+ * sits in, and a control that hides the one thing its section is for is a click charged for nothing.
+ * The field is simply there, focused by the person rather than by us — `autoFocus` on a section
+ * halfway down a landing page yanks the viewport to it on load.
  */
 function StartFromScratch({
   onStart,
@@ -204,27 +217,8 @@ function StartFromScratch({
   onStart: (fullName: string) => void
   busy: boolean
 }) {
-  const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const ready = name.trim() !== ''
-
-  if (!open) {
-    return (
-      <div className="mt-6 flex flex-col items-center gap-2">
-        <span className="text-meta text-ink-soft">
-          No CV yet, or the old one is not worth fixing?
-        </span>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => setOpen(true)}
-          className="btn btn-quiet px-5 py-2.5 text-[14px]"
-        >
-          Write one from scratch
-        </button>
-      </div>
-    )
-  }
 
   return (
     <form
@@ -232,46 +226,36 @@ function StartFromScratch({
         event.preventDefault()
         if (ready && !busy) onStart(name)
       }}
-      className="card mt-6 flex flex-col gap-3 p-5"
+      className="mt-1 flex flex-col gap-2"
     >
-      <div className="flex flex-col gap-1">
-        <label
-          htmlFor="blank-name"
-          className="text-[15px] font-semibold text-ink"
-        >
-          What is your name?
-        </label>
-        <p className="text-[13px] leading-relaxed text-ink-soft">
-          The only thing a CV cannot be without. Everything else — jobs,
-          schooling, skills, courses, references — you add in any order, and
-          nothing is compulsory.
-        </p>
-      </div>
-      <input
-        id="blank-name"
-        type="text"
-        autoFocus
-        autoComplete="name"
-        value={name}
-        onChange={(event) => setName(event.target.value)}
-        className="field"
-      />
-      <div className="flex flex-wrap items-center gap-2">
+      <label
+        htmlFor="blank-name"
+        className="text-[13px] font-semibold text-ink"
+      >
+        Your name
+      </label>
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <input
+          id="blank-name"
+          type="text"
+          autoComplete="name"
+          placeholder="As it should read at the top of the page"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          className="field sm:flex-1"
+        />
         <button
           type="submit"
           disabled={!ready || busy}
-          className="btn btn-primary px-5 py-2.5 text-[14px] disabled:cursor-not-allowed disabled:opacity-45"
+          className="btn btn-primary shrink-0 px-6 py-3 text-[15px] disabled:cursor-not-allowed disabled:opacity-45"
         >
           Start writing
-        </button>
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className="rounded-full px-3 py-2 text-[13px] text-ink-soft transition-colors hover:bg-band hover:text-ink"
-        >
-          I do have a file
+          <Icon name="arrow-right" className="h-[18px] w-[18px]" />
         </button>
       </div>
+      <span className="text-meta text-ink-soft">
+        Nothing else is compulsory, and you can download it at any point.
+      </span>
     </form>
   )
 }
@@ -1835,58 +1819,68 @@ function HunterReady() {
             </div>
           </section>
 
-          {/* The upload section proper: the drop target, the formats, the consent sentence, and the
-              samples — everything that needs room to explain itself. */}
+          {/*
+            The other way in, and now the only thing this section does.
+
+            It used to be the upload section, and it had stopped making sense: a drop target, a
+            consent sentence, a from-scratch prompt and three sample buttons, in a stack — four
+            offers competing in one column, and two of them (upload, samples) repeats of the hero
+            twenty lines above. One section, one decision.
+
+            Uploading did not move; it stayed in the hero where it belongs, and `Dropzone` is
+            untouched in `src/components/dropzone.tsx` for wherever it earns its place next. What
+            leaves the page with it is the drag-and-drop target — the picker button remains.
+
+            Asymmetric on purpose: the invitation and its one field on the left, and on the right the
+            shape of what is about to be filled in. That column is not decoration. The question
+            somebody asks before starting a form from nothing is "how much is this going to ask of
+            me", and the honest answer is a short list where most of it is optional.
+          */}
           <section id="upload" className="border-b border-hairline bg-ground">
-            <div className="mx-auto w-full max-w-xl px-4 py-16 sm:px-6 lg:py-20">
+            <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16 lg:px-8 lg:py-24">
               <Reveal>
-                <div className="mb-8 flex flex-col gap-3 text-center">
+                <div className="flex max-w-lg flex-col gap-5">
+                  <span className="flex items-center gap-2.5 text-[12px] font-semibold uppercase tracking-[0.1em] text-signal">
+                    <span aria-hidden className="h-3.5 w-[3px] bg-signal" />
+                    No CV yet
+                  </span>
                   <h2 className="text-display text-balance text-ink">
-                    Start with the CV you already have
+                    Write one from nothing
                     <span className="text-signal">.</span>
                   </h2>
                   <p className="text-lead text-ink-soft">
-                    Even if it is years old, in Word, or a photo of a printed
-                    page.
+                    A first job, a return to work after years out, a trade where
+                    nobody ever wrote one down. Same editor, same checked
+                    document at the end — it just starts empty.
                   </p>
+                  <StartFromScratch onStart={startBlank} busy={busy} />
                 </div>
               </Reveal>
 
-              <Reveal delay={80}>
-                <Dropzone onFile={upload} onPick={picker.open} busy={busy} />
-              </Reveal>
-
-              {/*
-                The door for somebody who has no CV at all.
-
-                Until now this product could only *correct* one, which excluded exactly the people who
-                need one most: a first job, a return to work after years out, a trade where nobody ever
-                wrote one down. It sits under the dropzone rather than beside it, because uploading is
-                still the faster path for everybody who has a file — but it is a real control with the
-                same weight as the samples below it, not a link in small print.
-              */}
-              <Reveal delay={110}>
-                <StartFromScratch onStart={startBlank} busy={busy} />
-              </Reveal>
-
-              <Reveal delay={140}>
-                <div className="mt-8 flex flex-col items-center gap-2.5">
-                  <span className="text-meta text-ink-soft">
-                    Or look at a finished example first
+              <Reveal delay={90}>
+                <div className="flex flex-col gap-3 lg:pt-2">
+                  <span className="text-meta font-semibold uppercase tracking-[0.08em] text-ink-faint">
+                    What it will ask for
                   </span>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    {SAMPLES.map((sample) => (
-                      <button
-                        key={sample.id}
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void loadSample(sample.id)}
-                        className="btn btn-quiet px-3.5 py-1.5 text-[13px]"
+                  <ul className="flex flex-col divide-y divide-hairline border-y border-hairline">
+                    {BLANK_SECTIONS.map((item) => (
+                      <li
+                        key={item.label}
+                        className="flex items-baseline justify-between gap-4 py-3"
                       >
-                        {sample.label}
-                      </button>
+                        <span className="text-[15px] font-medium text-ink">
+                          {item.label}
+                        </span>
+                        <span className="text-meta text-ink-soft">
+                          {item.note}
+                        </span>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
+                  <p className="text-meta leading-relaxed text-ink-soft">
+                    Add sections of your own for anything this list does not
+                    cover — courses, references, licences, publications.
+                  </p>
                 </div>
               </Reveal>
             </div>
