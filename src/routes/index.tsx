@@ -1819,10 +1819,11 @@ function HunterReady() {
             what a heading is for when its list is long enough to leave it behind.
           */}
           <section className="border-b border-hairline bg-band">
-            <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20 lg:px-8 lg:py-24">
+            <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20 lg:px-8 lg:py-16">
               <Reveal>
                 <div className="flex flex-col gap-4 lg:sticky lg:top-24">
-                  <h2 className="text-display text-balance text-ink">
+                  <span className="eyebrow">How it goes</span>
+                  <h2 className="text-section text-balance text-ink">
                     Three steps, about five minutes
                     <span className="text-signal">.</span>
                   </h2>
@@ -1873,10 +1874,7 @@ function HunterReady() {
             <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16 lg:px-8 lg:py-24">
               <Reveal>
                 <div className="flex max-w-lg flex-col gap-5">
-                  <span className="flex items-center gap-2.5 text-[12px] font-semibold uppercase tracking-[0.1em] text-signal">
-                    <span aria-hidden className="h-3.5 w-[3px] bg-signal" />
-                    No CV yet
-                  </span>
+                  <span className="eyebrow">No CV yet</span>
                   <h2 className="text-display text-balance text-ink">
                     Write one from nothing
                     <span className="text-signal">.</span>
@@ -1931,10 +1929,11 @@ function HunterReady() {
             want a source reference. It is the one place on the page where saying HOW is more
             persuasive than saying WHAT.
           */}
-          <section className="border-b border-hairline bg-ground">
-            <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
+          <section className="border-b border-hairline bg-band">
+            <div className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
               <Reveal>
-                <h2 className="max-w-2xl text-display text-balance text-ink">
+                <span className="eyebrow">Evidence</span>
+                <h2 className="mt-4 max-w-2xl text-section text-balance text-ink">
                   Three things we can prove, not just say
                   <span className="text-signal">.</span>
                 </h2>
@@ -1975,40 +1974,49 @@ function HunterReady() {
             The left column deliberately does not exaggerate. "Your CV probably parses fine" is in the
             lead, because for most people it does, and a page that opens by telling somebody their
             document is broken has already lied to the majority of its readers.
+
+            **This is the page's one dark band, and its only Hero-sized heading after the hero.** Seven
+            sections alternating between two greys is a rhythm with no accent in it — the reader has no
+            way to tell which one the product is actually about. Everything else on the page is a
+            feature or a reassurance; this is the argument. It gets the tonal event, and nothing else
+            may have one (see `.band-ink`).
           */}
-          <section className="border-b border-hairline bg-band">
-            <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
+          <section className="band-ink">
+            <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6 lg:px-8 lg:py-32">
               <Reveal>
-                <h2 className="max-w-2xl text-display text-balance text-ink">
+                <span className="eyebrow text-white">The problem</span>
+                <h2 className="mt-5 max-w-3xl text-hero text-balance text-white">
                   What you cannot check on your own
-                  <span className="text-signal">.</span>
+                  <span className="text-signal-edge">.</span>
                 </h2>
-                <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-ink-soft">
+                <p className="on-ink-soft mt-6 max-w-2xl text-lead">
                   Your CV probably parses fine. The problem is that there is no
                   way to find out before you send it — and the ways it fails are
                   invisible in the document you are looking at.
                 </p>
               </Reveal>
 
-              <div className="mt-10 flex flex-col divide-y divide-hairline-strong border-y border-hairline-strong">
+              <div className="mt-14 flex flex-col divide-y divide-white/12 border-y border-white/12">
                 <div className="hidden gap-10 py-3 lg:grid lg:grid-cols-2">
-                  <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
+                  <span className="on-ink-faint text-[12px] font-semibold uppercase tracking-[0.1em]">
                     On your own
                   </span>
-                  <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-signal">
+                  <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-affirm-wash">
                     Here
                   </span>
                 </div>
                 {COMPARISON.map((row, index) => (
                   <Reveal key={row.here} delay={index * 70}>
-                    <div className="grid gap-3 py-6 lg:grid-cols-2 lg:gap-10">
-                      <p className="max-w-[52ch] text-[14px] leading-relaxed text-ink-faint">
+                    <div className="grid gap-3 py-7 lg:grid-cols-2 lg:gap-10">
+                      {/* 72% white, not the 45% the column labels use: this column recedes by size
+                          and by position, and it still has to be read. */}
+                      <p className="on-ink-soft max-w-[52ch] text-[14px] leading-relaxed">
                         {row.alone}
                       </p>
-                      <p className="flex max-w-[52ch] gap-2.5 text-[15px] leading-relaxed text-ink">
+                      <p className="flex max-w-[52ch] gap-2.5 text-[16px] leading-relaxed text-white">
                         <Icon
                           name="check"
-                          className="mt-1 h-4 w-4 shrink-0 text-affirm"
+                          className="mt-1 h-4 w-4 shrink-0 text-affirm-wash"
                         />
                         {row.here}
                       </p>
@@ -2037,10 +2045,11 @@ function HunterReady() {
             for free, and find-in-page can reach inside a closed one.
           */}
           <section className="border-b border-hairline bg-ground">
-            <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20 lg:px-8 lg:py-24">
+            <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20 lg:px-8 lg:py-16">
               <Reveal>
                 <div className="flex flex-col gap-4 lg:sticky lg:top-24">
-                  <h2 className="text-display text-balance text-ink">
+                  <span className="eyebrow">Straight answers</span>
+                  <h2 className="text-section text-balance text-ink">
                     Before you start
                     <span className="text-signal">.</span>
                   </h2>
@@ -2072,24 +2081,37 @@ function HunterReady() {
             </div>
           </section>
 
-          {/* One last door, for the reader who scrolled the whole page before deciding. */}
-          <section className="border-t border-hairline bg-ground">
-            <div className="mx-auto w-full max-w-6xl px-4 py-16 text-center sm:px-6 lg:px-8">
+          {/* One last door, for the reader who scrolled the whole page before deciding.
+
+              On Signal Wash rather than white: it is the only section whose job is a single action,
+              and the accent's own tint says so without a second button or a louder word. It is also
+              the fourth ground on a page that had two, which is what stops the last screen before the
+              footer reading as more of the same. */}
+          <section className="bg-signal-wash">
+            <div className="mx-auto w-full max-w-6xl px-4 py-20 text-center sm:px-6 lg:px-8 lg:py-24">
               <Reveal>
-                <div className="flex flex-col items-center gap-5">
+                <div className="flex flex-col items-center gap-6">
                   <h2 className="max-w-xl text-display text-balance text-ink">
                     Ready to see what the software sees
                     <span className="text-signal">?</span>
                   </h2>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={picker.open}
-                    className="btn btn-primary px-7 py-3.5 text-[16px]"
-                  >
-                    Add your CV
-                    <Icon name="arrow-right" className="h-[18px] w-[18px]" />
-                  </button>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={picker.open}
+                      className="btn btn-primary px-7 py-3.5 text-[16px]"
+                    >
+                      Add your CV
+                      <Icon name="arrow-right" className="h-[18px] w-[18px]" />
+                    </button>
+                    <a
+                      href="#upload"
+                      className="btn btn-quiet bg-ground px-6 py-3.5 text-[15px]"
+                    >
+                      Or write one from nothing
+                    </a>
+                  </div>
                 </div>
               </Reveal>
             </div>

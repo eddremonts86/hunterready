@@ -135,8 +135,13 @@ Figtree (see The Print Is Not Ours).
   per page. Capped at 3.5rem after measurement: at 68px the hero sentence broke into
   four lines in its column and orphaned two of them. A headline that big is only big
   in a screenshot.
-- **Display** — `clamp(1.75rem, 3.4vw, 2.375rem)`, 800, -0.024em. Step questions and
-  section headings.
+- **Display** — `clamp(1.75rem, 3.4vw, 2.375rem)`, 800, -0.024em. Step questions, and the
+  section headings of the two or three sections a page is actually built on.
+- **Section** — `clamp(1.375rem, 2.2vw, 1.75rem)`, 800, -0.02em. Every other section heading.
+  Added because the level was missing and its absence was doing real damage: every heading on the
+  landing page was Display, so a page with seven sections shouted seven times at the same volume
+  and none of them led. Prominence is a decision, and a scale with no step between Display and
+  Title cannot express one.
 - **Title** — 1.1875rem, 700. Card and panel headings.
 - **Lead** — 1.0625rem, 400, 1.6. The paragraph under a hero.
 - **Body** — 1rem / 0.9375rem, 400, 1.6. On Ink, never on Ink Soft.
@@ -151,6 +156,27 @@ that fought the natural wrap and produced a four-line headline with two orphans.
 
 **Tabular Figures For Anything That Changes.** Counters, tallies, step numbers. A
 number that shifts the layout when it decrements reads as a glitch.
+
+**The Ladder, Not The Shout.** Every section on a long page opens the same way: eyebrow, heading,
+body. The eyebrow is `.eyebrow` — 0.75rem, 600, `0.1em` tracking, in Signal, with a 3px rule in
+front of it. Hierarchy between sections comes from _which_ heading level they take and how much air
+they get, never from a section deciding to be bigger on its own.
+
+**One Dark Band.** A page may set exactly one section on Ink, and it goes to the section carrying the
+argument — not to a feature, and never to two. This is the largest tonal event available without
+inventing a hue (see One Accent, which permits luminance), and it works only because the rest of the
+page is quiet: two dark bands are stripes and neither means anything. On the landing page it is
+"What you cannot check on your own", the only section that is not a feature or a reassurance.
+
+Contrast on it is not a matter of taste: white on Ink is 17.3:1, and the softened body underneath is
+white at 72%, which is 11.5:1. The 45% tint (`.on-ink-faint`) is for column labels and rules, on the
+same terms Ink Faint is on white — structural and large-format only, never a paragraph somebody has
+to read.
+
+**Four Grounds, In Order Of Loudness.** Ground and Band carry ordinary sections; Signal Wash marks a
+surface whose whole job is one action (the closing call); Ink marks the argument. A page that
+alternates two greys seven times has a rhythm with no accent in it, and the reader has no way to tell
+which section the product is actually about.
 
 ## Layout
 

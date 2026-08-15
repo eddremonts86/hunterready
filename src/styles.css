@@ -154,6 +154,16 @@
   --text-display--letter-spacing: -0.024em;
   --text-display--font-weight: 800;
 
+  /* The level between Display and Title, and the gap was doing real damage.
+     Every section heading on the landing page was Display, so a page with seven sections shouted
+     seven times at the same volume and none of them led. Supporting sections take this; the two the
+     page is actually built on keep Display. Fluid for the same reason Display is: it sits under a
+     hero that grows, and a fixed size drifts away from it. */
+  --text-section: clamp(1.375rem, 2.2vw, 1.75rem);
+  --text-section--line-height: 1.2;
+  --text-section--letter-spacing: -0.02em;
+  --text-section--font-weight: 800;
+
   --text-title: 1.1875rem;
   --text-title--line-height: 1.3;
   --text-title--letter-spacing: -0.014em;
@@ -208,6 +218,67 @@ body {
     box-shadow:
       0 1px 2px rgb(16 26 51 / 4%),
       0 10px 28px -14px rgb(16 26 51 / 12%);
+  }
+
+  /**
+   * The chapter label above a section heading.
+   *
+   * Small, tracked wide, in the accent, with a 3px rule in front of it. It does two jobs at once:
+   * it tells the reader where they are in the page's argument, and it gives every section a
+   * three-step ladder — label, heading, body — so hierarchy comes from the sequence rather than from
+   * making the heading bigger. That is the difference between a page with seven sections and a page
+   * that shouts seven times.
+   */
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-signal);
+  }
+
+  .eyebrow::before {
+    content: '';
+    width: 3px;
+    height: 0.875rem;
+    background: currentColor;
+    flex-shrink: 0;
+  }
+
+  /**
+   * The one dark band on the page, and it may only ever be one.
+   *
+   * The page had exactly two grounds — white and Band — alternating mechanically, which is a rhythm
+   * with no accent in it: seven sections of equal weight, so the reader has no idea which one the
+   * product actually turns on. Ink as a ground is the largest tonal event available without inventing
+   * a hue (DESIGN.md's One Accent permits luminance, not a new colour), so it is spent on the single
+   * section that carries the argument — the one naming what a person cannot check for themselves.
+   *
+   * Two of them would be stripes and neither would mean anything. If a second section ever wants
+   * this, the question to answer first is which one gives it up.
+   *
+   * Ink is #101A33 and white on it measures 17.3:1; the softened text below is white at 72%, which
+   * lands at 11.5:1 — both comfortably past AA, which is the only reason a dark band is allowed here
+   * at all.
+   */
+  .band-ink {
+    background: var(--color-ink);
+    color: #ffffff;
+  }
+
+  .band-ink .on-ink-soft {
+    color: rgb(255 255 255 / 72%);
+  }
+
+  .band-ink .on-ink-faint {
+    color: rgb(255 255 255 / 45%);
+  }
+
+  .band-ink .rule-ink {
+    border-color: rgb(255 255 255 / 14%);
   }
 
   .card {
