@@ -9,7 +9,7 @@
  * the questions to come from provenance rather than from a script (ADR-011). This is the form
  * underneath it: sections collapsed by default, uncertain ones open.
  */
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { DateField } from '@/components/date-field'
 import { PhotoField } from '@/components/photo-field'
 import {
@@ -95,11 +95,11 @@ function Field({
         <Flag entry={provenance} />
       </span>
       {multiline ? (
-        <textarea
+        <AutoTextarea
           value={value}
-          rows={3}
-          onChange={(event) => onChange(event.target.value)}
-          className={`${shared} resize-y leading-relaxed`}
+          minRows={3}
+          onChange={onChange}
+          className={shared}
         />
       ) : (
         <input
@@ -144,6 +144,83 @@ function RemoveRow({ label, onClick }: { label: string; onClick: () => void }) {
       </svg>
       Remove
     </button>
+  )
+}
+
+/**
+ * One editable line, and the control that removes it, in a container of their own.
+ *
+ * They used to sit side by side — a textarea with "Remove" pinned to its right. That gave the least
+ * width to the longest thing on the page (a sentence somebody is writing about their own work, which
+ * wraps after four or five words in a squeezed box), and it put the control that deletes that
+ * sentence directly beside the cursor writing it. Edd's words: the button goes under the text, the
+ * text takes the whole column, and the pair sits in a bubble that separates it from the next line.
+ *
+ * Tinted and flat, never a `.card`. DESIGN.md's elevation rule says a shadow means "this surface is
+ * above that one", and these are *inside* an open section — a nested card would claim a layer it does
+ * not have. Recessed says the true thing: a well holding one line of the document.
+ */
+function LineBubble({
+  children,
+  removeLabel,
+  onRemove,
+}: {
+  children: React.ReactNode
+  removeLabel: string
+  onRemove: () => void
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-choice border border-hairline bg-band p-2.5">
+      {children}
+      <RemoveRow label={removeLabel} onClick={onRemove} />
+    </div>
+  )
+}
+
+/**
+ * A textarea that is always exactly as tall as what is written in it.
+ *
+ * A fixed `rows={2}` hid the end of the sentence the moment the column got narrow — on a phone, the
+ * third line of a bullet sat behind a scrollbar inside a box two lines high, in the panel whose entire
+ * job is *checking what we read*. You cannot check a line you cannot see. Two rows is the floor, not
+ * the ceiling: it grows to the text and shrinks back when the text does.
+ *
+ * `useLayoutEffect` rather than `useEffect` so the height is set before the browser paints — measuring
+ * after paint makes the box visibly jump on every keystroke. The `height: auto` first is not
+ * redundant: `scrollHeight` on an already-stretched element reports the old height forever, so
+ * deleting text would never shrink it back.
+ */
+function AutoTextarea({
+  value,
+  onChange,
+  className,
+  ariaLabel,
+  minRows = 2,
+}: {
+  value: string
+  onChange: (next: string) => void
+  className: string
+  ariaLabel?: string
+  minRows?: number
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+
+  useLayoutEffect(() => {
+    const element = ref.current
+    if (element === null) return
+    element.style.height = 'auto'
+    element.style.height = `${element.scrollHeight}px`
+  }, [value])
+
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      rows={minRows}
+      {...(ariaLabel === undefined ? {} : { 'aria-label': ariaLabel })}
+      onChange={(event) => onChange(event.target.value)}
+      className={`${className} resize-none overflow-hidden leading-relaxed`}
+    />
   )
 }
 
@@ -718,28 +795,25 @@ export function ReviewForm({
                 </p>
               )}
               {item.highlights.map((text, b) => (
-                <div key={b} className="flex items-start gap-2">
-                  <textarea
+                <LineBubble
+                  key={b}
+                  removeLabel={`Remove bullet ${b + 1}`}
+                  onRemove={() => removeBullet(i, b)}
+                >
+                  <AutoTextarea
                     value={text}
-                    rows={2}
-                    aria-label={`Bullet ${b + 1} for ${item.role || 'this job'}`}
-                    onChange={(event) =>
+                    ariaLabel={`Bullet ${b + 1} for ${item.role || 'this job'}`}
+                    onChange={(next) =>
                       setHighlights(
                         i,
                         item.highlights.map((line, at) =>
-                          at === b ? event.target.value : line,
+                          at === b ? next : line,
                         ),
                       )
                     }
-                    className={`${fieldClass(
-                      `work.${i}.highlights.${b}`,
-                    )} min-w-0 flex-1 resize-y leading-relaxed`}
+                    className={fieldClass(`work.${i}.highlights.${b}`)}
                   />
-                  <RemoveRow
-                    label={`Remove bullet ${b + 1}`}
-                    onClick={() => removeBullet(i, b)}
-                  />
-                </div>
+                </LineBubble>
               ))}
               <AddRow label="Add a line" onClick={() => addBullet(i)} />
             </div>
@@ -903,18 +977,17 @@ export function ReviewForm({
                 What goes under it
                 <Flag entry={index.get(`skills.${i}.items`)} />
               </span>
-              <textarea
+              <AutoTextarea
                 value={group.items.join(', ')}
-                rows={2}
-                onChange={(event) =>
+                onChange={(next) =>
                   setSkillGroup(i, {
-                    items: event.target.value
+                    items: next
                       .split(',')
                       .map((item) => item.trim())
                       .filter((item) => item !== ''),
                   })
                 }
-                className={`${fieldClass(`skills.${i}.items`)} resize-y leading-relaxed`}
+                className={fieldClass(`skills.${i}.items`)}
               />
               <span className="text-meta text-ink-soft">
                 Separated by commas.
@@ -961,29 +1034,29 @@ export function ReviewForm({
             onChange={(title) => setCustomSection(i, { title })}
             provenance={index.get(`custom.${i}.title`)}
           />
+          {/*
+            The remove control here was a bare "✕" character where every other one in the form is the
+            same drawn bin — two icon families for one action, and the odd one out was the one sitting
+            closest to the text. Same bubble, same button, same place: learned once, true everywhere.
+          */}
           {section.items.map((item, j) => (
-            <label key={j} className="flex flex-col gap-1.5">
-              <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
-                Line {j + 1}
-                <Flag entry={index.get(`custom.${i}.items.${j}`)} />
-              </span>
-              <div className="flex items-start gap-2">
-                <textarea
+            <LineBubble
+              key={j}
+              removeLabel={`Remove line ${j + 1} of ${section.title || 'this section'}`}
+              onRemove={() => removeCustomItem(i, j)}
+            >
+              <label className="flex flex-col gap-1.5">
+                <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
+                  Line {j + 1}
+                  <Flag entry={index.get(`custom.${i}.items.${j}`)} />
+                </span>
+                <AutoTextarea
                   value={item}
-                  rows={Math.min(4, Math.max(1, Math.ceil(item.length / 70)))}
-                  onChange={(event) => setCustomItem(i, j, event.target.value)}
-                  className={`${fieldClass(`custom.${i}.items.${j}`)} flex-1 resize-y leading-relaxed`}
+                  onChange={(next) => setCustomItem(i, j, next)}
+                  className={fieldClass(`custom.${i}.items.${j}`)}
                 />
-                <button
-                  type="button"
-                  aria-label={`Remove line ${j + 1} of ${section.title || 'this section'}`}
-                  onClick={() => removeCustomItem(i, j)}
-                  className="mt-1 rounded-field px-2 py-1 text-[13px] text-ink-soft transition-colors hover:bg-band hover:text-ink"
-                >
-                  ✕
-                </button>
-              </div>
-            </label>
+              </label>
+            </LineBubble>
           ))}
           <AddRow label="Add a line" onClick={() => addCustomItem(i)} />
           <RemoveRow
