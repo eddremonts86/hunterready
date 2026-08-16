@@ -659,12 +659,21 @@ export function ReviewForm({
         </p>
       )}
 
-      {!authoring && !ocr && total === 0 && (
-        <p className="text-[13px] leading-relaxed text-ink-soft">
-          This time we could not tell which fields to double-check, so please
-          read through all of them, especially the dates and job titles.
-        </p>
-      )}
+      {/*
+        Deliberately no paragraph for the `total === 0` case, and this is the removal rather than an
+        omission.
+
+        Three elements were saying one thing. The page subtitle carries the advice ("your dates and
+        job titles are the ones worth a second look"), the tally beside it carries the state ("Check
+        everything" over "we could not tell which fields"), and a paragraph underneath repeated both
+        and added "read through all of them", which is what "Check everything" already says in two
+        words. The reader was being told the same thing three times in three registers, which reads
+        as insistence rather than as help (reference/distill.md).
+
+        The `ocr` and `flaggedCount === 0` branches keep their paragraphs: each says something the
+        tally cannot, namely *why* the whole document needs eyes in one case and that nothing looked
+        uncertain in the other.
+      */}
 
       {!authoring && !ocr && flaggedCount === 0 && total > 0 && (
         <p className="text-[13px] leading-relaxed text-ink-soft">
