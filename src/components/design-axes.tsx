@@ -33,12 +33,18 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { REGISTERED_FAMILIES } from '@/render/fonts/families'
 import { ACCENT_FLOOR, judgeAccent, normalizeHex } from '@/render/themes/custom'
 
@@ -89,6 +95,16 @@ export function Section({
   )
 }
 
+/**
+ * Sixty families, searchable.
+ *
+ * A plain `Select` was the first version and it does not scale to sixty: finding Merriweather meant
+ * scrolling a list whose order nobody knows, and a reader who half-remembers "something like Bodoni"
+ * had no way to ask. A combobox turns that into typing three letters.
+ *
+ * Each name is still set in its own face, which is the part that matters: a font list rendered in one
+ * typeface is a list of words, and the choice is being made by eye.
+ */
 function FontPicker({
   label,
   value,
@@ -100,48 +116,64 @@ function FontPicker({
   fallback: string
   onChange: (family?: string) => void
 }) {
+  const [open, setOpen] = useState(false)
+  const shown = value ?? `${fallback} (design)`
+
   return (
-    <label className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1.5">
       <span className="text-[13px] font-semibold text-ink">{label}</span>
-      <Select
-        value={value ?? '__design'}
-        onValueChange={(next) =>
-          onChange(next === '__design' ? undefined : next)
-        }
-      >
-        <SelectTrigger className={TRIGGER}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent className="max-h-72">
-          <SelectItem value="__design">{fallback} (design)</SelectItem>
-          {REGISTERED_FAMILIES.map((family) => (
-            // Each name set in its own face, so the list is a specimen rather than a list of words.
-            <SelectItem
-              key={family}
-              value={family}
-              style={{ fontFamily: `"${family}"` }}
-            >
-              {family}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger
+          className={`${TRIGGER} flex items-center justify-between gap-2 text-left`}
+          aria-label={`${label} typeface`}
+        >
+          <span
+            className="truncate"
+            style={
+              value === undefined ? undefined : { fontFamily: `"${value}"` }
+            }
+          >
+            {shown}
+          </span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-ink-soft" />
+        </PopoverTrigger>
+        <PopoverContent className="w-[min(22rem,90vw)] p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Search sixty typefaces…" />
+            <CommandList>
+              <CommandEmpty>No typeface by that name.</CommandEmpty>
+              <CommandGroup>
+                <CommandItem
+                  value={`${fallback} design default`}
+                  onSelect={() => {
+                    onChange(undefined)
+                    setOpen(false)
+                  }}
+                >
+                  {fallback} (design)
+                </CommandItem>
+                {REGISTERED_FAMILIES.map((family) => (
+                  <CommandItem
+                    key={family}
+                    value={family}
+                    onSelect={() => {
+                      onChange(family)
+                      setOpen(false)
+                    }}
+                    style={{ fontFamily: `"${family}"` }}
+                  >
+                    {family}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
   )
 }
 
-/**
- * A colour, typed or picked, without the field fighting the hand that types it.
- *
- * The first version was fully controlled and normalised on every keystroke, which cannot work: on the
- * way to typing `#ffffff` you pass through `#fff`, which is a valid three-digit hex. It normalised,
- * rewrote the field to `#ffffff`, and the remaining `fff` landed on the end of that. What came out was
- * a colour nobody chose, usually below the contrast floor, so the document quietly kept the design's
- * own colours and the whole feature looked broken.
- *
- * So the text field keeps a draft of exactly what was typed and commits only when the draft is a
- * whole colour. The swatch is unaffected: a native picker emits complete values.
- */
 function ColourPicker({
   label,
   value,

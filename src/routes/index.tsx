@@ -66,6 +66,11 @@ import { estimateFit } from '@/render/fit'
 import { quoteFamily, withColours } from '@/render/themes/custom'
 import { DesignAxes } from '@/components/design-axes'
 import { WorkspaceSplit } from '@/components/workspace-split'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Toaster } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 import { styleOf } from '@/render/themes/style'
 import { getTheme } from '@/render/themes'
 import type { ThemeId } from '@/render/themes'
@@ -77,8 +82,24 @@ import type { TemplateId } from '@/render/templates/registry'
 export const Route = createFileRoute('/')({
   // Validated in `@/lib/workspace-search`, with its reasoning and its tests.
   validateSearch: validateWorkspaceSearch,
-  component: HunterReady,
+  component: Workspace,
 })
+
+/**
+ * The route, plus the one surface that has to outlive every screen inside it.
+ *
+ * A toast is for the thing that happened while you were looking somewhere else, so its host cannot
+ * live inside a panel that unmounts when you switch tabs. `richColors` is off: this product has three
+ * semantic colours with measured contrast (DESIGN.md), and sonner's own palette is a fourth opinion.
+ */
+function Workspace() {
+  return (
+    <>
+      <HunterReady />
+      <Toaster position="bottom-right" closeButton />
+    </>
+  )
+}
 
 interface Loaded {
   resume: Resume
@@ -679,11 +700,18 @@ function useDownloads() {
       try {
         await downloadDocument(resume, templateId, themeId, wanted, axes)
       } catch (error) {
-        setFailure(
+        const message =
           error instanceof DownloadFailed
             ? error.message
-            : 'Something went wrong building the file. Your CV is still here. Try again.',
-        )
+            : 'Something went wrong building the file. Your CV is still here. Try again.'
+        setFailure(message)
+        /*
+          Said twice on purpose, and they are not the same message doing the same job. The inline note
+          stays beside the button that failed, which is where somebody looks when they try again. The
+          toast is for the case the note cannot cover: a long panel scrolled away from its own footer,
+          where a failure would otherwise be silent.
+        */
+        toast.error('That file did not build', { description: message })
       } finally {
         setFormat(undefined)
       }
@@ -831,56 +859,54 @@ function PanelTabs({
 }) {
   return (
     /*
-      One row, always — scrolling rather than wrapping.
+      Radix `Tabs` rather than the hand-rolled strip that was here.
 
-      `flex-wrap` put four tabs on the first line and stranded "Account" alone and centred beneath
-      them at 375px, which reads as a rendering fault rather than a fifth tab. A tab strip is a single
-      axis by definition: the fix is to let it scroll, not to let it fold. `scrollbar-none` because a
-      visible bar under a pill row is noise on the one viewport with the least room for it, and the
-      partially-cut last tab is itself the affordance that says "there is more this way".
+      The roles were already right — `tablist`, `tab`, `aria-selected` — and that is the half that is
+      easy. The half that was missing is the behaviour the ARIA pattern actually requires: arrow keys
+      move between tabs, Home and End jump to the ends, and only the selected tab is in the tab order
+      so a keyboard user tabs *past* the strip rather than through five stops in it. None of that was
+      here, and all of it comes with the primitive.
 
-      `min-w-0` on the buttons, and `flex-1` only from `sm` up: below that they take their natural
-      width so the labels never truncate; above it they share the row as before, where they fit.
+      Rendered without `TabsContent`: the panels live further down the tree, keyed off the same state,
+      and pulling them in here would mean moving five large blocks to satisfy a component.
+
+      One row, always — scrolling rather than wrapping. `flex-wrap` put four tabs on the first line and
+      stranded "Account" alone beneath them at 375px, which reads as a rendering fault rather than a
+      fifth tab. A tab strip is a single axis by definition: the fix is to let it scroll, not fold.
     */
-    <div
-      role="tablist"
-      aria-label="CV panels"
-      className="scrollbar-none flex shrink-0 gap-1 overflow-x-auto rounded-full bg-band p-1"
+    <Tabs
+      value={active}
+      onValueChange={(next) => onChange(next as PanelId)}
+      className="shrink-0"
     >
-      {PANELS.map((panel) => {
-        const on = panel.id === active
-        const badge = badges[panel.id]
-        return (
-          <button
-            key={panel.id}
-            type="button"
-            role="tab"
-            aria-selected={on}
-            onClick={() => onChange(panel.id)}
-            className={[
-              'flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1.5 text-[13px] transition-colors sm:flex-1 sm:shrink',
-              on
-                ? 'border border-signal-edge bg-ground font-semibold text-signal'
-                : 'border border-transparent font-medium text-ink-soft hover:text-ink',
-            ].join(' ')}
-          >
-            {panel.label}
-            {badge !== undefined && (
-              <span
-                className={[
-                  'tally rounded-full px-1.5 text-[11px] font-bold',
-                  badge.tone === 'caution'
-                    ? 'bg-caution text-white'
-                    : 'bg-signal text-white',
-                ].join(' ')}
-              >
-                {badge.text}
-              </span>
-            )}
-          </button>
-        )
-      })}
-    </div>
+      <TabsList
+        aria-label="CV panels"
+        className="scrollbar-none flex w-full gap-1 overflow-x-auto rounded-full bg-band p-1"
+      >
+        {PANELS.map((panel) => {
+          const badge = badges[panel.id]
+          return (
+            <TabsTrigger
+              key={panel.id}
+              value={panel.id}
+              className="flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border border-transparent px-2.5 py-1.5 text-[13px] font-medium text-ink-soft transition-colors hover:text-ink data-[state=active]:border-signal-edge data-[state=active]:bg-ground data-[state=active]:font-semibold data-[state=active]:text-signal sm:flex-1 sm:shrink"
+            >
+              {panel.label}
+              {badge !== undefined && (
+                <Badge
+                  className={[
+                    'tally rounded-full border-transparent px-1.5 text-[11px] font-bold text-white',
+                    badge.tone === 'caution' ? 'bg-caution' : 'bg-signal',
+                  ].join(' ')}
+                >
+                  {badge.text}
+                </Badge>
+              )}
+            </TabsTrigger>
+          )
+        })}
+      </TabsList>
+    </Tabs>
   )
 }
 
@@ -2919,32 +2945,34 @@ function HunterReady() {
                   {panel === 'check' &&
                     (loaded.warnings.length > 0 ||
                       fit.advice !== undefined) && (
-                      <div className="rounded-card border border-caution/25 bg-caution-wash p-4">
-                        <h2 className="text-[13px] font-semibold text-caution">
+                      <Alert className="rounded-card border-caution/25 bg-caution-wash p-4">
+                        <AlertTitle className="text-[13px] font-semibold text-caution">
                           Worth knowing
-                        </h2>
-                        <ul className="mt-2 flex flex-col gap-1.5">
-                          {loaded.warnings.map((warning, i) => (
-                            <li
-                              key={i}
-                              className="text-[13px] leading-relaxed text-ink"
-                            >
-                              {warning}
-                            </li>
-                          ))}
-                          {/*
+                        </AlertTitle>
+                        <AlertDescription>
+                          <ul className="mt-2 flex flex-col gap-1.5">
+                            {loaded.warnings.map((warning, i) => (
+                              <li
+                                key={i}
+                                className="text-[13px] leading-relaxed text-ink"
+                              >
+                                {warning}
+                              </li>
+                            ))}
+                            {/*
                         Length advice belongs beside the other remarks about the document's content,
                         not as a caption over the render. It is last because it is the softest: the
                         others describe something we could not read, this one describes a judgement
                         call that is the candidate's to make.
                       */}
-                          {fit.advice !== undefined && (
-                            <li className="text-[13px] leading-relaxed text-ink">
-                              {fit.advice}
-                            </li>
-                          )}
-                        </ul>
-                      </div>
+                            {fit.advice !== undefined && (
+                              <li className="text-[13px] leading-relaxed text-ink">
+                                {fit.advice}
+                              </li>
+                            )}
+                          </ul>
+                        </AlertDescription>
+                      </Alert>
                     )}
 
                   {panel === 'check' && (
