@@ -65,6 +65,7 @@ import { needsReview } from '@/schema/provenance'
 import { estimateFit } from '@/render/fit'
 import { quoteFamily, withColours } from '@/render/themes/custom'
 import { DesignAxes } from '@/components/design-axes'
+import { WorkspaceSplit } from '@/components/workspace-split'
 import { styleOf } from '@/render/themes/style'
 import { getTheme } from '@/render/themes'
 import type { ThemeId } from '@/render/themes'
@@ -2879,404 +2880,410 @@ function HunterReady() {
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col gap-5 lg:min-h-0 lg:flex-row">
-          {/* What changes the document, and what still needs checking. */}
-          {/*
+        <WorkspaceSplit
+          storageId="hunterready.workspace-split.v1"
+          panel={
+            <>
+              {/* What changes the document, and what still needs checking. */}
+              {/*
             One column, five panels, one at a time.
 
             `overflow-y-auto` moved from the column to the *panel* below: the tab strip has to stay put
             while its content scrolls, or the way back out of a long panel scrolls away with it.
           */}
-          <aside className="flex w-full shrink-0 flex-col gap-3 lg:w-[400px] lg:min-h-0">
-            <PanelTabs
-              active={panel}
-              onChange={setPanel}
-              badges={{
-                ...(toCheck > 0
-                  ? {
-                      check: {
-                        text: String(toCheck),
-                        tone: 'caution' as const,
-                      },
-                    }
-                  : {}),
-                ...(rewrites !== undefined && pendingRewrites > 0
-                  ? {
-                      wording: {
-                        text: String(pendingRewrites),
-                        tone: 'signal' as const,
-                      },
-                    }
-                  : {}),
-              }}
-            />
+              <aside className="flex w-full min-w-0 flex-col gap-3 lg:min-h-0">
+                <PanelTabs
+                  active={panel}
+                  onChange={setPanel}
+                  badges={{
+                    ...(toCheck > 0
+                      ? {
+                          check: {
+                            text: String(toCheck),
+                            tone: 'caution' as const,
+                          },
+                        }
+                      : {}),
+                    ...(rewrites !== undefined && pendingRewrites > 0
+                      ? {
+                          wording: {
+                            text: String(pendingRewrites),
+                            tone: 'signal' as const,
+                          },
+                        }
+                      : {}),
+                  }}
+                />
 
-            <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-2 lg:pr-1">
-              {panel === 'check' &&
-                (loaded.warnings.length > 0 || fit.advice !== undefined) && (
-                  <div className="rounded-card border border-caution/25 bg-caution-wash p-4">
-                    <h2 className="text-[13px] font-semibold text-caution">
-                      Worth knowing
-                    </h2>
-                    <ul className="mt-2 flex flex-col gap-1.5">
-                      {loaded.warnings.map((warning, i) => (
-                        <li
-                          key={i}
-                          className="text-[13px] leading-relaxed text-ink"
-                        >
-                          {warning}
-                        </li>
-                      ))}
-                      {/*
+                <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-2 lg:pr-1">
+                  {panel === 'check' &&
+                    (loaded.warnings.length > 0 ||
+                      fit.advice !== undefined) && (
+                      <div className="rounded-card border border-caution/25 bg-caution-wash p-4">
+                        <h2 className="text-[13px] font-semibold text-caution">
+                          Worth knowing
+                        </h2>
+                        <ul className="mt-2 flex flex-col gap-1.5">
+                          {loaded.warnings.map((warning, i) => (
+                            <li
+                              key={i}
+                              className="text-[13px] leading-relaxed text-ink"
+                            >
+                              {warning}
+                            </li>
+                          ))}
+                          {/*
                         Length advice belongs beside the other remarks about the document's content,
                         not as a caption over the render. It is last because it is the softest: the
                         others describe something we could not read, this one describes a judgement
                         call that is the candidate's to make.
                       */}
-                      {fit.advice !== undefined && (
-                        <li className="text-[13px] leading-relaxed text-ink">
-                          {fit.advice}
-                        </li>
-                      )}
-                    </ul>
-                  </div>
-                )}
+                          {fit.advice !== undefined && (
+                            <li className="text-[13px] leading-relaxed text-ink">
+                              {fit.advice}
+                            </li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
 
-              {panel === 'check' && (
-                <ReviewForm
-                  resume={loaded.resume}
-                  provenance={loaded.provenance}
-                  ocr={loaded.ocr}
-                  authoring={loaded.origin === 'blank'}
-                  /*
+                  {panel === 'check' && (
+                    <ReviewForm
+                      resume={loaded.resume}
+                      provenance={loaded.provenance}
+                      ocr={loaded.ocr}
+                      authoring={loaded.origin === 'blank'}
+                      /*
                 The provenance comes back on structural edits, and taking it is not optional: adding or
                 removing a row renumbers every index-based path after it, so keeping the old list would
                 leave "we were not sure we read this" pointing at a row the person just typed.
               */
-                  onChange={(resume, provenance, edit) => {
-                    setLoaded({
-                      ...loaded,
-                      resume,
-                      ...(provenance === undefined ? {} : { provenance }),
-                    })
-                    /*
+                      onChange={(resume, provenance, edit) => {
+                        setLoaded({
+                          ...loaded,
+                          resume,
+                          ...(provenance === undefined ? {} : { provenance }),
+                        })
+                        /*
                       A structural edit renumbers the coordinates the open suggestions point at, so
                       they shift with it — the same arithmetic the provenance flags just went through.
                       The accepted set is keyed by those coordinates too, so it is rebuilt through the
                       same mapping: an accepted suggestion stays accepted at its new address, and the
                       deleted row's entries leave both lists together.
                     */
-                    if (edit !== undefined && rewrites !== undefined) {
-                      const moved = rewrites.flatMap((entry) => {
-                        const next = shiftTarget(entry, edit)
-                        return next === undefined
-                          ? []
-                          : [{ before: keyOf(entry), entry: next }]
-                      })
-                      setRewrites(moved.map((m) => m.entry))
-                      setAccepted(
-                        (current) =>
-                          new Set(
-                            moved
-                              .filter((m) => current.has(m.before))
-                              .map((m) => keyOf(m.entry)),
-                          ),
-                      )
-                    }
-                  }}
-                  /*
+                        if (edit !== undefined && rewrites !== undefined) {
+                          const moved = rewrites.flatMap((entry) => {
+                            const next = shiftTarget(entry, edit)
+                            return next === undefined
+                              ? []
+                              : [{ before: keyOf(entry), entry: next }]
+                          })
+                          setRewrites(moved.map((m) => m.entry))
+                          setAccepted(
+                            (current) =>
+                              new Set(
+                                moved
+                                  .filter((m) => current.has(m.before))
+                                  .map((m) => keyOf(m.entry)),
+                              ),
+                          )
+                        }
+                      }}
+                      /*
                     Read off the registry rather than compared against a template id, so a third
                     convention would be one entry in one file — that check does not want to live in the
                     form, which has no business knowing which templates exist.
                   */
-                  photoShown={template.convention === 'eu'}
-                  onUseEuropeanLayout={() => setTemplateId('modern-eu')}
-                />
-              )}
+                      photoShown={template.convention === 'eu'}
+                      onUseEuropeanLayout={() => setTemplateId('modern-eu')}
+                    />
+                  )}
 
-              {/*
+                  {/*
               Wording comes *after* the check, never before it — which a tab strip states less firmly
               than a stack did, so the copy carries it: "Once your details are right". The order is the
               argument, and improving a sentence we misread is worse than leaving it alone.
             */}
-              {panel === 'wording' && (
-                <div className="card flex flex-col gap-3 p-4">
-                  {/*
+                  {panel === 'wording' && (
+                    <div className="card flex flex-col gap-3 p-4">
+                      {/*
                     Language, at the head of Wording — moved here from Design at Edd's direction: it is
                     a decision about *words*, and this is the words panel. Switching now translates the
                     whole document (src/optimize/translate.ts carries the guards and the history of the
                     line it moves); the wait narrates itself below, and the comparison opens after.
                   */}
-                  <div className="flex flex-col gap-2 border-b border-hairline pb-4">
-                    <Segmented
-                      label="Language"
-                      options={localeOptions().map((option) => ({
-                        id: option.id,
-                        label: option.label,
-                        hint: 'The whole document: headings, dates and your own words. We show you the before and after.',
-                      }))}
-                      value={resolveLocale(loaded.resume.locale)}
-                      onChange={(locale) => void switchLanguage(locale)}
-                    />
-                    {translating && stages.length > 0 && (
-                      <ol className="flex flex-col gap-1.5">
-                        {stages.map((stage, index) => (
-                          <li
-                            key={index}
-                            className="flex items-center gap-2 text-[13px]"
-                          >
-                            {stage.done ? (
-                              <svg
-                                aria-hidden
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2.4"
-                                strokeLinecap="round"
-                                className="h-3.5 w-3.5 shrink-0 text-affirm"
-                              >
-                                <path d="m5 12.5 4.5 4.5L19 7" />
-                              </svg>
-                            ) : (
-                              <Spinner className="h-3 w-3 shrink-0 text-signal" />
-                            )}
-                            <span
-                              className={
-                                stage.done ? 'text-ink-faint' : 'text-ink-soft'
-                              }
-                            >
-                              {stage.label}
-                              {stage.detail === undefined
-                                ? ''
-                                : `. ${stage.detail}`}
-                            </span>
-                          </li>
-                        ))}
-                      </ol>
-                    )}
-                    {translateNote !== undefined && (
-                      <p
-                        role="status"
-                        className="text-[13px] leading-relaxed text-ink-soft"
-                      >
-                        {translateNote}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col gap-1">
-                    <h2 className="text-[15px] font-semibold text-ink">
-                      Wording
-                    </h2>
-                    <p className="text-[13px] leading-relaxed text-ink-soft">
-                      Once your details are right, we can suggest stronger
-                      wording for each bullet. Nothing changes unless you accept
-                      it.
-                    </p>
-                  </div>
-
-                  {rewrites === undefined ? (
-                    <div className="flex flex-col gap-2">
-                      <button
-                        type="button"
-                        disabled={rewriting}
-                        aria-busy={rewriting}
-                        onClick={() => void askForRewrites()}
-                        className="btn btn-quiet px-4 py-2.5 text-[14px]"
-                      >
-                        <ButtonLabel
-                          busy={rewriting}
-                          idle="Suggest better wording"
-                          working="Reading your bullets…"
+                      <div className="flex flex-col gap-2 border-b border-hairline pb-4">
+                        <Segmented
+                          label="Language"
+                          options={localeOptions().map((option) => ({
+                            id: option.id,
+                            label: option.label,
+                            hint: 'The whole document: headings, dates and your own words. We show you the before and after.',
+                          }))}
+                          value={resolveLocale(loaded.resume.locale)}
+                          onChange={(locale) => void switchLanguage(locale)}
                         />
-                      </button>
-                      {rewriting && rewriteChecklist === undefined && (
-                        <span
+                        {translating && stages.length > 0 && (
+                          <ol className="flex flex-col gap-1.5">
+                            {stages.map((stage, index) => (
+                              <li
+                                key={index}
+                                className="flex items-center gap-2 text-[13px]"
+                              >
+                                {stage.done ? (
+                                  <svg
+                                    aria-hidden
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2.4"
+                                    strokeLinecap="round"
+                                    className="h-3.5 w-3.5 shrink-0 text-affirm"
+                                  >
+                                    <path d="m5 12.5 4.5 4.5L19 7" />
+                                  </svg>
+                                ) : (
+                                  <Spinner className="h-3 w-3 shrink-0 text-signal" />
+                                )}
+                                <span
+                                  className={
+                                    stage.done
+                                      ? 'text-ink-faint'
+                                      : 'text-ink-soft'
+                                  }
+                                >
+                                  {stage.label}
+                                  {stage.detail === undefined
+                                    ? ''
+                                    : `. ${stage.detail}`}
+                                </span>
+                              </li>
+                            ))}
+                          </ol>
+                        )}
+                        {translateNote !== undefined && (
+                          <p
+                            role="status"
+                            className="text-[13px] leading-relaxed text-ink-soft"
+                          >
+                            {translateNote}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <h2 className="text-[15px] font-semibold text-ink">
+                          Wording
+                        </h2>
+                        <p className="text-[13px] leading-relaxed text-ink-soft">
+                          Once your details are right, we can suggest stronger
+                          wording for each bullet. Nothing changes unless you
+                          accept it.
+                        </p>
+                      </div>
+
+                      {rewrites === undefined ? (
+                        <div className="flex flex-col gap-2">
+                          <button
+                            type="button"
+                            disabled={rewriting}
+                            aria-busy={rewriting}
+                            onClick={() => void askForRewrites()}
+                            className="btn btn-quiet px-4 py-2.5 text-[14px]"
+                          >
+                            <ButtonLabel
+                              busy={rewriting}
+                              idle="Suggest better wording"
+                              working="Reading your bullets…"
+                            />
+                          </button>
+                          {rewriting && rewriteChecklist === undefined && (
+                            <span
+                              role="status"
+                              className="text-meta leading-relaxed text-ink-soft"
+                            >
+                              One pass over every bullet. The longer your
+                              history, the longer this takes.
+                            </span>
+                          )}
+                          {rewriteChecklist !== undefined && (
+                            <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-field border border-hairline bg-ground px-3 py-2.5">
+                              {/*
+                            Every bullet named before the first model call, ticked green as each one
+                            finishes. The queue is the progress bar — no percentage can lie about what
+                            is left when what is left is listed.
+                          */}
+                              {rewriteChecklist.map((entry, i) => {
+                                const previous = rewriteChecklist[i - 1]
+                                const showCompany =
+                                  previous === undefined ||
+                                  previous.company !== entry.company
+                                return (
+                                  <div key={i} className="flex flex-col gap-1">
+                                    {showCompany && (
+                                      <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-faint first:mt-0">
+                                        {entry.company}
+                                      </span>
+                                    )}
+                                    <span className="flex items-start gap-2">
+                                      {entry.status === 'done' ? (
+                                        <svg
+                                          aria-hidden
+                                          viewBox="0 0 24 24"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          strokeWidth="2.6"
+                                          strokeLinecap="round"
+                                          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-affirm"
+                                        >
+                                          <path d="m5 12.5 4.5 4.5L19 7" />
+                                        </svg>
+                                      ) : entry.status === 'working' ? (
+                                        <Spinner className="mt-0.5 h-3 w-3 shrink-0 text-signal" />
+                                      ) : entry.status === 'failed' ? (
+                                        <span
+                                          aria-label="skipped"
+                                          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-center text-[11px] font-bold leading-none text-caution"
+                                        >
+                                          !
+                                        </span>
+                                      ) : (
+                                        <span
+                                          aria-hidden
+                                          className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full border border-hairline-strong"
+                                        />
+                                      )}
+                                      <span
+                                        className={`line-clamp-1 text-[12px] leading-relaxed ${
+                                          entry.status === 'done'
+                                            ? 'text-ink-faint'
+                                            : 'text-ink-soft'
+                                        }`}
+                                      >
+                                        {entry.text}
+                                      </span>
+                                    </span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          {rewriteChecklist !== undefined && (
+                            <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-field border border-hairline bg-ground px-3 py-2.5">
+                              {/*
+                            Every bullet named before the first model call, ticked green as each one
+                            finishes. The queue is the progress bar — no percentage can lie about what
+                            is left when what is left is listed.
+                          */}
+                              {rewriteChecklist.map((entry, i) => {
+                                const previous = rewriteChecklist[i - 1]
+                                const showCompany =
+                                  previous === undefined ||
+                                  previous.company !== entry.company
+                                return (
+                                  <div key={i} className="flex flex-col gap-1">
+                                    {showCompany && (
+                                      <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-faint first:mt-0">
+                                        {entry.company}
+                                      </span>
+                                    )}
+                                    <span className="flex items-start gap-2">
+                                      {entry.status === 'done' ? (
+                                        <svg
+                                          aria-hidden
+                                          viewBox="0 0 24 24"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          strokeWidth="2.6"
+                                          strokeLinecap="round"
+                                          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-affirm"
+                                        >
+                                          <path d="m5 12.5 4.5 4.5L19 7" />
+                                        </svg>
+                                      ) : entry.status === 'working' ? (
+                                        <Spinner className="mt-0.5 h-3 w-3 shrink-0 text-signal" />
+                                      ) : entry.status === 'failed' ? (
+                                        <span
+                                          aria-label="skipped"
+                                          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-center text-[11px] font-bold leading-none text-caution"
+                                        >
+                                          !
+                                        </span>
+                                      ) : (
+                                        <span
+                                          aria-hidden
+                                          className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full border border-hairline-strong"
+                                        />
+                                      )}
+                                      <span
+                                        className={`line-clamp-1 text-[12px] leading-relaxed ${
+                                          entry.status === 'done'
+                                            ? 'text-ink-faint'
+                                            : 'text-ink-soft'
+                                        }`}
+                                      >
+                                        {entry.text}
+                                      </span>
+                                    </span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                          {rewrites.filter(
+                            (entry) =>
+                              entry.suggestion !== undefined &&
+                              !accepted.has(keyOf(entry)),
+                          ).length >= 2 && (
+                            <button
+                              type="button"
+                              onClick={acceptAllRewrites}
+                              className="btn btn-quiet self-start px-4 py-2 text-[13px]"
+                            >
+                              Accept all{' '}
+                              {
+                                rewrites.filter(
+                                  (entry) =>
+                                    entry.suggestion !== undefined &&
+                                    !accepted.has(keyOf(entry)),
+                                ).length
+                              }{' '}
+                              suggestions
+                            </button>
+                          )}
+                          <RewriteReview
+                            rewrites={rewrites}
+                            accepted={accepted}
+                            onAccept={acceptRewrite}
+                            onDismiss={dismissRewrite}
+                            onAnswer={(answers) => void askForRewrites(answers)}
+                            busy={rewriting}
+                          />
+                        </div>
+                      )}
+
+                      {rewriteNote !== undefined && (
+                        <p
                           role="status"
-                          className="text-meta leading-relaxed text-ink-soft"
+                          className="text-[13px] leading-relaxed text-ink-soft"
                         >
-                          One pass over every bullet. The longer your history,
-                          the longer this takes.
-                        </span>
+                          {rewriteNote}
+                        </p>
                       )}
-                      {rewriteChecklist !== undefined && (
-                        <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-field border border-hairline bg-ground px-3 py-2.5">
-                          {/*
-                            Every bullet named before the first model call, ticked green as each one
-                            finishes. The queue is the progress bar — no percentage can lie about what
-                            is left when what is left is listed.
-                          */}
-                          {rewriteChecklist.map((entry, i) => {
-                            const previous = rewriteChecklist[i - 1]
-                            const showCompany =
-                              previous === undefined ||
-                              previous.company !== entry.company
-                            return (
-                              <div key={i} className="flex flex-col gap-1">
-                                {showCompany && (
-                                  <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-faint first:mt-0">
-                                    {entry.company}
-                                  </span>
-                                )}
-                                <span className="flex items-start gap-2">
-                                  {entry.status === 'done' ? (
-                                    <svg
-                                      aria-hidden
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2.6"
-                                      strokeLinecap="round"
-                                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-affirm"
-                                    >
-                                      <path d="m5 12.5 4.5 4.5L19 7" />
-                                    </svg>
-                                  ) : entry.status === 'working' ? (
-                                    <Spinner className="mt-0.5 h-3 w-3 shrink-0 text-signal" />
-                                  ) : entry.status === 'failed' ? (
-                                    <span
-                                      aria-label="skipped"
-                                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-center text-[11px] font-bold leading-none text-caution"
-                                    >
-                                      !
-                                    </span>
-                                  ) : (
-                                    <span
-                                      aria-hidden
-                                      className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full border border-hairline-strong"
-                                    />
-                                  )}
-                                  <span
-                                    className={`line-clamp-1 text-[12px] leading-relaxed ${
-                                      entry.status === 'done'
-                                        ? 'text-ink-faint'
-                                        : 'text-ink-soft'
-                                    }`}
-                                  >
-                                    {entry.text}
-                                  </span>
-                                </span>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      {rewriteChecklist !== undefined && (
-                        <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-field border border-hairline bg-ground px-3 py-2.5">
-                          {/*
-                            Every bullet named before the first model call, ticked green as each one
-                            finishes. The queue is the progress bar — no percentage can lie about what
-                            is left when what is left is listed.
-                          */}
-                          {rewriteChecklist.map((entry, i) => {
-                            const previous = rewriteChecklist[i - 1]
-                            const showCompany =
-                              previous === undefined ||
-                              previous.company !== entry.company
-                            return (
-                              <div key={i} className="flex flex-col gap-1">
-                                {showCompany && (
-                                  <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-faint first:mt-0">
-                                    {entry.company}
-                                  </span>
-                                )}
-                                <span className="flex items-start gap-2">
-                                  {entry.status === 'done' ? (
-                                    <svg
-                                      aria-hidden
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2.6"
-                                      strokeLinecap="round"
-                                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-affirm"
-                                    >
-                                      <path d="m5 12.5 4.5 4.5L19 7" />
-                                    </svg>
-                                  ) : entry.status === 'working' ? (
-                                    <Spinner className="mt-0.5 h-3 w-3 shrink-0 text-signal" />
-                                  ) : entry.status === 'failed' ? (
-                                    <span
-                                      aria-label="skipped"
-                                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-center text-[11px] font-bold leading-none text-caution"
-                                    >
-                                      !
-                                    </span>
-                                  ) : (
-                                    <span
-                                      aria-hidden
-                                      className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full border border-hairline-strong"
-                                    />
-                                  )}
-                                  <span
-                                    className={`line-clamp-1 text-[12px] leading-relaxed ${
-                                      entry.status === 'done'
-                                        ? 'text-ink-faint'
-                                        : 'text-ink-soft'
-                                    }`}
-                                  >
-                                    {entry.text}
-                                  </span>
-                                </span>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                      {rewrites.filter(
-                        (entry) =>
-                          entry.suggestion !== undefined &&
-                          !accepted.has(keyOf(entry)),
-                      ).length >= 2 && (
-                        <button
-                          type="button"
-                          onClick={acceptAllRewrites}
-                          className="btn btn-quiet self-start px-4 py-2 text-[13px]"
-                        >
-                          Accept all{' '}
-                          {
-                            rewrites.filter(
-                              (entry) =>
-                                entry.suggestion !== undefined &&
-                                !accepted.has(keyOf(entry)),
-                            ).length
-                          }{' '}
-                          suggestions
-                        </button>
-                      )}
-                      <RewriteReview
-                        rewrites={rewrites}
-                        accepted={accepted}
-                        onAccept={acceptRewrite}
-                        onDismiss={dismissRewrite}
-                        onAnswer={(answers) => void askForRewrites(answers)}
-                        busy={rewriting}
-                      />
                     </div>
                   )}
 
-                  {rewriteNote !== undefined && (
-                    <p
-                      role="status"
-                      className="text-[13px] leading-relaxed text-ink-soft"
-                    >
-                      {rewriteNote}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/*
+                  {/*
               The account, offered after the CV exists and never before it (ADR-004, ADR-011: the
               artifact comes before any question). It renders nothing at all on an installation with no
               database, so a deployment that cannot keep an account never offers one.
             */}
-              {panel === 'account' && (
-                <div className="flex flex-col gap-4">
-                  {/*
+                  {panel === 'account' && (
+                    <div className="flex flex-col gap-4">
+                      {/*
                     The standing answer to "who reads my CV", reachable at any moment.
 
                     It lives here rather than beside a button because it is a fact about the person,
@@ -3284,62 +3291,62 @@ function HunterReady() {
                     the translation alike. The gate still asks once on the first upload; this is
                     where the answer lives afterwards, which is what makes the gate's promise true.
                   */}
-                  <ProcessingChoice
-                    provider={consent.provider}
-                    choice={consent.choice}
-                    onDecide={consent.decide}
-                    Control={Segmented}
-                  />
-                  <Library
-                    resume={loaded.resume}
-                    /*
+                      <ProcessingChoice
+                        provider={consent.provider}
+                        choice={consent.choice}
+                        onDecide={consent.decide}
+                        Control={Segmented}
+                      />
+                      <Library
+                        resume={loaded.resume}
+                        /*
                 A CV opened from the library gets a fresh `original`, because it is a different
                 document. Keeping the old one would compare a stored CV against a file uploaded earlier
                 in the same session, and "before and after" would show a distance nobody travelled.
               */
-                    onLoad={(resume) =>
-                      setLoaded({ ...loaded, resume, original: resume })
-                    }
-                    savedId={savedResumeId}
-                    onSavedIdChange={setSavedResumeId}
-                  />
-                </div>
-              )}
+                        onLoad={(resume) =>
+                          setLoaded({ ...loaded, resume, original: resume })
+                        }
+                        savedId={savedResumeId}
+                        onSavedIdChange={setSavedResumeId}
+                      />
+                    </div>
+                  )}
 
-              {/*
+                  {/*
               Targeting sits below wording for the same reason wording sits below the check: each step
               is only worth doing once the one above it is right. Tailoring a CV we misread aims the
               wrong document at the job.
             */}
-              {panel === 'job' && (
-                <div className="card flex flex-col gap-3 p-4">
-                  <div className="flex flex-col gap-1">
-                    <h2 className="text-[15px] font-semibold text-ink">
-                      Applying for something specific?
-                    </h2>
-                    <p className="text-[13px] leading-relaxed text-ink-soft">
-                      Paste the advert and we will show you which of their
-                      requirements your CV already answers, which are buried,
-                      and which are missing. We never add one you have not
-                      claimed.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setTargeting(true)}
-                    className="btn btn-quiet self-start px-4 py-2.5 text-[14px]"
-                  >
-                    {reading === undefined
-                      ? 'Target a job advert'
-                      : 'Back to this job'}
-                    <Icon name="arrow-right" className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
+                  {panel === 'job' && (
+                    <div className="card flex flex-col gap-3 p-4">
+                      <div className="flex flex-col gap-1">
+                        <h2 className="text-[15px] font-semibold text-ink">
+                          Applying for something specific?
+                        </h2>
+                        <p className="text-[13px] leading-relaxed text-ink-soft">
+                          Paste the advert and we will show you which of their
+                          requirements your CV already answers, which are
+                          buried, and which are missing. We never add one you
+                          have not claimed.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setTargeting(true)}
+                        className="btn btn-quiet self-start px-4 py-2.5 text-[14px]"
+                      >
+                        {reading === undefined
+                          ? 'Target a job advert'
+                          : 'Back to this job'}
+                        <Icon name="arrow-right" className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
 
-              {panel === 'design' && (
-                <div className="card flex flex-col gap-3 p-4">
-                  {/*
+                  {panel === 'design' && (
+                    <div className="card flex flex-col gap-3 p-4">
+                      {/*
                     Thirty pairings, replacing the three segmented rows that were here.
 
                     The rows were a fine control for twelve combinations spread across two questions. They
@@ -3348,107 +3355,111 @@ function HunterReady() {
                     question. `design-gallery.tsx` carries why the cards show a type specimen rather than a
                     thumbnail of a page.
                   */}
-                  <div className="flex flex-col gap-1">
-                    <h2 className="text-[15px] font-semibold text-ink">
-                      Design
-                    </h2>
-                    <p className="text-[13px] leading-relaxed text-ink-soft">
-                      The layout decides what a reader meets first. The type
-                      decides how it sounds. Both are free to change at any
-                      point, and nothing about your CV is rewritten.
-                    </p>
-                    {/*
+                      <div className="flex flex-col gap-1">
+                        <h2 className="text-[15px] font-semibold text-ink">
+                          Design
+                        </h2>
+                        <p className="text-[13px] leading-relaxed text-ink-soft">
+                          The layout decides what a reader meets first. The type
+                          decides how it sounds. Both are free to change at any
+                          point, and nothing about your CV is rewritten.
+                        </p>
+                        {/*
                       Said here because a control that only appears on hover is a control most people
                       never find. The card's "Full page" button is deliberately quiet so that a
                       hundred of them do not shout; the cost of that is one sentence of telling.
                     */}
-                    <p className="text-[13px] leading-relaxed text-ink-soft">
-                      To see a whole page before choosing, use{' '}
-                      <strong className="font-semibold text-ink">
-                        Full page
-                      </strong>{' '}
-                      on any card. From there the arrows, or the left and right
-                      keys, walk the rest without closing it.
-                    </p>
-                  </div>
+                        <p className="text-[13px] leading-relaxed text-ink-soft">
+                          To see a whole page before choosing, use{' '}
+                          <strong className="font-semibold text-ink">
+                            Full page
+                          </strong>{' '}
+                          on any card. From there the arrows, or the left and
+                          right keys, walk the rest without closing it.
+                        </p>
+                      </div>
 
-                  {previousLook !== undefined && (
-                    /*
+                      {previousLook !== undefined && (
+                        /*
                       Offered rather than announced: a banner every time somebody picks a card would be
                       noise on the action they most repeat. It sits where the change happened and says
                       what it goes back *to*, because "Undo" alone asks the reader to remember.
                     */
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTemplateId(previousLook.templateId)
-                        setThemeId(previousLook.themeId)
-                        setCustomFonts(previousLook.fonts)
-                        setCustomColours(previousLook.colours)
-                        setPreviousLook(undefined)
-                      }}
-                      className="btn btn-quiet self-start px-3 py-1.5 text-[13px]"
-                    >
-                      <Icon name="arrow-left" className="h-4 w-4" />
-                      Back to {previousLook.label}
-                    </button>
-                  )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTemplateId(previousLook.templateId)
+                            setThemeId(previousLook.themeId)
+                            setCustomFonts(previousLook.fonts)
+                            setCustomColours(previousLook.colours)
+                            setPreviousLook(undefined)
+                          }}
+                          className="btn btn-quiet self-start px-3 py-1.5 text-[13px]"
+                        >
+                          <Icon name="arrow-left" className="h-4 w-4" />
+                          Back to {previousLook.label}
+                        </button>
+                      )}
 
-                  <DesignAxes
-                    axes={{ fonts: customFonts, colours: customColours }}
-                    defaults={{
-                      body: getTheme(
-                        themeId,
-                      ).typography.body.fontFamily.replace(/^["']|["']$/g, ''),
-                      heading: getTheme(
-                        themeId,
-                      ).typography.heading.fontFamily.replace(
-                        /^["']|["']$/g,
-                        '',
-                      ),
-                      accent:
-                        styleOf(getTheme(themeId)).accent ??
-                        getTheme(themeId).colors.primary,
-                      paper: getTheme(themeId).colors.background,
-                    }}
-                    onChange={(next) => {
-                      setCustomFonts(next.fonts)
-                      setCustomColours(next.colours)
-                    }}
-                  />
+                      <DesignAxes
+                        axes={{ fonts: customFonts, colours: customColours }}
+                        defaults={{
+                          body: getTheme(
+                            themeId,
+                          ).typography.body.fontFamily.replace(
+                            /^["']|["']$/g,
+                            '',
+                          ),
+                          heading: getTheme(
+                            themeId,
+                          ).typography.heading.fontFamily.replace(
+                            /^["']|["']$/g,
+                            '',
+                          ),
+                          accent:
+                            styleOf(getTheme(themeId)).accent ??
+                            getTheme(themeId).colors.primary,
+                          paper: getTheme(themeId).colors.background,
+                        }}
+                        onChange={(next) => {
+                          setCustomFonts(next.fonts)
+                          setCustomColours(next.colours)
+                        }}
+                      />
 
-                  <DesignGallery
-                    templateId={templateId}
-                    themeId={themeId}
-                    resume={loaded.resume}
-                    /*
+                      <DesignGallery
+                        templateId={templateId}
+                        themeId={themeId}
+                        resume={loaded.resume}
+                        /*
                       `=== true` on purpose: the field is `undefined` until the server answers, and an
                       unknown entitlement must draw as locked rather than as unlocked. A padlock that
                       appears a moment late is untidy; one that vanishes a moment late offers something
                       the render endpoint will refuse.
                     */
-                    entitled={consent.paidDesigns === true}
-                    onChoose={(design) => {
-                      setPreviousLook({
-                        templateId,
-                        themeId,
-                        fonts: customFonts,
-                        colours: customColours,
-                        label:
-                          DESIGNS.find(
-                            (d) =>
-                              d.structure === templateId && d.theme === themeId,
-                          )?.label ?? 'the last look',
-                      })
-                      setTemplateId(design.structure)
-                      setThemeId(design.theme)
-                    }}
-                  />
+                        entitled={consent.paidDesigns === true}
+                        onChoose={(design) => {
+                          setPreviousLook({
+                            templateId,
+                            themeId,
+                            fonts: customFonts,
+                            colours: customColours,
+                            label:
+                              DESIGNS.find(
+                                (d) =>
+                                  d.structure === templateId &&
+                                  d.theme === themeId,
+                              )?.label ?? 'the last look',
+                          })
+                          setTemplateId(design.structure)
+                          setThemeId(design.theme)
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {/*
+                {/*
               The download, at the foot of its own column.
 
               Restored here after being deleted by accident: the edit that swapped the Design panel for the
@@ -3459,103 +3470,109 @@ function HunterReady() {
               Outside the scrolling panel, so the last action never scrolls out of reach, and a full-width
               primary pill because DESIGN.md is right that it reads as one decisive action.
             */}
-            <div className="flex shrink-0 flex-col gap-2 border-t border-hairline pt-3">
-              {/*
+                <div className="flex shrink-0 flex-col gap-2 border-t border-hairline pt-3">
+                  {/*
                 Disabled on a locked design rather than left to fail at the endpoint. `/api/render` is the
                 real gate — a client cannot be trusted with one — but letting somebody press a button whose
                 only possible outcome is a refusal is not respect for the gate, just a worse way to say no.
               */}
-              <button
-                type="button"
-                disabled={downloads.busyFormat !== undefined || lockedDesign}
-                aria-busy={downloads.busyFormat === 'pdf'}
-                onClick={() =>
-                  void downloads.start(
-                    loaded.resume,
-                    templateId,
-                    themeId,
-                    'pdf',
-                    {
-                      fonts: customFonts,
-                      colours: customColours,
-                    },
-                  )
-                }
-                className="btn btn-primary w-full px-6 py-3 text-[15px]"
-              >
-                {downloads.busyFormat === 'pdf' ? (
-                  <Spinner className="h-[18px] w-[18px]" />
-                ) : (
-                  <Icon name="download" className="h-[18px] w-[18px]" />
-                )}
-                {downloads.busyFormat === 'pdf'
-                  ? 'Building your PDF…'
-                  : 'Download the PDF'}
-              </button>
-              {/*
+                  <button
+                    type="button"
+                    disabled={
+                      downloads.busyFormat !== undefined || lockedDesign
+                    }
+                    aria-busy={downloads.busyFormat === 'pdf'}
+                    onClick={() =>
+                      void downloads.start(
+                        loaded.resume,
+                        templateId,
+                        themeId,
+                        'pdf',
+                        {
+                          fonts: customFonts,
+                          colours: customColours,
+                        },
+                      )
+                    }
+                    className="btn btn-primary w-full px-6 py-3 text-[15px]"
+                  >
+                    {downloads.busyFormat === 'pdf' ? (
+                      <Spinner className="h-[18px] w-[18px]" />
+                    ) : (
+                      <Icon name="download" className="h-[18px] w-[18px]" />
+                    )}
+                    {downloads.busyFormat === 'pdf'
+                      ? 'Building your PDF…'
+                      : 'Download the PDF'}
+                  </button>
+                  {/*
                 Word, beside the PDF rather than hidden behind a menu — v0.6. Many ATS portals require or
                 prefer `.docx`, and several parse it better than any PDF. It stays the quiet button: the PDF
                 is what most people send and the one whose look they just chose.
               */}
-              <button
-                type="button"
-                disabled={downloads.busyFormat !== undefined || lockedDesign}
-                aria-busy={downloads.busyFormat === 'docx'}
-                onClick={() =>
-                  void downloads.start(
-                    loaded.resume,
-                    templateId,
-                    themeId,
-                    'docx',
-                  )
-                }
-                title="For portals that ask for a Word file"
-                className="btn btn-quiet w-full px-4 py-2.5 text-[14px]"
-              >
-                <ButtonLabel
-                  busy={downloads.busyFormat === 'docx'}
-                  idle="Word (.docx)"
-                  working="Building…"
-                />
-              </button>
-              {lockedDesign && (
-                <p className="text-meta leading-relaxed text-ink-soft">
-                  Pick a design marked Included to download, or keep this one to
-                  compare.
-                </p>
-              )}
-              {downloads.failure !== undefined && (
-                <p
-                  role="status"
-                  className="rounded-field border border-alert/25 bg-alert-wash px-3 py-2 text-[13px] leading-relaxed text-ink"
-                >
-                  {downloads.failure}
-                </p>
-              )}
-            </div>
-          </aside>
-
-          {/*
+                  <button
+                    type="button"
+                    disabled={
+                      downloads.busyFormat !== undefined || lockedDesign
+                    }
+                    aria-busy={downloads.busyFormat === 'docx'}
+                    onClick={() =>
+                      void downloads.start(
+                        loaded.resume,
+                        templateId,
+                        themeId,
+                        'docx',
+                      )
+                    }
+                    title="For portals that ask for a Word file"
+                    className="btn btn-quiet w-full px-4 py-2.5 text-[14px]"
+                  >
+                    <ButtonLabel
+                      busy={downloads.busyFormat === 'docx'}
+                      idle="Word (.docx)"
+                      working="Building…"
+                    />
+                  </button>
+                  {lockedDesign && (
+                    <p className="text-meta leading-relaxed text-ink-soft">
+                      Pick a design marked Included to download, or keep this
+                      one to compare.
+                    </p>
+                  )}
+                  {downloads.failure !== undefined && (
+                    <p
+                      role="status"
+                      className="rounded-field border border-alert/25 bg-alert-wash px-3 py-2 text-[13px] leading-relaxed text-ink"
+                    >
+                      {downloads.failure}
+                    </p>
+                  )}
+                </div>
+              </aside>
+            </>
+          }
+          document={
+            /*
             The document. It is the only element in this world allowed real visual density, and it
             keeps its own surround so it reads as a sheet on a desk rather than as another panel.
-          */}
-          <main className="card flex min-h-[70vh] flex-1 flex-col overflow-hidden lg:min-h-0">
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-hairline px-4 py-2.5">
-              <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
-                Your PDF
-                {template.atsRating === 'verified' ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-affirm-wash px-2 py-0.5 text-[11px] font-semibold text-affirm">
-                    <Icon name="verified" className="h-3.5 w-3.5" />
-                    Parse verified
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center rounded-full bg-caution-wash px-2 py-0.5 text-[11px] font-semibold text-caution">
-                    Design-first
-                  </span>
-                )}
-              </span>
-              <span className="flex flex-wrap items-center gap-3">
-                {/*
+          */
+            <main className="card flex min-h-[70vh] flex-1 flex-col overflow-hidden lg:min-h-0">
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-hairline px-4 py-2.5">
+                <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
+                  Your PDF
+                  {template.atsRating === 'verified' ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-affirm-wash px-2 py-0.5 text-[11px] font-semibold text-affirm">
+                      <Icon name="verified" className="h-3.5 w-3.5" />
+                      Parse verified
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full bg-caution-wash px-2 py-0.5 text-[11px] font-semibold text-caution">
+                      Design-first
+                    </span>
+                  )}
+                </span>
+                <span className="flex flex-wrap items-center gap-3">
+                  {/*
                   The before-and-after switch, and it exists only once there is something to show.
 
                   DESIGN.md: don't show a progress indicator for progress that has not happened. A button
@@ -3564,7 +3581,7 @@ function HunterReady() {
                   freshly uploaded CV this is simply not here, and it appears the moment the first
                   correction or accepted suggestion lands.
                 */}
-                {/*
+                  {/*
                   And never on a CV written here, whatever the diff says.
 
                   Found in the browser walk: authoring one from scratch put "5 changes since you
@@ -3573,57 +3590,57 @@ function HunterReady() {
                   of everything the person has typed, presented as an achievement over a file that
                   never existed. Same falsehood as the counter and the empty states, one pane over.
                 */}
-                {changes.length > 0 && (
-                  <button
-                    type="button"
-                    aria-pressed={comparing}
-                    onClick={() => setComparing(!comparing)}
-                    className={[
-                      'flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-semibold transition-colors',
-                      comparing
-                        ? 'border-signal-edge bg-signal-wash text-signal'
-                        : 'border-hairline-strong text-ink-soft hover:text-ink',
-                    ].join(' ')}
-                  >
-                    {comparing ? 'Just the new one' : 'Before and after'}
-                    <span className="tally rounded-full bg-signal px-1.5 text-[11px] font-bold text-white">
-                      {changes.length}
-                    </span>
-                  </button>
-                )}
-                <span className="tally text-meta text-ink-soft">
-                  A4 · {pages} page{pages === 1 ? '' : 's'}
-                  {readFields > 0 &&
-                    ` · ${readFields - toCheck}/${readFields} read cleanly`}
+                  {changes.length > 0 && (
+                    <button
+                      type="button"
+                      aria-pressed={comparing}
+                      onClick={() => setComparing(!comparing)}
+                      className={[
+                        'flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-semibold transition-colors',
+                        comparing
+                          ? 'border-signal-edge bg-signal-wash text-signal'
+                          : 'border-hairline-strong text-ink-soft hover:text-ink',
+                      ].join(' ')}
+                    >
+                      {comparing ? 'Just the new one' : 'Before and after'}
+                      <span className="tally rounded-full bg-signal px-1.5 text-[11px] font-bold text-white">
+                        {changes.length}
+                      </span>
+                    </button>
+                  )}
+                  <span className="tally text-meta text-ink-soft">
+                    A4 · {pages} page{pages === 1 ? '' : 's'}
+                    {readFields > 0 &&
+                      ` · ${readFields - toCheck}/${readFields} read cleanly`}
+                  </span>
                 </span>
-              </span>
-            </div>
-            {/*
+              </div>
+              {/*
               Said where the document is, because the document is the thing that cannot be downloaded.
               Caution rather than alert: nothing has failed — this is a fact about the plan, and colouring a
               price as an error would make it feel like a fault.
             */}
-            {lockedDesign && (
-              <p className="border-b border-caution/25 bg-caution-wash px-4 py-2 text-[13px] leading-relaxed text-ink">
-                This design is part of the paid plan. You can see it here, and
-                download any design marked <strong>Included</strong>, which
-                produce the same document, checked by the same parse test.
-              </p>
-            )}
-            {/*
+              {lockedDesign && (
+                <p className="border-b border-caution/25 bg-caution-wash px-4 py-2 text-[13px] leading-relaxed text-ink">
+                  This design is part of the paid plan. You can see it here, and
+                  download any design marked <strong>Included</strong>, which
+                  produce the same document, checked by the same parse test.
+                </p>
+              )}
+              {/*
               The fit advice used to sit here, in a band across the top of the paper. It is a remark
               about the *content* — that a fifteen-year history squeezed onto one page has probably
               lost something — and content is what the Check panel is for. Above the document it read
               as a caption on the render, which is the one thing it is not about, and it was there on
               every panel including the ones where nobody is editing anything.
             */}
-            {/*
+              {/*
               Comparing replaces the preview rather than opening beside it or over it. A modal would put
               the achievement in a box to be dismissed, and a third column would shrink both sheets to
               the point where neither is legible. The switch is one click away in either direction, which
               is what makes replacing it safe — every station in this flow is re-enterable.
             */}
-            {/*
+              {/*
               `changes.length > 0` as well as `comparing`, because `compare=true` is now something a URL
               can assert and a URL can be wrong.
 
@@ -3633,30 +3650,31 @@ function HunterReady() {
               address bar. Ignoring the flag instead is the same rule the search validator follows: an
               impossible request falls back to the ordinary screen rather than to a dead end.
             */}
-            {comparing && changes.length > 0 ? (
-              <BeforeAfter
-                original={comparisonBase ?? loaded.original}
-                current={loaded.resume}
-                changes={changes}
-                theme={theme}
-                Template={template.Component}
-                since={loaded.origin === 'blank' ? 'fit' : 'upload'}
-              />
-            ) : (
-              <PaperPreview
-                resume={loaded.resume}
-                theme={theme}
-                Template={template.Component}
-                /*
+              {comparing && changes.length > 0 ? (
+                <BeforeAfter
+                  original={comparisonBase ?? loaded.original}
+                  current={loaded.resume}
+                  changes={changes}
+                  theme={theme}
+                  Template={template.Component}
+                  since={loaded.origin === 'blank' ? 'fit' : 'upload'}
+                />
+              ) : (
+                <PaperPreview
+                  resume={loaded.resume}
+                  theme={theme}
+                  Template={template.Component}
+                  /*
                   This is the preview whose count the header beside it shows. The first attempt wired the
                   callback to the targeting branch's preview instead — the label kept reading the estimate
                   while the sheets beside it disagreed, which is the bug being fixed, one screen over.
                 */
-                onPagesMeasured={setMeasuredPages}
-              />
-            )}
-          </main>
-        </div>
+                  onPagesMeasured={setMeasuredPages}
+                />
+              )}
+            </main>
+          }
+        />
       </div>
     </div>
   )

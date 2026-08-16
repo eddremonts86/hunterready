@@ -45,6 +45,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { PdfcnTheme } from '@/components/pdf/theme-types'
 import type { Resume } from '@/schema/resume'
+import { ButtonGroup, ButtonGroupText } from '@/components/ui/button-group'
+import { Kbd } from '@/components/ui/kbd'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 /** A4 at 96 dpi, the unit takumi lays out in. */
 /**
@@ -287,90 +295,121 @@ export function PaperPreview({
         document is a button covering the document at exactly the moment somebody zoomed in to see
         what was underneath it.
       */}
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b border-hairline bg-ground px-3 py-1.5">
-        {/*
-          Page navigation on the left, because it is about *where* you are, and the count already
-          existed: `breaks.length` was being used to write "2 pages" and for nothing else. Zoomed to
-          200%, reaching the second page was a long blind scroll.
-        */}
-        <span className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => goToPage(current - 1)}
-            disabled={current <= 0}
-            aria-label="Previous page"
-            className="btn btn-quiet px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            &lsaquo;
-          </button>
-          <span className="tally min-w-[4.5rem] text-center text-meta text-ink-soft">
-            {breaks.length === 1
-              ? '1 page'
-              : `${current + 1} of ${breaks.length}`}
-          </span>
-          <button
-            type="button"
-            onClick={() => goToPage(current + 1)}
-            disabled={current >= breaks.length - 1}
-            aria-label="Next page"
-            className="btn btn-quiet px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            &rsaquo;
-          </button>
-        </span>
+      {/*
+        Two groups rather than six loose buttons.
 
-        <span className="flex items-center gap-1">
-          {/*
-            The two postures, named. "Width" fills the space to read the words; "Page" shows the whole
-            sheet to judge whether it lands on one. Both are pressed states rather than plain buttons,
-            because which one you are in changes what the percentage beside them means.
-          */}
-          <button
-            type="button"
-            onClick={() => setMode('width')}
-            aria-pressed={mode === 'width'}
-            className={`btn px-2.5 py-1 text-[12px] ${mode === 'width' ? 'btn-primary' : 'btn-quiet'}`}
-          >
-            Width
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('page')}
-            aria-pressed={mode === 'page'}
-            className={`btn px-2.5 py-1 text-[12px] ${mode === 'page' ? 'btn-primary' : 'btn-quiet'}`}
-          >
-            Page
-          </button>
+        `ButtonGroup` welds each set into one object with shared edges, which is what says "these
+        belong together and that one does not". Before, page navigation and zoom were the same six
+        pills in a row and the eye had to work out which was which. Every icon-only control carries a
+        tooltip, because a chevron is not a word: the `aria-label` was already telling a screen reader
+        what these do while telling the person looking at them nothing.
+      */}
+      <TooltipProvider delayDuration={400}>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b border-hairline bg-ground px-3 py-1.5">
+          <ButtonGroup>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => goToPage(current - 1)}
+                  disabled={current <= 0}
+                  aria-label="Previous page"
+                  className="btn btn-quiet rounded-r-none px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  &lsaquo;
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Previous page</TooltipContent>
+            </Tooltip>
+            <ButtonGroupText className="tally min-w-[4.5rem] justify-center text-meta text-ink-soft">
+              {breaks.length === 1
+                ? '1 page'
+                : `${current + 1} of ${breaks.length}`}
+            </ButtonGroupText>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => goToPage(current + 1)}
+                  disabled={current >= breaks.length - 1}
+                  aria-label="Next page"
+                  className="btn btn-quiet rounded-l-none px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  &rsaquo;
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Next page</TooltipContent>
+            </Tooltip>
+          </ButtonGroup>
 
-          <span className="mx-1 h-4 w-px bg-hairline" />
+          <div className="flex items-center gap-2">
+            {/*
+              The two postures, named. "Width" fills the space to read the words; "Page" shows the
+              whole sheet to judge whether it lands on one.
+            */}
+            <ButtonGroup>
+              <button
+                type="button"
+                onClick={() => setMode('width')}
+                aria-pressed={mode === 'width'}
+                className={`btn rounded-r-none px-2.5 py-1 text-[12px] ${mode === 'width' ? 'btn-primary' : 'btn-quiet'}`}
+              >
+                Width
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('page')}
+                aria-pressed={mode === 'page'}
+                className={`btn rounded-l-none px-2.5 py-1 text-[12px] ${mode === 'page' ? 'btn-primary' : 'btn-quiet'}`}
+              >
+                Page
+              </button>
+            </ButtonGroup>
 
-          <button
-            type="button"
-            onClick={() => nudge(-1)}
-            disabled={effective <= ZOOM_STEPS[0] + 0.001}
-            aria-label="Zoom out"
-            className="btn btn-quiet px-2 py-1 text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            &minus;
-          </button>
-          {/*
-            The size against a real page, not a percentage of the fit. "100%" then means life-size,
-            which is the number somebody wants when they ask how big this is.
-          */}
-          <span className="tally min-w-[3.5rem] text-center text-meta text-ink-soft">
-            {Math.round(effective * 100)}%
-          </span>
-          <button
-            type="button"
-            onClick={() => nudge(1)}
-            disabled={effective >= ZOOM_STEPS[ZOOM_STEPS.length - 1] - 0.001}
-            aria-label="Zoom in"
-            className="btn btn-quiet px-2 py-1 text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            +
-          </button>
-        </span>
-      </div>
+            <ButtonGroup>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => nudge(-1)}
+                    disabled={effective <= ZOOM_STEPS[0] + 0.001}
+                    aria-label="Zoom out"
+                    className="btn btn-quiet rounded-r-none px-2 py-1 text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    &minus;
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Zoom out</TooltipContent>
+              </Tooltip>
+              {/*
+                The size against a real page, not a percentage of the fit. "100%" then means life-size,
+                which is the number somebody wants when they ask how big this is.
+              */}
+              <ButtonGroupText className="tally min-w-[3.5rem] justify-center text-meta text-ink-soft">
+                {Math.round(effective * 100)}%
+              </ButtonGroupText>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => nudge(1)}
+                    disabled={
+                      effective >= ZOOM_STEPS[ZOOM_STEPS.length - 1] - 0.001
+                    }
+                    aria-label="Zoom in"
+                    className="btn btn-quiet rounded-l-none px-2 py-1 text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    +
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Zoom in <Kbd>Ctrl</Kbd> + scroll
+                </TooltipContent>
+              </Tooltip>
+            </ButtonGroup>
+          </div>
+        </div>
+      </TooltipProvider>
 
       <div
         ref={containerRef}
