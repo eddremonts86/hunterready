@@ -165,5 +165,5 @@ export function withColours(
             onAccent: deriveOnAccent(accent),
           },
         }),
-  } as PdfcnTheme
+  }
 }
