@@ -3247,11 +3247,25 @@ function HunterReady() {
                       decides how it sounds. Both are free to change at any
                       point, and nothing about your CV is rewritten.
                     </p>
+                    {/*
+                      Said here because a control that only appears on hover is a control most people
+                      never find. The card's "Full page" button is deliberately quiet so that a
+                      hundred of them do not shout; the cost of that is one sentence of telling.
+                    */}
+                    <p className="text-[13px] leading-relaxed text-ink-soft">
+                      To see a whole page before choosing, use{' '}
+                      <strong className="font-semibold text-ink">
+                        Full page
+                      </strong>{' '}
+                      on any card. From there the arrows, or the left and right
+                      keys, walk the rest without closing it.
+                    </p>
                   </div>
 
                   <DesignGallery
                     templateId={templateId}
                     themeId={themeId}
+                    resume={loaded.resume}
                     /*
                       `=== true` on purpose: the field is `undefined` until the server answers, and an
                       unknown entitlement must draw as locked rather than as unlocked. A padlock that

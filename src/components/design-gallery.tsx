@@ -31,6 +31,9 @@ import { styleOf } from '@/render/themes/style'
 import { templates } from '@/render/templates/registry'
 import type { TemplateId } from '@/render/templates/registry'
 import type { ThemeId } from '@/render/themes'
+import { useMemo, useState } from 'react'
+import type { Resume } from '@/schema/resume'
+import { DesignPreviewDialog } from './design-preview-dialog'
 
 /** The order a card shows as three words, because it is the structural difference a person can act on. */
 const ORDER_WORDS: Record<string, Array<string>> = {
@@ -224,15 +227,27 @@ export function DesignGallery({
   themeId,
   entitled,
   onChoose,
+  resume,
 }: {
   templateId: TemplateId
   themeId: ThemeId
   /** Whether this visitor may use the paid half. Advisory — `/api/render` is the gate. */
   entitled: boolean
   onChoose: (design: Design) => void
+  /** The reader's own document, so a preview opens on what they will actually download. */
+  resume: Resume
 }) {
+  const [previewing, setPreviewing] = useState<Design | undefined>(undefined)
   const free = DESIGNS.filter((d) => d.tier === 'free')
   const paid = DESIGNS.filter((d) => d.tier === 'paid')
+  /*
+    One stable array, not a fresh one per render.
+
+    The dialog registers its arrow-key listener keyed on this, so a new identity every render meant
+    the listener was torn down and rebuilt constantly — and a single ArrowRight could be seen by more
+    than one of them, walking the gallery several steps at a time.
+  */
+  const ordered = useMemo(() => [...free, ...paid], [free, paid])
 
   const Card = ({ design }: { design: Design }) => {
     const chosen = design.structure === templateId && design.theme === themeId
@@ -240,76 +255,102 @@ export function DesignGallery({
     const meta = templates[design.structure]
 
     return (
-      <button
-        type="button"
-        aria-pressed={chosen}
-        onClick={() => onChoose(design)}
-        className={[
-          'flex flex-col gap-2 rounded-choice border p-2.5 text-left transition-colors',
-          chosen
-            ? 'border-signal bg-signal-wash'
-            : 'border-hairline hover:border-hairline-strong',
-        ].join(' ')}
-      >
-        <Specimen design={design} />
+      /*
+        Two real buttons rather than one, because choosing and looking are different acts and a
+        button cannot be nested inside a button. `group` lets the quiet one stay out of the way until
+        the card is hovered or something inside it has focus, so 103 cards do not become 206 controls
+        competing for attention.
+      */
+      <div className="group relative">
+        <button
+          type="button"
+          aria-pressed={chosen}
+          onClick={() => onChoose(design)}
+          className={[
+            'flex w-full flex-col gap-2 rounded-choice border p-2.5 text-left transition-colors',
+            chosen
+              ? 'border-signal bg-signal-wash'
+              : 'border-hairline hover:border-hairline-strong',
+          ].join(' ')}
+        >
+          <Specimen design={design} />
 
-        <span className="flex flex-col gap-0.5">
-          <span className="flex items-center gap-1.5">
-            <span className="text-[13px] font-semibold text-ink">
-              {design.label}
+          <span className="flex flex-col gap-0.5">
+            <span className="flex items-center gap-1.5">
+              <span className="text-[13px] font-semibold text-ink">
+                {design.label}
+              </span>
+              {chosen && (
+                <svg
+                  aria-hidden
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  className="h-3.5 w-3.5 shrink-0 text-signal"
+                >
+                  <path d="m5 12.5 4.5 4.5L19 7" />
+                </svg>
+              )}
             </span>
-            {chosen && (
-              <svg
-                aria-hidden
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                className="h-3.5 w-3.5 shrink-0 text-signal"
-              >
-                <path d="m5 12.5 4.5 4.5L19 7" />
-              </svg>
-            )}
-          </span>
 
-          {/*
+            {/*
             The reading order, spelled out. It is the one structural difference between these cards, and
             "Skills first" in the name is easy to skim past — three words in sequence is not.
           */}
-          <span className="text-[11px] leading-snug text-ink-soft">
-            {(ORDER_WORDS[meta.order] ?? ORDER_WORDS.experience).join(' → ')}
+            <span className="text-[11px] leading-snug text-ink-soft">
+              {(ORDER_WORDS[meta.order] ?? ORDER_WORDS.experience).join(' → ')}
+            </span>
           </span>
-        </span>
 
-        <span className="flex flex-wrap items-center gap-1.5">
-          {/*
+          <span className="flex flex-wrap items-center gap-1.5">
+            {/*
             The ATS rating per card, because it is the claim that matters most and it belongs to the
             structure rather than to the tier. Paying does not buy a better rating — `showcase` is rated
             the same whether it costs money or not.
           */}
-          {meta.atsRating === 'verified' ? (
-            <span className="inline-flex items-center rounded-full bg-affirm-wash px-1.5 py-0.5 text-[10px] font-semibold text-affirm">
-              Parse verified
-            </span>
-          ) : (
-            <span className="inline-flex items-center rounded-full bg-caution-wash px-1.5 py-0.5 text-[10px] font-semibold text-caution">
-              Design-first
-            </span>
-          )}
-          {locked && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-band px-1.5 py-0.5 text-[10px] font-semibold text-ink-soft">
-              <Lock />
-              Paid plan
-            </span>
-          )}
-        </span>
-      </button>
+            {meta.atsRating === 'verified' ? (
+              <span className="inline-flex items-center rounded-full bg-affirm-wash px-1.5 py-0.5 text-[10px] font-semibold text-affirm">
+                Parse verified
+              </span>
+            ) : (
+              <span className="inline-flex items-center rounded-full bg-caution-wash px-1.5 py-0.5 text-[10px] font-semibold text-caution">
+                Design-first
+              </span>
+            )}
+            {locked && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-band px-1.5 py-0.5 text-[10px] font-semibold text-ink-soft">
+                <Lock />
+                Paid plan
+              </span>
+            )}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPreviewing(design)}
+          aria-label={`See ${design.label} as a full page`}
+          className="absolute right-3 top-3 rounded-full border border-hairline-strong bg-ground/95 px-2 py-1 text-[11px] font-semibold text-ink-soft opacity-0 transition-opacity hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
+        >
+          Full page
+        </button>
+      </div>
     )
   }
 
   return (
     <div className="flex flex-col gap-4">
+      <DesignPreviewDialog
+        design={previewing}
+        /* The gallery's own order: everything included first, then the paid half. */
+        designs={ordered}
+        resume={resume}
+        onClose={() => setPreviewing(undefined)}
+        onChoose={onChoose}
+        onNavigate={setPreviewing}
+      />
       <div className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between gap-2">
           <h3 className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-soft">
