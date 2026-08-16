@@ -20,6 +20,8 @@ import { SIDEBAR_WIDTH, SidebarBody, sidebarGround } from './templates/sidebar'
 import { Document, Page } from '@/lib/pdf-primitives'
 import { PdfcnThemeProvider } from '@/components/pdf/theme-provider'
 import type { TemplateId } from './templates/registry'
+import { withColours } from './themes/custom'
+import type { ColourChoice } from './themes/custom'
 
 export interface RenderOptions {
   templateId?: TemplateId
@@ -34,6 +36,13 @@ export interface RenderOptions {
    * face is the failure mode that ADR is about.
    */
   fonts?: { body?: string; heading?: string }
+  /**
+   * Ink and paper the reader chose.
+   *
+   * Refused rather than clamped when the pair falls below the legibility floor: see
+   * `themes/custom.ts` for why colour is free of the parse guarantee and bound by this one instead.
+   */
+  colours?: ColourChoice
 }
 
 export interface RenderResult {
@@ -71,25 +80,27 @@ export async function renderResume(
   */
   const quoted = (family: string) =>
     /^["']/.test(family) ? family : `"${family}"`
+  const painted =
+    options.colours === undefined ? base : withColours(base, options.colours)
   const theme =
     options.fonts === undefined
-      ? base
+      ? painted
       : {
-          ...base,
+          ...painted,
           typography: {
-            ...base.typography,
+            ...painted.typography,
             body: {
-              ...base.typography.body,
+              ...painted.typography.body,
               fontFamily:
                 options.fonts.body === undefined
-                  ? base.typography.body.fontFamily
+                  ? painted.typography.body.fontFamily
                   : quoted(options.fonts.body),
             },
             heading: {
-              ...base.typography.heading,
+              ...painted.typography.heading,
               fontFamily:
                 options.fonts.heading === undefined
-                  ? base.typography.heading.fontFamily
+                  ? painted.typography.heading.fontFamily
                   : quoted(options.fonts.heading),
             },
           },
