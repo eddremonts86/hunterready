@@ -2737,18 +2737,46 @@ function HunterReady() {
               no file and no reading — telling them to check it, and counting details we were unsure of
               in a document nobody parsed, is a sentence with no referent.
             */}
+            {/*
+              The heading follows the panel, because it used to lie on four screens out of five.
+
+              It branched on where the document came from and never on which panel was open, so
+              "Check what we read." sat over the design gallery and over the account controls, and
+              under it "Your dates and job titles are the ones worth a second look" made a claim
+              about a screen the person had already left. A title that describes the wrong screen is
+              worse than no title: it is the one thing on the page a reader trusts without checking.
+
+              Each line is the one fact that screen is about, said once (reference/clarify.md), and
+              none of them names a side of the layout, because on a phone there are no sides.
+            */}
             <h1 className="text-display text-ink">
-              {loaded.origin === 'blank'
-                ? 'Write your CV'
-                : 'Check what we read'}
+              {panel === 'check'
+                ? loaded.origin === 'blank'
+                  ? 'Write your CV'
+                  : 'Check what we read'
+                : panel === 'wording'
+                  ? 'Sharpen the wording'
+                  : panel === 'design'
+                    ? 'Choose how it looks'
+                    : panel === 'job'
+                      ? 'Aim it at one job'
+                      : 'Your account'}
               <span className="text-signal">.</span>
             </h1>
             <p className="text-[14px] text-ink-soft">
-              {loaded.origin === 'blank'
-                ? 'Fill in what you have. The page on the right is the document as it will arrive.'
-                : toCheck > 0
-                  ? `${toCheck} ${toCheck === 1 ? 'detail is' : 'details are'} worth your eyes. Everything else looked clear.`
-                  : 'Your dates and job titles are the ones worth a second look.'}
+              {panel === 'check'
+                ? loaded.origin === 'blank'
+                  ? 'Fill in what you have. The preview updates as you type, and you can download at any point.'
+                  : toCheck > 0
+                    ? `${toCheck} ${toCheck === 1 ? 'detail is' : 'details are'} worth your eyes. Everything else looked clear.`
+                    : 'Your dates and job titles are the ones worth a second look.'
+                : panel === 'wording'
+                  ? 'Suggestions on your own lines. Nothing changes unless you accept it.'
+                  : panel === 'design'
+                    ? 'Every layout here has been read back and checked field by field.'
+                    : panel === 'job'
+                      ? 'Paste an advert and see what it asks for that your CV already shows.'
+                      : 'Sign in to keep your CV between visits, or take everything with you.'}
             </p>
           </div>
         </div>
