@@ -1996,7 +1996,10 @@ function HunterReady() {
 
               <Reveal delay={90}>
                 <div className="flex flex-col gap-3 lg:pt-2">
-                  <span className="text-meta font-semibold uppercase tracking-[0.08em] text-ink-faint">
+                  {/* Ink Soft, not Ink Faint. DESIGN.md's own rule reserves Faint (3.07:1) for rules,
+                      disabled labels and strike decoration; this is a column heading somebody reads.
+                      Measured at 3.09:1 against the 4.5:1 AA floor before the change. */}
+                  <span className="text-meta font-semibold uppercase tracking-[0.08em] text-ink-soft">
                     What it will ask for
                   </span>
                   <ul className="flex flex-col divide-y divide-hairline border-y border-hairline">
@@ -2258,7 +2261,7 @@ function HunterReady() {
             </div>
 
             <div className="flex flex-col gap-2.5">
-              <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
+              <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-soft">
                 The product
               </span>
               <button
@@ -2284,7 +2287,7 @@ function HunterReady() {
             </div>
 
             <div className="flex flex-col gap-2.5">
-              <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
+              <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-soft">
                 Straight answers
               </span>
               <a
@@ -2303,7 +2306,7 @@ function HunterReady() {
           </div>
           <div className="border-t border-hairline">
             <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
-              <p className="text-meta leading-relaxed text-ink-faint">
+              <p className="text-meta leading-relaxed text-ink-soft">
                 HunterReady is in development and free to use. There is no
                 company behind it yet and no paid plan open. When there is, both
                 will be named here.
