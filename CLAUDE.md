@@ -131,13 +131,34 @@ there and be broken in the only environment that runs it. It also cannot prove t
 (ADR-005). Do not start a second one.
 
 ```bash
-docker build -t hunterready:local .   # after any source change…
-docker compose -f docker-compose.yml -f docker-compose.local.yml up -d   # …then restart it
+# After any source change. `--build` is the whole command; without it you restart the old image.
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build app
 ```
 
-⚠️ Run `docker build` directly, **not** `pnpm docker:build`. A global pnpm of a different major than
-this repo's crashes in its dependency-status check before it runs the script, and prints a stack trace
-with exit code 0 — a build that never happened, reported as a success.
+⚠️ **`docker build -t hunterready:local .` does not feed this container, and used to be the documented
+step here.** The `app` service declares `build:` with no `image:`, so Compose builds and runs an image
+of its own — `hunterready-app:latest`. The `hunterready:local` tag belongs to `pnpm docker:run`, a
+separate standalone flow. Building one and starting the other is a no-op with a success message on
+both halves, and it cost a full session: `HR_THIRD_PARTY_FOR_ALL=true` was set correctly in `.env`,
+present in the container, present at PID 1 — and ignored, because the bundle in the running image
+predated ADR-030 by a day and contained no code that read it. `entitlementFor` returned a hardcoded
+`thirdParty: false`. Nothing in the interface says which build it is serving; the only tell was that
+the string was absent from `.output/server/`.
+
+⚠️ `--force-recreate` is not a rebuild either. It recreates the **container** from the image already
+on disk, so it reports `Recreated` and changes nothing about the code.
+
+⚠️ Run the build through Compose or `docker build` directly, **not** `pnpm docker:build`. A global
+pnpm of a different major than this repo's crashes in its dependency-status check before it runs the
+script, and prints a stack trace with exit code 0 — a build that never happened, reported as a
+success.
+
+**When a deploy-time switch appears not to work, check the bundle before the environment.** One
+command, and it distinguishes "misconfigured" from "this code is not in the image":
+
+```bash
+docker exec hunterready-app sh -c 'grep -rl YOUR_ENV_VAR .output/server/ | wc -l'
+```
 
 ```bash
 pnpm build && pnpm start    # the only way to trust the WASM render path
