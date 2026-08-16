@@ -239,3 +239,65 @@ describe('document typography stays readable in print', () => {
     expect(theme.page.orientation).toBe('portrait')
   })
 })
+
+/**
+ * The floor the document palette never had.
+ *
+ * `tokens.ts` records a contrast ratio beside every chrome token and this file asserted none of
+ * them: it enforced hex-only, banned chrome colors, and proved the themes look different from each
+ * other, all of which can hold while a theme prints grey on grey. The product's whole promise is a
+ * document a machine and a person can both read, and the inks that go on it were the untested half.
+ *
+ * The floors below are per role, because the roles do different jobs, and each is set just under
+ * what the seventeen themes actually achieve today rather than at a round number:
+ *
+ *   foreground       13.23 today (onyx)     body text, and it should never be close
+ *   mutedForeground   4.10 today (glacier)  secondary lines, dates, the second half of a metadata row
+ *   primary / accent  4.75 today (brush)    headings and section rules, larger than body
+ *
+ * A blanket 3:1 was the first proposal, taken from a cruder measurement of raw tokens against white
+ * paper. Measuring each role against its own theme's ground gave better numbers, and a floor of 3
+ * would have licensed a slide from 4.10 to 3.01 without anyone noticing. Raise these when a change
+ * earns it; never lower one to make a red suite green.
+ */
+describe('every theme stays readable', () => {
+  const channel = (hex: string, at: number) =>
+    parseInt(hex.slice(at, at + 2), 16)
+  const luminance = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map((at) => {
+      const v = channel(hex, at) / 255
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+    })
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+  }
+  const contrast = (a: string, b: string) => {
+    const [x, y] = [luminance(a), luminance(b)]
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05)
+  }
+
+  const FLOORS = {
+    foreground: 7,
+    mutedForeground: 4,
+    primary: 4.5,
+    accent: 4.5,
+  } as const
+
+  for (const [role, floor] of Object.entries(FLOORS)) {
+    it(`${role} clears ${floor}:1 against its own ground in every theme`, () => {
+      const failures: Array<string> = []
+      for (const id of THEME_IDS) {
+        const colors = themes[id].colors as unknown as Record<string, string>
+        const ink = colors[role]
+        const ground = colors.background
+        if (ink === undefined || ground === undefined) continue
+        const ratio = contrast(ink, ground)
+        if (ratio < floor) {
+          failures.push(
+            `${id}: ${role} ${ink} on ${ground} = ${ratio.toFixed(2)}:1`,
+          )
+        }
+      }
+      expect(failures).toEqual([])
+    })
+  }
+})
