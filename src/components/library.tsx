@@ -382,7 +382,7 @@ export function Library({
           */}
           <p className="text-[13px] leading-relaxed text-ink-soft">
             Right now nothing is stored: close this tab and your work is gone.
-            An account keeps your CV and the versions you tailor for each job —
+            An account keeps your CV and the versions you tailor for each job.
             which means we do hold your employment history, for 90 days after
             your last visit, and you can delete all of it in one click.
           </p>
@@ -521,7 +521,7 @@ export function Library({
                     {present(row.role) ?? 'A job'}
                     {present(row.company) === undefined
                       ? ''
-                      : ` — ${present(row.company)}`}
+                      : `, ${present(row.company)}`}
                   </span>
                   <span className="tally text-[12px] text-ink-soft">
                     {ago(row.createdAt)}
@@ -576,8 +576,8 @@ export function Library({
           </button>
         </div>
         <p className="text-[13px] leading-relaxed text-ink-soft">
-          Anyone with the link can read this CV — no password. Every link closes
-          itself after two weeks, and you can close one sooner.
+          Anyone with the link can read this CV, with no password. Every link
+          closes itself after two weeks, and you can close one sooner.
         </p>
         {links.length > 0 && (
           <ul className="flex flex-col">

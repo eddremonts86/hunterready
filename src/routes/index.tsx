@@ -660,7 +660,7 @@ function useDownloads() {
         setFailure(
           error instanceof DownloadFailed
             ? error.message
-            : 'Something went wrong building the file. Your CV is still here — try again.',
+            : 'Something went wrong building the file. Your CV is still here. Try again.',
         )
       } finally {
         setFormat(undefined)
@@ -1302,7 +1302,7 @@ function HunterReady() {
 
         if (failures > 0) {
           setRewriteNote(
-            `We could not look at ${failures} of your bullets just now. The rest are below — run it again later for the missing ones.`,
+            `We could not look at ${failures} of your bullets just now. The rest are below. Run it again later for the missing ones.`,
           )
         }
       } catch {
@@ -1455,7 +1455,7 @@ function HunterReady() {
         const kept = typeof payload.kept === 'number' ? payload.kept : 0
         if (kept > 0) {
           setTranslateNote(
-            `${kept} ${kept === 1 ? 'line' : 'lines'} stayed in the original language — the translation did not keep their numbers intact, so we kept your words instead.`,
+            `${kept} ${kept === 1 ? 'line' : 'lines'} stayed in the original language. The translation did not keep their numbers intact, so we kept your words instead.`,
           )
         }
       } catch {
@@ -2910,7 +2910,7 @@ function HunterReady() {
                               {stage.label}
                               {stage.detail === undefined
                                 ? ''
-                                : ` — ${stage.detail}`}
+                                : `. ${stage.detail}`}
                             </span>
                           </li>
                         ))}
@@ -2957,7 +2957,7 @@ function HunterReady() {
                           role="status"
                           className="text-meta leading-relaxed text-ink-soft"
                         >
-                          One pass over every bullet — the longer your history,
+                          One pass over every bullet. The longer your history,
                           the longer this takes.
                         </span>
                       )}
@@ -3217,7 +3217,7 @@ function HunterReady() {
                     <p className="text-[13px] leading-relaxed text-ink-soft">
                       The layout decides what a reader meets first. The type
                       decides how it sounds. Both are free to change at any
-                      point — nothing about your CV is rewritten.
+                      point, and nothing about your CV is rewritten.
                     </p>
                   </div>
 
@@ -3389,7 +3389,7 @@ function HunterReady() {
             {lockedDesign && (
               <p className="border-b border-caution/25 bg-caution-wash px-4 py-2 text-[13px] leading-relaxed text-ink">
                 This design is part of the paid plan. You can see it here, and
-                download any design marked <strong>Included</strong> — they
+                download any design marked <strong>Included</strong>, which
                 produce the same document, checked by the same parse test.
               </p>
             )}

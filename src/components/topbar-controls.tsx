@@ -285,7 +285,7 @@ function UpgradeNote() {
         already the switch; a provider only has to write to it. See docs/08-roadmap.md.
       */}
       <p className="text-[12px] font-medium text-ink">
-        Paid plans are not open yet — this is the last piece before v1.0.
+        Paid plans are not open yet. This is the last piece before v1.0.
       </p>
     </div>
   )
