@@ -39,10 +39,26 @@ const ORDER_WORDS: Record<string, Array<string>> = {
   education: ['Study', 'Experience', 'Skills'],
 }
 
+/**
+ * A line of real content for whichever section the design opens with.
+ *
+ * The specimen used to draw "Experience" and a job line on every card, including the cards whose
+ * entire selling point is that they do *not* open with experience. "Skills first, European" showed a
+ * heading reading EXPERIENCE directly above its own label promising `Skills → Experience → Study`.
+ * The two halves of the card contradicted each other, and the half a person believes is the picture.
+ */
+const SPECIMEN_LINE: Record<string, string> = {
+  Experience: 'Shift Lead Nurse, Rigshospitalet',
+  Skills: 'Intensive care · Triage · Ventilator management',
+  Study: 'BSc Nursing, Københavns Professionshøjskole',
+}
+
 function Specimen({ design }: { design: Design }) {
   const theme = getTheme(design.theme)
   const style = styleOf(theme)
   const { heading, body } = theme.typography
+  const meta = templates[design.structure]
+  const opensWith = (ORDER_WORDS[meta.order] ?? ORDER_WORDS.experience)[0]
 
   /*
     The heading drawn with its real treatment — the accent bar, the navy underline, the solid band, the
@@ -65,7 +81,7 @@ function Specimen({ design }: { design: Design }) {
               : theme.colors.foreground,
       }}
     >
-      Experience
+      {opensWith}
     </span>
   )
 
@@ -180,7 +196,7 @@ function Specimen({ design }: { design: Design }) {
           color: theme.colors.mutedForeground,
         }}
       >
-        Shift Lead Nurse — Rigshospitalet
+        {SPECIMEN_LINE[opensWith] ?? SPECIMEN_LINE.Experience}
       </span>
     </div>
   )
