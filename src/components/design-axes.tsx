@@ -25,6 +25,7 @@
  * the app rather than like a default install: `rounded-field`, Hairline Strong, and the Signal focus
  * ring DESIGN.md specifies for every field.
  */
+import { useEffect, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import {
   Collapsible,
@@ -129,6 +130,18 @@ function FontPicker({
   )
 }
 
+/**
+ * A colour, typed or picked, without the field fighting the hand that types it.
+ *
+ * The first version was fully controlled and normalised on every keystroke, which cannot work: on the
+ * way to typing `#ffffff` you pass through `#fff`, which is a valid three-digit hex. It normalised,
+ * rewrote the field to `#ffffff`, and the remaining `fff` landed on the end of that. What came out was
+ * a colour nobody chose, usually below the contrast floor, so the document quietly kept the design's
+ * own colours and the whole feature looked broken.
+ *
+ * So the text field keeps a draft of exactly what was typed and commits only when the draft is a
+ * whole colour. The swatch is unaffected: a native picker emits complete values.
+ */
 function ColourPicker({
   label,
   value,
@@ -138,6 +151,10 @@ function ColourPicker({
   value: string
   onChange: (hex: string) => void
 }) {
+  const [draft, setDraft] = useState(value)
+  /* Follow the value when it changes from outside: a swatch pick, or a reset back to the design. */
+  useEffect(() => setDraft(value), [value])
+
   return (
     <label className="flex flex-col gap-1.5">
       <span className="text-[13px] font-semibold text-ink">{label}</span>
@@ -151,8 +168,20 @@ function ColourPicker({
         />
         <input
           type="text"
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
+          value={draft}
+          onChange={(event) => {
+            const typed = event.target.value
+            setDraft(typed)
+            /*
+              Six digits only. Accepting the three-digit form here is what caused the rewrite, and a
+              reader typing a brand colour is typing six of them anyway.
+            */
+            if (/^#?[0-9a-fA-F]{6}$/.test(typed.trim())) {
+              const hex = normalizeHex(typed)
+              if (hex !== undefined) onChange(hex)
+            }
+          }}
+          onBlur={() => setDraft(value)}
           spellCheck={false}
           className="field tally"
           aria-label={`${label} colour as hex`}
