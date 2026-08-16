@@ -13,7 +13,13 @@
 /** Ink. Body text, headings — the darkest value a document may use. */
 export const PRINT_BLACK = '#0D0D0D'
 
-/** Print highlight. Secondary text on light grounds, hairline rules. */
+/**
+ * Hairline rules and card borders. **Not text.**
+ *
+ * The comment here used to say "secondary text on light grounds", which no theme has ever done and
+ * which would be indefensible: 1.88:1 on white paper. Every theme uses it as `border`, where a low
+ * ratio is the point. `DEVELOPER_GRAY` is the one for secondary text, at 5.10:1.
+ */
 export const SILVER_GRAY = '#BDBDBD'
 
 /**
