@@ -2814,23 +2814,35 @@ function HunterReady() {
             />
 
             <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-2 lg:pr-1">
-              {panel === 'check' && loaded.warnings.length > 0 && (
-                <div className="rounded-card border border-caution/25 bg-caution-wash p-4">
-                  <h2 className="text-[13px] font-semibold text-caution">
-                    Worth knowing
-                  </h2>
-                  <ul className="mt-2 flex flex-col gap-1.5">
-                    {loaded.warnings.map((warning, i) => (
-                      <li
-                        key={i}
-                        className="text-[13px] leading-relaxed text-ink"
-                      >
-                        {warning}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              {panel === 'check' &&
+                (loaded.warnings.length > 0 || fit.advice !== undefined) && (
+                  <div className="rounded-card border border-caution/25 bg-caution-wash p-4">
+                    <h2 className="text-[13px] font-semibold text-caution">
+                      Worth knowing
+                    </h2>
+                    <ul className="mt-2 flex flex-col gap-1.5">
+                      {loaded.warnings.map((warning, i) => (
+                        <li
+                          key={i}
+                          className="text-[13px] leading-relaxed text-ink"
+                        >
+                          {warning}
+                        </li>
+                      ))}
+                      {/*
+                        Length advice belongs beside the other remarks about the document's content,
+                        not as a caption over the render. It is last because it is the softest: the
+                        others describe something we could not read, this one describes a judgement
+                        call that is the candidate's to make.
+                      */}
+                      {fit.advice !== undefined && (
+                        <li className="text-[13px] leading-relaxed text-ink">
+                          {fit.advice}
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                )}
 
               {panel === 'check' && (
                 <ReviewForm
@@ -3435,11 +3447,13 @@ function HunterReady() {
                 produce the same document, checked by the same parse test.
               </p>
             )}
-            {fit.advice !== undefined && (
-              <p className="border-b border-hairline bg-band px-4 py-2 text-[13px] leading-relaxed text-ink-soft">
-                {fit.advice}
-              </p>
-            )}
+            {/*
+              The fit advice used to sit here, in a band across the top of the paper. It is a remark
+              about the *content* — that a fifteen-year history squeezed onto one page has probably
+              lost something — and content is what the Check panel is for. Above the document it read
+              as a caption on the render, which is the one thing it is not about, and it was there on
+              every panel including the ones where nobody is editing anything.
+            */}
             {/*
               Comparing replaces the preview rather than opening beside it or over it. A modal would put
               the achievement in a box to be dismissed, and a third column would shrink both sheets to
