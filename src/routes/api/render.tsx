@@ -20,6 +20,8 @@ import { errorEvent } from '@/lib/log'
 import { DEFAULT_DESIGN_ID, findDesign, tierOf } from '@/render/designs'
 import { Resume } from '@/schema/resume'
 import { renderResume } from '@/render/render'
+import { REGISTERED_FAMILIES } from '@/render/fonts'
+import { normalizeHex } from '@/render/themes/custom'
 import { docxFilename, renderDocx } from '@/render/docx/docx'
 import { isThemeId } from '@/render/themes'
 import type { ThemeId } from '@/render/themes'
@@ -37,13 +39,39 @@ function isFixtureName(value: string): value is FixtureName {
 function readSelection(url: URL): {
   templateId: TemplateId | undefined
   themeId: ThemeId | undefined
+  fonts?: { body?: string; heading?: string }
+  colours?: { accent?: string; paper?: string }
 } {
   const template = url.searchParams.get('template')
   const theme = url.searchParams.get('theme')
+
+  /*
+    The chooser's axes, validated here rather than trusted.
+
+    A family not in the bundle would draw nothing at all (ADR-022), and a colour below the floor is
+    refused by `withColours` — but neither should depend on the interface having asked nicely. This
+    endpoint is public and takes whatever a query string carries.
+  */
+  const body = url.searchParams.get('bodyFont')
+  const heading = url.searchParams.get('headingFont')
+  const known = (family: string | null) =>
+    family !== null && REGISTERED_FAMILIES.includes(family) ? family : undefined
+  const fonts =
+    known(body) === undefined && known(heading) === undefined
+      ? undefined
+      : { body: known(body), heading: known(heading) }
+
+  const accent = normalizeHex(url.searchParams.get('accent') ?? '')
+  const paper = normalizeHex(url.searchParams.get('paper') ?? '')
+  const colours =
+    accent === undefined && paper === undefined ? undefined : { accent, paper }
+
   return {
     templateId:
       template !== null && isTemplateId(template) ? template : undefined,
     themeId: theme !== null && isThemeId(theme) ? theme : undefined,
+    fonts,
+    colours,
   }
 }
 

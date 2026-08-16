@@ -63,6 +63,9 @@ import { Resume } from '@/schema/resume'
 import type { FieldProvenance } from '@/schema/provenance'
 import { needsReview } from '@/schema/provenance'
 import { estimateFit } from '@/render/fit'
+import { quoteFamily, withColours } from '@/render/themes/custom'
+import { DesignAxes } from '@/components/design-axes'
+import { styleOf } from '@/render/themes/style'
 import { getTheme } from '@/render/themes'
 import type { ThemeId } from '@/render/themes'
 import { localeOptions, resolveLocale } from '@/render/locale'
@@ -615,9 +618,22 @@ async function downloadDocument(
   templateId: TemplateId,
   themeId: ThemeId,
   format: 'pdf' | 'docx' = 'pdf',
+  axes: {
+    fonts?: { body?: string; heading?: string }
+    colours?: { accent?: string; paper?: string }
+  } = {},
 ): Promise<void> {
+  /* The chosen axes travel with the request, so the file matches the preview. */
+  const extra = new URLSearchParams()
+  if (axes.fonts?.body !== undefined) extra.set('bodyFont', axes.fonts.body)
+  if (axes.fonts?.heading !== undefined)
+    extra.set('headingFont', axes.fonts.heading)
+  if (axes.colours?.accent !== undefined)
+    extra.set('accent', axes.colours.accent)
+  if (axes.colours?.paper !== undefined) extra.set('paper', axes.colours.paper)
+  const suffix = extra.toString() === '' ? '' : `&${extra.toString()}`
   await saveRendered(
-    `/api/render?template=${templateId}&theme=${themeId}&download=1&format=${format}`,
+    `/api/render?template=${templateId}&theme=${themeId}&download=1&format=${format}${suffix}`,
     resume,
     `CV.${format}`,
   )
@@ -649,13 +665,18 @@ function useDownloads() {
       templateId: TemplateId,
       themeId: ThemeId,
       wanted: 'pdf' | 'docx' = 'pdf',
+      /* The reader's axes, so the file that lands matches the preview they were looking at. */
+      axes: {
+        fonts?: { body?: string; heading?: string }
+        colours?: { accent?: string; paper?: string }
+      } = {},
     ) => {
       // Two clicks would build the same document twice and save two copies to Downloads.
       if (format !== undefined) return
       setFormat(wanted)
       setFailure(undefined)
       try {
-        await downloadDocument(resume, templateId, themeId, wanted)
+        await downloadDocument(resume, templateId, themeId, wanted, axes)
       } catch (error) {
         setFailure(
           error instanceof DownloadFailed
@@ -900,6 +921,22 @@ function HunterReady() {
   const [accepted, setAccepted] = useState<Set<string>>(new Set())
   const [templateId, setTemplateId] = useState<TemplateId>('modern-intl')
   const [themeId, setThemeId] = useState<ThemeId>('modern')
+  /**
+   * The reader's own axes, layered over whichever design they picked.
+   *
+   * Kept apart from `templateId`/`themeId` rather than folded into them, because a design is a
+   * catalogued pairing that carries a tier and a parse rating, and these are adjustments on top of
+   * one. Choosing a new design keeps them, which is the point: somebody who found their colour wants
+   * to see it on the next layout too.
+   */
+  const [customFonts, setCustomFonts] = useState<{
+    body?: string
+    heading?: string
+  }>({})
+  const [customColours, setCustomColours] = useState<{
+    accent?: string
+    paper?: string
+  }>({})
   /**
    * Targeting is a branch off the check step, not a fourth step everyone walks through.
    *
@@ -2319,7 +2356,41 @@ function HunterReady() {
   }
 
   const template = templates[templateId]
-  const theme = getTheme(themeId)
+  /*
+    The preview is painted with the same two functions the renderer uses, so what is on screen and
+    what downloads cannot drift. `withColours` throws on a pairing below the floor; the picker never
+    submits one, and the catch keeps a bad value from blanking the workspace.
+  */
+  const theme = (() => {
+    const base = getTheme(themeId)
+    let next = base
+    try {
+      next = withColours(base, customColours)
+    } catch {
+      /* Refused pairing: keep the design's own colours until the picker offers a legible one. */
+    }
+    if (customFonts.body === undefined && customFonts.heading === undefined) {
+      return next
+    }
+    return {
+      ...next,
+      typography: {
+        ...next.typography,
+        body: {
+          ...next.typography.body,
+          fontFamily: quoteFamily(
+            customFonts.body ?? next.typography.body.fontFamily,
+          ),
+        },
+        heading: {
+          ...next.typography.heading,
+          fontFamily: quoteFamily(
+            customFonts.heading ?? next.typography.heading.fontFamily,
+          ),
+        },
+      },
+    }
+  })()
 
   // ── The branch: targeting one job ────────────────────────────────────────────────────────
   if (targeting) {
@@ -2594,7 +2665,16 @@ function HunterReady() {
                   disabled={downloads.busyFormat !== undefined}
                   aria-busy={downloads.busyFormat === 'pdf'}
                   onClick={() =>
-                    void downloads.start(loaded.resume, templateId, themeId)
+                    void downloads.start(
+                      loaded.resume,
+                      templateId,
+                      themeId,
+                      'pdf',
+                      {
+                        fonts: customFonts,
+                        colours: customColours,
+                      },
+                    )
                   }
                   className="btn btn-quiet px-3.5 py-1.5 text-[13px]"
                 >
@@ -3274,6 +3354,29 @@ function HunterReady() {
                     </p>
                   </div>
 
+                  <DesignAxes
+                    axes={{ fonts: customFonts, colours: customColours }}
+                    defaults={{
+                      body: getTheme(
+                        themeId,
+                      ).typography.body.fontFamily.replace(/^["']|["']$/g, ''),
+                      heading: getTheme(
+                        themeId,
+                      ).typography.heading.fontFamily.replace(
+                        /^["']|["']$/g,
+                        '',
+                      ),
+                      accent:
+                        styleOf(getTheme(themeId)).accent ??
+                        getTheme(themeId).colors.primary,
+                      paper: getTheme(themeId).colors.background,
+                    }}
+                    onChange={(next) => {
+                      setCustomFonts(next.fonts)
+                      setCustomColours(next.colours)
+                    }}
+                  />
+
                   <DesignGallery
                     templateId={templateId}
                     themeId={themeId}
@@ -3316,7 +3419,16 @@ function HunterReady() {
                 disabled={downloads.busyFormat !== undefined || lockedDesign}
                 aria-busy={downloads.busyFormat === 'pdf'}
                 onClick={() =>
-                  void downloads.start(loaded.resume, templateId, themeId)
+                  void downloads.start(
+                    loaded.resume,
+                    templateId,
+                    themeId,
+                    'pdf',
+                    {
+                      fonts: customFonts,
+                      colours: customColours,
+                    },
+                  )
                 }
                 className="btn btn-primary w-full px-6 py-3 text-[15px]"
               >

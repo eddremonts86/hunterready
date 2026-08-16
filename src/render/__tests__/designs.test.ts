@@ -1,10 +1,5 @@
 /**
  * The design catalogue's shape, and the gate's stance.
- *
- * Thirty entries is a number Edd asked for, so it is asserted rather than trusted — a catalogue that
- * quietly became 29 after a refactor would be a promise broken in a place nobody looks. The rest of this
- * file is about the two things a catalogue of paid things must never get wrong: giving away what is sold,
- * and taking away what was free.
  */
 import { describe, expect, it } from 'vitest'
 import {
@@ -19,13 +14,10 @@ import { TEMPLATE_IDS, templates } from '../templates/registry'
 import { THEME_IDS } from '../themes'
 
 describe('the catalogue', () => {
-  it('has sixty entries, twelve free and forty-eight paid', () => {
-    // Thirty at the first catalogue, fifty-two after the character expansion (ADR-025), sixty with
-    // the sidebar family and the dark page. The free twelve never change: taking a design away from
-    // someone's CV tool is not a growth strategy.
-    expect(DESIGNS).toHaveLength(60)
+  it('has one hundred and three entries, twelve free and ninety-one paid', () => {
+    expect(DESIGNS).toHaveLength(103)
     expect(FREE_DESIGNS).toHaveLength(12)
-    expect(PAID_DESIGNS).toHaveLength(48)
+    expect(PAID_DESIGNS).toHaveLength(91)
   })
 
   it('has no duplicate ids', () => {
@@ -34,11 +26,6 @@ describe('the catalogue', () => {
   })
 
   it('uses every structure and every theme at least once', () => {
-    /**
-     * The assertion that keeps the catalogue honest about its own variety. Thirty entries drawn from three
-     * structures would be a gallery of near-duplicates dressed as a choice, which is the thing a CV tool
-     * with "30 templates!" on the box usually is.
-     */
     const structures = new Set(DESIGNS.map((d) => d.structure))
     const themes = new Set(DESIGNS.map((d) => d.theme))
     for (const id of TEMPLATE_IDS) expect(structures, id).toContain(id)
@@ -60,11 +47,6 @@ describe('the catalogue', () => {
 })
 
 describe('the free tier takes nothing away', () => {
-  /**
-   * Twelve, not ten. Edd asked for ten free, and ten would mean two pairings somebody can use today
-   * moving behind a paywall — a thing not to do to a person's CV tool over a round number. The twelve are
-   * defined as exactly what was available before the catalogue existed.
-   */
   const ORIGINAL_STRUCTURES = ['modern-intl', 'modern-eu', 'showcase'] as const
   const ORIGINAL_THEMES = [
     'modern',
@@ -90,12 +72,6 @@ describe('the free tier takes nothing away', () => {
 
 describe('the gate fails closed', () => {
   it('calls an uncatalogued pairing paid, not free', () => {
-    /**
-     * `modern-eu-skills` × `technical` renders perfectly and is deliberately not offered. Someone reading
-     * the query string will try it. The answer has to be "that is not free" rather than "that is not
-     * listed, so help yourself" — the same stance as `entitlements.ts`, where the safe direction is the
-     * one that does not give away what is sold.
-     */
     expect(tierOf('modern-eu-skills', 'technical')).toBe('paid')
     expect(tierOf('modern-intl-education', 'minimal')).toBe('paid')
   })
@@ -113,7 +89,6 @@ describe('the gate fails closed', () => {
   })
 
   it('never sells a design-first layout as verified', () => {
-    // The rating comes from the structure and a theme cannot change it. Paying does not buy a claim.
     for (const d of DESIGNS) {
       expect(templates[d.structure].atsRating).toBe(
         templates[d.structure].atsRating,

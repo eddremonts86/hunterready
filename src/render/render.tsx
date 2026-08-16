@@ -20,7 +20,7 @@ import { SIDEBAR_WIDTH, SidebarBody, sidebarGround } from './templates/sidebar'
 import { Document, Page } from '@/lib/pdf-primitives'
 import { PdfcnThemeProvider } from '@/components/pdf/theme-provider'
 import type { TemplateId } from './templates/registry'
-import { withColours } from './themes/custom'
+import { quoteFamily, withColours } from './themes/custom'
 import type { ColourChoice } from './themes/custom'
 
 export interface RenderOptions {
@@ -78,8 +78,7 @@ export async function renderResume(
     the catalogue are named that way, and quoting every one is simpler than remembering which. The
     loader strips quotes again on its side, so both forms reach the same files.
   */
-  const quoted = (family: string) =>
-    /^["']/.test(family) ? family : `"${family}"`
+  const quoted = quoteFamily
   const painted =
     options.colours === undefined ? base : withColours(base, options.colours)
   const theme =

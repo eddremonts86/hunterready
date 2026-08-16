@@ -34,6 +34,7 @@ import type { ThemeId } from '@/render/themes'
 import { useMemo, useState } from 'react'
 import type { Resume } from '@/schema/resume'
 import { DesignPreviewDialog } from './design-preview-dialog'
+import { Section } from './design-axes'
 
 /** The order a card shows as three words, because it is the structural difference a person can act on. */
 const ORDER_WORDS: Record<string, Array<string>> = {
@@ -351,49 +352,44 @@ export function DesignGallery({
         onChoose={onChoose}
         onNavigate={setPreviewing}
       />
-      <div className="flex flex-col gap-2">
-        <div className="flex items-baseline justify-between gap-2">
-          <h3 className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-soft">
-            Included
-          </h3>
-          <span className="tally text-[11px] text-ink-faint">
-            {free.length}
-          </span>
-        </div>
+      <Section title="Included" count={free.length}>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {free.map((design) => (
             <Card key={design.id} design={design} />
           ))}
         </div>
-      </div>
+      </Section>
 
-      <div className="flex flex-col gap-2 border-t border-hairline pt-3">
-        <div className="flex items-baseline justify-between gap-2">
-          <h3 className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-soft">
-            {entitled ? 'Also yours' : 'Paid plan'}
-          </h3>
-          <span className="tally text-[11px] text-ink-faint">
-            {paid.length}
-          </span>
-        </div>
-        {!entitled && (
-          /*
+      {/*
+        Folded shut by default, and that is a judgement rather than a default: ninety-one paid cards
+        under twelve included ones meant the included set was a strip at the top of a very long
+        column. Closed, the two sets are the same size on screen, which is what a comparison needs.
+      */}
+      <Section
+        title={entitled ? 'Also yours' : 'Paid plan'}
+        count={paid.length}
+        defaultOpen={false}
+      >
+        <div className="flex flex-col gap-2">
+          {!entitled && (
+            /*
             Said once, at the top of the locked set, rather than as a sales line on each of eighteen cards.
             And it says what the free ones *are* rather than what they lack: the ATS guarantee is not the
             thing being sold, and implying it is would be the kind of pressure this product does not use.
           */
-          <p className="text-meta leading-relaxed text-ink-soft">
-            Every design above renders the same document, checked by the same
-            parse test. These add different typefaces and a different order of
-            sections.
-          </p>
-        )}
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {paid.map((design) => (
-            <Card key={design.id} design={design} />
-          ))}
+            <p className="text-meta leading-relaxed text-ink-soft">
+              Every design above renders the same document, checked by the same
+              parse test. These add different typefaces and a different order of
+              sections.
+            </p>
+          )}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {paid.map((design) => (
+              <Card key={design.id} design={design} />
+            ))}
+          </div>
         </div>
-      </div>
+      </Section>
     </div>
   )
 }

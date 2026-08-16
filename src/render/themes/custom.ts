@@ -106,6 +106,17 @@ export function deriveOnAccent(accent: string): string {
     : '#0d0d0d'
 }
 
+/**
+ * The CSS form of a family name.
+ *
+ * CSS rejects an unquoted family name that ends in a digit, and two of the sixty are named that way.
+ * Exported so the preview quotes exactly as the renderer does; two spellings of the same font is how
+ * a preview starts disagreeing with the file.
+ */
+export function quoteFamily(family: string): string {
+  return /^["']/.test(family) ? family : `"${family}"`
+}
+
 export interface ColourChoice {
   accent?: string
   paper?: string

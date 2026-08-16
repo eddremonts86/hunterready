@@ -14,6 +14,7 @@
  */
 import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import { FAMILY_SLUGS } from './families'
 
 interface FontLoader {
   name: string
@@ -33,70 +34,6 @@ const FONT_DIRS = [
 ]
 
 /** Family name → the fontsource package slug the files are named after. */
-const FAMILY_SLUGS: ReadonlyMap<string, string> = new Map([
-  // ── The chooser's catalogue. Every one proved to render through takumi before it was offered. ──
-  ['Lato', 'lato'],
-  ['Open Sans', 'open-sans'],
-  ['Noto Sans', 'noto-sans'],
-  ['PT Sans', 'pt-sans'],
-  ['Fira Sans', 'fira-sans'],
-  ['IBM Plex Sans', 'ibm-plex-sans'],
-  ['Work Sans', 'work-sans'],
-  ['Public Sans', 'public-sans'],
-  ['Rubik', 'rubik'],
-  ['Karla', 'karla'],
-  ['Mulish', 'mulish'],
-  ['Manrope', 'manrope'],
-  ['Inter', 'inter'],
-  ['Barlow', 'barlow'],
-  ['Asap', 'asap'],
-  ['Poppins', 'poppins'],
-  ['Montserrat', 'montserrat'],
-  ['Nunito Sans', 'nunito-sans'],
-  ['Outfit', 'outfit'],
-  ['Urbanist', 'urbanist'],
-  ['Jost', 'jost'],
-  ['Barlow Condensed', 'barlow-condensed'],
-  ['Fira Sans Condensed', 'fira-sans-condensed'],
-  ['Saira Condensed', 'saira-condensed'],
-  ['Encode Sans Condensed', 'encode-sans-condensed'],
-  ['Oswald', 'oswald'],
-  ['Merriweather', 'merriweather'],
-  ['Libre Baskerville', 'libre-baskerville'],
-  ['Crimson Text', 'crimson-text'],
-  ['Cardo', 'cardo'],
-  ['Spectral', 'spectral'],
-  ['PT Serif', 'pt-serif'],
-  ['Noto Serif', 'noto-serif'],
-  ['Bitter', 'bitter'],
-  ['Zilla Slab', 'zilla-slab'],
-  ['Roboto Slab', 'roboto-slab'],
-  ['Arvo', 'arvo'],
-  ['Alegreya', 'alegreya'],
-  ['Vollkorn', 'vollkorn'],
-  ['Literata', 'literata'],
-  ['Gelasio', 'gelasio'],
-  ['Faustina', 'faustina'],
-  ['Cormorant Garamond', 'cormorant-garamond'],
-  ['Prata', 'prata'],
-  ['Bodoni Moda', 'bodoni-moda'],
-  ['IBM Plex Mono', 'ibm-plex-mono'],
-  ['JetBrains Mono', 'jetbrains-mono'],
-  ['Space Mono', 'space-mono'],
-  ['Archivo', 'archivo'],
-  ['Chivo', 'chivo'],
-  ['Source Sans 3', 'source-sans-3'],
-  ['Source Serif 4', 'source-serif-4'],
-  ['Courier Prime', 'courier-prime'],
-  ['Archivo Narrow', 'archivo-narrow'],
-  ['Caveat Brush', 'caveat-brush'],
-  // The character expansion (ADR-025): display, classical, grotesque, warm, geometric.
-  ['Playfair Display', 'playfair-display'],
-  ['EB Garamond', 'eb-garamond'],
-  ['Space Grotesk', 'space-grotesk'],
-  ['Lora', 'lora'],
-  ['Josefin Sans', 'josefin-sans'],
-])
 
 /** Weights to try per family. A missing weight is survivable; a missing 400 is not. */
 const WEIGHTS = [400, 600, 700]
@@ -205,7 +142,7 @@ export async function loadThemeFonts(theme: {
 }
 
 /** Families this build can render. Asserted by a test. */
-export const REGISTERED_FAMILIES = [...FAMILY_SLUGS.keys()]
+export { REGISTERED_FAMILIES } from './families'
 
 /** Exposed for the asset-copy script and for tests. */
 export const FONT_SOURCE_DIR = 'src/render/fonts/files'
