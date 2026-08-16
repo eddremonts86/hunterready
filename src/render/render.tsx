@@ -20,10 +20,29 @@ import { SIDEBAR_WIDTH, SidebarBody, sidebarGround } from './templates/sidebar'
 import { Document, Page } from '@/lib/pdf-primitives'
 import { PdfcnThemeProvider } from '@/components/pdf/theme-provider'
 import type { TemplateId } from './templates/registry'
+import { quoteFamily, withColours } from './themes/custom'
+import type { ColourChoice } from './themes/custom'
 
 export interface RenderOptions {
   templateId?: TemplateId
   themeId?: ThemeId
+  /**
+   * Type chosen by the reader, replacing what the theme names.
+   *
+   * A theme is a coherent set of decisions and stays the default. This is the door out of it, for the
+   * person who wants this layout in that face — and it is also the only way to prove a bundled family
+   * actually reaches takumi, which is the check ADR-022 exists to insist on. A family not in
+   * `FAMILY_SLUGS` throws rather than drawing nothing, because the renderer's silence on an unknown
+   * face is the failure mode that ADR is about.
+   */
+  fonts?: { body?: string; heading?: string }
+  /**
+   * Ink and paper the reader chose.
+   *
+   * Refused rather than clamped when the pair falls below the legibility floor: see
+   * `themes/custom.ts` for why colour is free of the parse guarantee and bound by this one instead.
+   */
+  colours?: ColourChoice
 }
 
 export interface RenderResult {
@@ -52,7 +71,39 @@ export async function renderResume(
 ): Promise<RenderResult> {
   const { render, measure } = await import('takumi-pdf')
 
-  const theme = getTheme(options.themeId ?? DEFAULT_THEME_ID)
+  const base = getTheme(options.themeId ?? DEFAULT_THEME_ID)
+  /*
+    Quoted, always. takumi parses `fontFamily` as CSS, and CSS rejects an unquoted family name that
+    ends in a digit: "Source Sans 3" fails with `Unexpected token: 3`. Two of the sixty families in
+    the catalogue are named that way, and quoting every one is simpler than remembering which. The
+    loader strips quotes again on its side, so both forms reach the same files.
+  */
+  const quoted = quoteFamily
+  const painted =
+    options.colours === undefined ? base : withColours(base, options.colours)
+  const theme =
+    options.fonts === undefined
+      ? painted
+      : {
+          ...painted,
+          typography: {
+            ...painted.typography,
+            body: {
+              ...painted.typography.body,
+              fontFamily:
+                options.fonts.body === undefined
+                  ? painted.typography.body.fontFamily
+                  : quoted(options.fonts.body),
+            },
+            heading: {
+              ...painted.typography.heading,
+              fontFamily:
+                options.fonts.heading === undefined
+                  ? painted.typography.heading.fontFamily
+                  : quoted(options.fonts.heading),
+            },
+          },
+        }
   const meta = getTemplate(options.templateId ?? DEFAULT_TEMPLATE_ID)
   const { Component } = meta
   const { page } = theme.spacing

@@ -171,7 +171,7 @@ export function Dropzone({
               copy covers both rather than promising the fast case.
             */}
             {busy
-              ? 'A few seconds — longer for a scan or a photo'
+              ? 'A few seconds, longer for a scan or a photo'
               : 'PDF, Word, plain text, or a photo of a printed page.'}
           </p>
         </div>

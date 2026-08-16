@@ -33,7 +33,7 @@ export const Route = createFileRoute('/s/$token')({
       // Belt and braces with the `X-Robots-Tag` on `/api/shared`. A CV in a search index is a leak that
       // outlives the link it came from.
       { name: 'robots', content: 'noindex, nofollow, noarchive' },
-      { title: 'A shared CV — HunterReady' },
+      { title: 'A shared CV | HunterReady' },
     ],
   }),
 })

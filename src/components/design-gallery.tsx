@@ -31,6 +31,10 @@ import { styleOf } from '@/render/themes/style'
 import { templates } from '@/render/templates/registry'
 import type { TemplateId } from '@/render/templates/registry'
 import type { ThemeId } from '@/render/themes'
+import { useEffect, useMemo, useState } from 'react'
+import type { Resume } from '@/schema/resume'
+import { DesignPreviewDialog } from './design-preview-dialog'
+import { Section } from './design-axes'
 
 /** The order a card shows as three words, because it is the structural difference a person can act on. */
 const ORDER_WORDS: Record<string, Array<string>> = {
@@ -39,10 +43,26 @@ const ORDER_WORDS: Record<string, Array<string>> = {
   education: ['Study', 'Experience', 'Skills'],
 }
 
+/**
+ * A line of real content for whichever section the design opens with.
+ *
+ * The specimen used to draw "Experience" and a job line on every card, including the cards whose
+ * entire selling point is that they do *not* open with experience. "Skills first, European" showed a
+ * heading reading EXPERIENCE directly above its own label promising `Skills → Experience → Study`.
+ * The two halves of the card contradicted each other, and the half a person believes is the picture.
+ */
+const SPECIMEN_LINE: Record<string, string> = {
+  Experience: 'Shift Lead Nurse, Rigshospitalet',
+  Skills: 'Intensive care · Triage · Ventilator management',
+  Study: 'BSc Nursing, Københavns Professionshøjskole',
+}
+
 function Specimen({ design }: { design: Design }) {
   const theme = getTheme(design.theme)
   const style = styleOf(theme)
   const { heading, body } = theme.typography
+  const meta = templates[design.structure]
+  const opensWith = (ORDER_WORDS[meta.order] ?? ORDER_WORDS.experience)[0]
 
   /*
     The heading drawn with its real treatment — the accent bar, the navy underline, the solid band, the
@@ -65,7 +85,7 @@ function Specimen({ design }: { design: Design }) {
               : theme.colors.foreground,
       }}
     >
-      Experience
+      {opensWith}
     </span>
   )
 
@@ -180,9 +200,25 @@ function Specimen({ design }: { design: Design }) {
           color: theme.colors.mutedForeground,
         }}
       >
-        Shift Lead Nurse — Rigshospitalet
+        {SPECIMEN_LINE[opensWith] ?? SPECIMEN_LINE.Experience}
       </span>
     </div>
+  )
+}
+
+function Star({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinejoin="round"
+      className="h-3.5 w-3.5"
+    >
+      <path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.7-5.2-2.7-5.2 2.7 1-5.7L3.5 9.7l5.9-.9z" />
+    </svg>
   )
 }
 
@@ -208,15 +244,62 @@ export function DesignGallery({
   themeId,
   entitled,
   onChoose,
+  resume,
 }: {
   templateId: TemplateId
   themeId: ThemeId
   /** Whether this visitor may use the paid half. Advisory — `/api/render` is the gate. */
   entitled: boolean
   onChoose: (design: Design) => void
+  /** The reader's own document, so a preview opens on what they will actually download. */
+  resume: Resume
 }) {
+  const [previewing, setPreviewing] = useState<Design | undefined>(undefined)
+  /**
+   * Designs somebody marked on the way past.
+   *
+   * A hundred and three cards is more than anyone holds in their head, so "the one I liked twenty
+   * cards ago" stops being recoverable by scrolling. Kept in `localStorage` rather than on the
+   * account, for the same reason the consent answer is: it is a preference about this browser, not a
+   * fact about a person, and it costs nothing to lose.
+   */
+  const [starred, setStarred] = useState<ReadonlyArray<string>>([])
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('hunterready.starred-designs.v1')
+      const parsed: unknown = raw === null ? [] : JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        setStarred(parsed.filter((id): id is string => typeof id === 'string'))
+      }
+    } catch {
+      /* Private browsing, or a corrupt entry. An empty list is a fine answer. */
+    }
+  }, [])
+
+  const toggleStar = (id: string) => {
+    const next = starred.includes(id)
+      ? starred.filter((entry) => entry !== id)
+      : [...starred, id]
+    setStarred(next)
+    try {
+      localStorage.setItem(
+        'hunterready.starred-designs.v1',
+        JSON.stringify(next),
+      )
+    } catch {
+      /* The mark still holds for this visit. */
+    }
+  }
   const free = DESIGNS.filter((d) => d.tier === 'free')
   const paid = DESIGNS.filter((d) => d.tier === 'paid')
+  /*
+    One stable array, not a fresh one per render.
+
+    The dialog registers its arrow-key listener keyed on this, so a new identity every render meant
+    the listener was torn down and rebuilt constantly — and a single ArrowRight could be seen by more
+    than one of them, walking the gallery several steps at a time.
+  */
+  const ordered = useMemo(() => [...free, ...paid], [free, paid])
 
   const Card = ({ design }: { design: Design }) => {
     const chosen = design.structure === templateId && design.theme === themeId
@@ -224,119 +307,179 @@ export function DesignGallery({
     const meta = templates[design.structure]
 
     return (
-      <button
-        type="button"
-        aria-pressed={chosen}
-        onClick={() => onChoose(design)}
-        className={[
-          'flex flex-col gap-2 rounded-choice border p-2.5 text-left transition-colors',
-          chosen
-            ? 'border-signal bg-signal-wash'
-            : 'border-hairline hover:border-hairline-strong',
-        ].join(' ')}
-      >
-        <Specimen design={design} />
+      /*
+        Two real buttons rather than one, because choosing and looking are different acts and a
+        button cannot be nested inside a button. `group` lets the quiet one stay out of the way until
+        the card is hovered or something inside it has focus, so 103 cards do not become 206 controls
+        competing for attention.
+      */
+      <div className="group relative">
+        <button
+          type="button"
+          aria-pressed={chosen}
+          onClick={() => onChoose(design)}
+          className={[
+            'flex w-full flex-col gap-2 rounded-choice border p-2.5 text-left transition-colors',
+            chosen
+              ? 'border-signal bg-signal-wash'
+              : 'border-hairline hover:border-hairline-strong',
+          ].join(' ')}
+        >
+          <Specimen design={design} />
 
-        <span className="flex flex-col gap-0.5">
-          <span className="flex items-center gap-1.5">
-            <span className="text-[13px] font-semibold text-ink">
-              {design.label}
+          <span className="flex flex-col gap-0.5">
+            <span className="flex items-center gap-1.5">
+              <span className="text-[13px] font-semibold text-ink">
+                {design.label}
+              </span>
+              {chosen && (
+                <svg
+                  aria-hidden
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  className="h-3.5 w-3.5 shrink-0 text-signal"
+                >
+                  <path d="m5 12.5 4.5 4.5L19 7" />
+                </svg>
+              )}
             </span>
-            {chosen && (
-              <svg
-                aria-hidden
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                className="h-3.5 w-3.5 shrink-0 text-signal"
-              >
-                <path d="m5 12.5 4.5 4.5L19 7" />
-              </svg>
-            )}
-          </span>
 
-          {/*
+            {/*
             The reading order, spelled out. It is the one structural difference between these cards, and
             "Skills first" in the name is easy to skim past — three words in sequence is not.
           */}
-          <span className="text-[11px] leading-snug text-ink-soft">
-            {(ORDER_WORDS[meta.order] ?? ORDER_WORDS.experience).join(' → ')}
+            <span className="text-[11px] leading-snug text-ink-soft">
+              {(ORDER_WORDS[meta.order] ?? ORDER_WORDS.experience).join(' → ')}
+            </span>
           </span>
-        </span>
 
-        <span className="flex flex-wrap items-center gap-1.5">
-          {/*
+          <span className="flex flex-wrap items-center gap-1.5">
+            {/*
             The ATS rating per card, because it is the claim that matters most and it belongs to the
             structure rather than to the tier. Paying does not buy a better rating — `showcase` is rated
             the same whether it costs money or not.
           */}
-          {meta.atsRating === 'verified' ? (
-            <span className="inline-flex items-center rounded-full bg-affirm-wash px-1.5 py-0.5 text-[10px] font-semibold text-affirm">
-              Parse verified
-            </span>
-          ) : (
-            <span className="inline-flex items-center rounded-full bg-caution-wash px-1.5 py-0.5 text-[10px] font-semibold text-caution">
-              Design-first
-            </span>
-          )}
-          {locked && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-band px-1.5 py-0.5 text-[10px] font-semibold text-ink-soft">
-              <Lock />
-              Paid plan
-            </span>
-          )}
-        </span>
-      </button>
+            {meta.atsRating === 'verified' ? (
+              <span className="inline-flex items-center rounded-full bg-affirm-wash px-1.5 py-0.5 text-[10px] font-semibold text-affirm">
+                Parse verified
+              </span>
+            ) : (
+              <span className="inline-flex items-center rounded-full bg-caution-wash px-1.5 py-0.5 text-[10px] font-semibold text-caution">
+                Design-first
+              </span>
+            )}
+            {locked && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-band px-1.5 py-0.5 text-[10px] font-semibold text-ink-soft">
+                <Lock />
+                Paid plan
+              </span>
+            )}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => toggleStar(design.id)}
+          aria-label={
+            starred.includes(design.id)
+              ? `Remove ${design.label} from your marked designs`
+              : `Mark ${design.label}`
+          }
+          aria-pressed={starred.includes(design.id)}
+          className={[
+            'absolute left-3 top-3 rounded-full border px-1.5 py-1 transition-opacity',
+            starred.includes(design.id)
+              ? 'border-signal-edge bg-signal-wash text-signal opacity-100'
+              : 'border-hairline-strong bg-ground/95 text-ink-soft opacity-0 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100',
+          ].join(' ')}
+        >
+          <Star filled={starred.includes(design.id)} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPreviewing(design)}
+          aria-label={`See ${design.label} as a full page`}
+          className="absolute right-3 top-3 rounded-full border border-hairline-strong bg-ground/95 px-2 py-1 text-[11px] font-semibold text-ink-soft opacity-0 transition-opacity hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
+        >
+          Full page
+        </button>
+      </div>
     )
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <div className="flex items-baseline justify-between gap-2">
-          <h3 className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-soft">
-            Included
-          </h3>
-          <span className="tally text-[11px] text-ink-faint">
-            {free.length}
-          </span>
-        </div>
+      <DesignPreviewDialog
+        design={previewing}
+        /* The gallery's own order: everything included first, then the paid half. */
+        designs={ordered}
+        resume={resume}
+        onClose={() => setPreviewing(undefined)}
+        onChoose={onChoose}
+        onNavigate={setPreviewing}
+        current={DESIGNS.find(
+          (d) => d.structure === templateId && d.theme === themeId,
+        )}
+      />
+      {starred.length > 0 && (
+        /*
+          First, and only when it has something in it. An empty "Marked" header on every visit is a
+          promise of a feature rather than a feature, and it would push the catalogue down the page
+          for the many people who never mark anything.
+        */
+        <Section title="Marked" count={starred.length}>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {ordered
+              .filter((design) => starred.includes(design.id))
+              .map((design) => (
+                <Card key={design.id} design={design} />
+              ))}
+          </div>
+        </Section>
+      )}
+
+      <Section title="Included" count={free.length}>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {free.map((design) => (
             <Card key={design.id} design={design} />
           ))}
         </div>
-      </div>
+      </Section>
 
-      <div className="flex flex-col gap-2 border-t border-hairline pt-3">
-        <div className="flex items-baseline justify-between gap-2">
-          <h3 className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-soft">
-            {entitled ? 'Also yours' : 'Paid plan'}
-          </h3>
-          <span className="tally text-[11px] text-ink-faint">
-            {paid.length}
-          </span>
-        </div>
-        {!entitled && (
-          /*
+      {/*
+        Folded shut by default, and that is a judgement rather than a default: ninety-one paid cards
+        under twelve included ones meant the included set was a strip at the top of a very long
+        column. Closed, the two sets are the same size on screen, which is what a comparison needs.
+      */}
+      <Section
+        title={entitled ? 'Also yours' : 'Paid plan'}
+        count={paid.length}
+        defaultOpen={false}
+      >
+        <div className="flex flex-col gap-2">
+          {!entitled && (
+            /*
             Said once, at the top of the locked set, rather than as a sales line on each of eighteen cards.
             And it says what the free ones *are* rather than what they lack: the ATS guarantee is not the
             thing being sold, and implying it is would be the kind of pressure this product does not use.
           */
-          <p className="text-meta leading-relaxed text-ink-soft">
-            Every design above renders the same document, checked by the same
-            parse test. These add different typefaces and a different order of
-            sections.
-          </p>
-        )}
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {paid.map((design) => (
-            <Card key={design.id} design={design} />
-          ))}
+            <p className="text-meta leading-relaxed text-ink-soft">
+              Every design above renders the same document, checked by the same
+              parse test. These add different typefaces and a different order of
+              sections.
+            </p>
+          )}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {paid.map((design) => (
+              <Card key={design.id} design={design} />
+            ))}
+          </div>
         </div>
-      </div>
+      </Section>
     </div>
   )
 }

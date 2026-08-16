@@ -110,7 +110,7 @@ const VERDICT: Record<
   },
   weak: {
     label: 'Buried',
-    note: 'It is in there, but only in your skills list or in an old job — someone skimming the first half of page one will miss it.',
+    note: 'It is in there, but only in your skills list or in an old job. someone skimming the first half of page one will miss it.',
     chip: 'bg-caution-wash text-caution',
   },
   missing: {
@@ -152,7 +152,7 @@ function MatchRow({
         >
           <Cross />
           <span className="sr-only">
-            Remove “{match.requirement}” — they did not ask for this
+            Remove “{match.requirement}”. They did not ask for this
           </span>
         </button>
       </div>
@@ -324,7 +324,7 @@ export function AdvertForm({
                   className={stage.done ? 'text-ink-faint' : 'text-ink-soft'}
                 >
                   {stage.label}
-                  {stage.detail === undefined ? '' : ` — ${stage.detail}`}
+                  {stage.detail === undefined ? '' : `. ${stage.detail}`}
                 </span>
               </li>
             ))}
@@ -566,9 +566,9 @@ export function TargetPanel({
         {reading.invented.length > 0 && (
           <p className="rounded-field border border-hairline bg-band px-3 py-2 text-[13px] leading-relaxed text-ink-soft">
             We dropped {reading.invented.map((item) => `“${item}”`).join(', ')}{' '}
-            — the model listed {reading.invented.length === 1 ? 'it' : 'them'}{' '}
-            but the advert does not ask for{' '}
-            {reading.invented.length === 1 ? 'it' : 'them'}.
+            because the model listed{' '}
+            {reading.invented.length === 1 ? 'it' : 'them'} but the advert does
+            not ask for {reading.invented.length === 1 ? 'it' : 'them'}.
           </p>
         )}
       </div>
@@ -580,8 +580,8 @@ export function TargetPanel({
             What they ask for, and where it is
           </h2>
           <p className="text-[13px] leading-relaxed text-ink-soft">
-            Remove anything they did not actually ask for — it changes
-            everything below.
+            Remove anything they did not actually ask for. It changes everything
+            below.
           </p>
         </div>
 
@@ -625,7 +625,7 @@ export function TargetPanel({
               </span>
             </h3>
             <p className="pb-1 text-[13px] leading-relaxed text-ink-soft">
-              Not counted above, and not a gap to fix. No CV can prove these —
+              Not counted above, and not a gap to fix. No CV can prove these.
               they are what the interview is for.
             </p>
             <ul className="flex flex-wrap gap-1.5">
@@ -728,7 +728,7 @@ export function TargetPanel({
               </button>
               {!summaryUsed && (
                 <span className="self-center text-[13px] text-ink-soft">
-                  or keep yours — nothing changes until you click.
+                  or keep yours. Nothing changes until you click.
                 </span>
               )}
             </div>
@@ -746,7 +746,7 @@ export function TargetPanel({
                   .map((item) => `“${item}”`)
                   .join(
                     ', ',
-                  )}, which your CV does not evidence — so we threw them away.`
+                  )}, which your CV does not evidence, so we threw them away.`
               : ' Every version we tried added something you had not written, so we threw them away.'}
           </p>
         ) : (
@@ -765,7 +765,8 @@ export function TargetPanel({
           </h2>
           <p className="text-[13px] leading-relaxed text-ink-soft">
             Reordering only. Nothing is added, nothing is removed, and nothing
-            is reworded — a reordering cannot make your CV say something untrue.
+            is reworded, because a reordering cannot make your CV say something
+            untrue.
           </p>
         </div>
 
@@ -846,7 +847,7 @@ export function TargetPanel({
             <p className="text-[13px] leading-relaxed text-ink-soft">
               Built from your CV and this advert only. It will not claim
               anything you have not written, and it will not say we admire a
-              company we know nothing about — we only know what the advert says.
+              company we know nothing about. We only know what the advert says.
             </p>
           </div>
 
@@ -907,7 +908,7 @@ export function TargetPanel({
                       }
                     >
                       {stage.label}
-                      {stage.detail === undefined ? '' : ` — ${stage.detail}`}
+                      {stage.detail === undefined ? '' : `. ${stage.detail}`}
                     </span>
                   </li>
                 ))}
@@ -1015,7 +1016,7 @@ export function TargetPanel({
                     .map((finding) => finding.value)
                     .join(
                       ', ',
-                    )}) — usually a compliment about the employer that nothing backs.`
+                    )}), usually a compliment about the employer that nothing backs.`
                 : ''}{' '}
               Try again, or write the first line yourself and we will leave it
               alone.

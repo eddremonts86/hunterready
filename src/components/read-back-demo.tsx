@@ -24,34 +24,34 @@
  * starts a timer. A looping animation is the exact thing that setting exists for, and a person who
  * has asked for stillness should get the informative end state, not a frozen empty card.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /** The same nurse who ships as a fixture, so nothing here is invented for the marketing. */
 const DEMO = {
   initials: 'MS',
   name: 'Marta Sørensen',
-  headline: 'Registered Nurse — Intensive Care',
+  headline: 'Registered Nurse, Intensive Care',
   jobs: [
     {
       role: 'Shift Lead Nurse, Intensive Care',
       company: 'Rigshospitalet',
-      dates: '2019 — Present',
+      dates: '2019 - Present',
     },
     {
       role: 'Nurse, Post-Operative Recovery',
       company: 'Herlev Hospital',
-      dates: '2016 — 2019',
+      dates: '2016 - 2019',
     },
     {
       role: 'Nurse, General Surgical Ward',
       company: 'Herlev Hospital',
-      dates: '2014 — 2016',
+      dates: '2014 - 2016',
       // The point of the whole card. A product that claims a perfect read is a product that is
       // lying; the one that says "this line I am unsure about" is the one you can trust.
       flagged: true,
     },
   ],
-  education: 'BSc Nursing — Københavns Professionshøjskole',
+  education: 'BSc Nursing, Københavns Professionshøjskole',
   skills: ['Intensive care', 'Ventilator management', 'Triage'],
 }
 
@@ -90,19 +90,57 @@ function Row({ show, children }: { show: boolean; children: React.ReactNode }) {
 
 export function ReadBackDemo() {
   const [tick, setTick] = useState(0)
+  const frame = useRef<HTMLDivElement>(null)
+  /**
+   * The loop only runs while somebody can actually see it.
+   *
+   * It used to run from mount until navigation: a `setInterval` every 420ms, each tick a React state
+   * update, for the whole time a visitor spent reading the FAQ eight sections below. The animation
+   * is the hero's argument, so it earns its cost while it is on screen and earns nothing at all
+   * while it is not, which on a phone is battery spent on a card nobody is looking at.
+   *
+   * Two conditions, because they fail differently: `IntersectionObserver` covers scrolling away, and
+   * `visibilitychange` covers a backgrounded tab, where the element is still "intersecting" and the
+   * browser may throttle the timer without stopping it.
+   */
+  const [awake, setAwake] = useState(true)
+
+  useEffect(() => {
+    const el = frame.current
+    if (el === null) return
+    const observer = new IntersectionObserver(
+      ([entry]) => setAwake(entry.isIntersecting),
+      // Any sliver counts: a half-visible card is still a card somebody is watching.
+      { threshold: 0 },
+    )
+    observer.observe(el)
+    const onVisibility = () => {
+      if (document.hidden) setAwake(false)
+      else if (frame.current !== null) {
+        const box = frame.current.getBoundingClientRect()
+        setAwake(box.bottom > 0 && box.top < window.innerHeight)
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      observer.disconnect()
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [])
 
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       setTick(STEPS)
       return
     }
+    if (!awake) return
     const timer = window.setInterval(() => {
       // Count up, hold on the finished state, then start over. The hold is the important part: the
       // completed card is what the page is actually saying, so it is what is on screen most.
       setTick((current) => (current >= STEPS + HOLD_TICKS ? 0 : current + 1))
     }, TICK_MS)
     return () => window.clearInterval(timer)
-  }, [])
+  }, [awake])
 
   const done = tick >= STEPS
   const progress = Math.min(100, Math.round((tick / STEPS) * 100))
@@ -115,7 +153,7 @@ export function ReadBackDemo() {
         : 'Reading your education…'
 
   return (
-    <div className="flex flex-col gap-3">
+    <div ref={frame} className="flex flex-col gap-3">
       {/*
         One label for assistive technology instead of a looping list of half-built rows. A screen
         reader user gets the point of the illustration in a sentence; the animation is for eyes.
@@ -220,7 +258,7 @@ export function ReadBackDemo() {
 
       {/* The label that keeps this an illustration rather than a claim (DESIGN.md: No Invented Proof). */}
       <p className="text-center text-meta text-ink-soft">
-        A sample CV, read back field by field — this is the screen you get after
+        A sample CV, read back field by field. This is the screen you get after
         uploading.
       </p>
     </div>

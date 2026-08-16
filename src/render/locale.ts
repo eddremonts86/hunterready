@@ -70,6 +70,26 @@ export interface LocaleStrings {
     volunteer: string
     publications: string
   }
+  /**
+   * The editorial templates' kickers: the small line above a heading, not a second heading.
+   *
+   * They live here rather than in the template because they were hardcoded in Spanish and printed
+   * that way on English and Danish CVs, which is the exact failure v0.8's locale table exists to
+   * prevent. They are deliberately not translations of `headings`: a kicker says what the section is
+   * *for*, the heading says what it is, and a template that used the same words twice would be
+   * saying one thing in two sizes.
+   *
+   * `skills` is worded without assuming a trade. The Spanish original read "EXPERIENCIA TÉCNICA",
+   * which is a claim about the reader's career and is wrong on most of this product's CVs.
+   */
+  kickers: {
+    summary: string
+    work: string
+    education: string
+    skills: string
+    projects: string
+    languages: string
+  }
 }
 
 /**
@@ -111,6 +131,14 @@ const STRINGS: Record<OutputLocale, LocaleStrings> = {
       volunteer: 'Volunteer',
       publications: 'Publications',
     },
+    kickers: {
+      summary: 'WHO IS WRITING',
+      work: 'RECORD & RESULTS',
+      education: 'STUDY & QUALIFICATIONS',
+      skills: 'SKILLS & TOOLS',
+      projects: 'SELECTED WORK',
+      languages: 'LANGUAGES',
+    },
   },
   es: {
     endonym: 'Español',
@@ -143,6 +171,14 @@ const STRINGS: Record<OutputLocale, LocaleStrings> = {
       volunteer: 'Voluntariado',
       publications: 'Publicaciones',
     },
+    kickers: {
+      summary: 'QUIÉN ESCRIBE',
+      work: 'HISTORIAL & LOGROS',
+      education: 'FORMACIÓN & TÍTULOS',
+      skills: 'COMPETENCIAS & HERRAMIENTAS',
+      projects: 'TRABAJOS SELECCIONADOS',
+      languages: 'IDIOMAS',
+    },
   },
   da: {
     endonym: 'Dansk',
@@ -174,6 +210,14 @@ const STRINGS: Record<OutputLocale, LocaleStrings> = {
       awards: 'Priser',
       volunteer: 'Frivilligt arbejde',
       publications: 'Publikationer',
+    },
+    kickers: {
+      summary: 'HVEM SKRIVER',
+      work: 'ERFARING & RESULTATER',
+      education: 'UDDANNELSE & BEVISER',
+      skills: 'KOMPETENCER & VÆRKTØJ',
+      projects: 'UDVALGT ARBEJDE',
+      languages: 'SPROG',
     },
   },
 }

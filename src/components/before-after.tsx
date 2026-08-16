@@ -129,8 +129,8 @@ export function BeforeAfter({
                 : 'changes since you uploaded it'}
           </span>
           <span className="text-[13px] leading-snug text-ink-soft">
-            {changeBreakdown(changes)}. Every one of them was your decision —
-            and nothing was invented.
+            {changeBreakdown(changes)}. Every one of them was your decision. and
+            nothing was invented.
           </span>
         </span>
       </div>

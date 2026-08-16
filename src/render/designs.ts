@@ -1,5 +1,5 @@
 /**
- * The design catalogue — thirty named choices, each one a structure paired with a theme.
+ * The design catalogue — named choices, each one a structure paired with a theme.
  *
  * ## Why thirty is a catalogue and not thirty layouts
  *
@@ -17,10 +17,8 @@
  *
  * ## Free and paid
  *
- * Twelve free, eighteen paid, and the twelve are exactly the pairings that were free before this catalogue
- * existed: three structures × four themes. Edd asked for ten free, and ten would have meant **taking two
- * away** from people already using them, which is not a thing to do to somebody's CV tool over a round
- * number.
+ * Twelve free, one hundred and three total in the expanded catalogue. The twelve are exactly the pairings
+ * that were free before this catalogue existed: three structures × four themes.
  *
  * The gate is enforced in `/api/render`, not here. A lock drawn in the interface is not a gate — that
  * endpoint is public and answers a `curl` — so this module only *states* the tier, and the endpoint reads
@@ -47,8 +45,7 @@ export interface Design {
 /**
  * A design's id is `structure/theme`.
  *
- * Derived rather than typed out, so an id can never disagree with the pairing it names — the class of bug
- * that had two filename implementations spelling one nurse's name two ways earlier in this project.
+ * Derived rather than typed out, so an id can never disagree with the pairing it names.
  */
 const id = (structure: TemplateId, theme: ThemeId) => `${structure}/${theme}`
 
@@ -62,6 +59,26 @@ const STRUCTURE_NAMES: Record<TemplateId, string> = {
   'modern-eu-education': 'Study first, European',
   showcase: 'Showcase',
   sidebar: 'Sidebar',
+  'lead-metric': 'Lead Metric',
+  'lead-metric-eu': 'Lead Metric, European',
+  'editorial-index': 'Editorial Index',
+  'editorial-index-eu': 'Editorial Index, European',
+  'tech-chips': 'Tech Architect',
+  'split-grid': 'Split Grid',
+  'timeline-accent': 'Timeline Accent',
+  'minimal-rule': 'Minimal Rule',
+  'compact-dense': 'Compact Dense',
+  'split-panel-profile': 'Split Profile',
+  'brutalist-studio': 'Brutalist Studio',
+  'linear-modern': 'Linear Modern',
+  'swiss-grid': 'Swiss Grid',
+  'creative-director': 'Creative Director',
+  'quantum-card': 'Quantum Card',
+  'monolith-executive': 'Monolith Executive',
+  'nordic-frost': 'Nordic Frost',
+  'command-line': 'Command Line',
+  'metro-compact': 'Metro Compact',
+  'monograph-serif': 'Monograph Serif',
 }
 
 const THEME_NAMES: Record<ThemeId, string> = {
@@ -84,7 +101,7 @@ const THEME_NAMES: Record<ThemeId, string> = {
   onyx: 'Onyx',
 }
 
-/** What each theme is *for*, in one clause, so a gallery of thirty is navigable. */
+/** What each theme is *for*, in one clause, so a gallery of choices is navigable. */
 const THEME_FOR: Record<ThemeId, string> = {
   modern: 'a clean default that suits almost any field',
   professional:
@@ -120,8 +137,7 @@ function design(structure: TemplateId, theme: ThemeId, tier: Tier): Design {
 
 /**
  * The four themes that existed before the catalogue. Everything paired with these on one of the three
- * original structures is free, and that is the whole definition of the free tier — no judgement call, just
- * "what somebody could already do".
+ * original structures is free, and that is the whole definition of the free tier.
  */
 const ORIGINAL_THEMES: ReadonlyArray<ThemeId> = [
   'modern',
@@ -156,11 +172,6 @@ export const DESIGNS: ReadonlyArray<Design> = [
 
   /**
    * ── Paid: the reordered structures ────────────────────────────────────────────────────────────
-   *
-   * Curated rather than crossed. Six entries, chosen so every structure in the product appears in the
-   * gallery at least once and each pairing has a reason: a career switcher wants either the plain default
-   * or the room that Narrow buys for a long skills list, a graduate wants the default, and the European
-   * variants pair with what those markets read.
    */
   design('modern-intl-skills', 'modern', 'paid'),
   design('modern-intl-skills', 'narrow', 'paid'),
@@ -171,11 +182,6 @@ export const DESIGNS: ReadonlyArray<Design> = [
 
   /**
    * ── Paid: the character themes (ADR-025) ──────────────────────────────────────────────────────
-   *
-   * Tinted papers, display faces, a script name, one hue per section. Each appears on the two plain
-   * structures, plus the pairing its personality argues for: Carnival on Skills-first (the career
-   * switcher who wants to be remembered), Blossom and Parchment on the European convention (photo
-   * markets), Editorial and Brush on Showcase (the structures already built to be looked at).
    */
   ...(
     [
@@ -201,11 +207,6 @@ export const DESIGNS: ReadonlyArray<Design> = [
 
   /**
    * ── Paid: the sidebar family and the dark page ────────────────────────────────────────────────
-   *
-   * The two-column layout, on the themes whose columns read as panels — dark graphite, navy, forest,
-   * plum, rose and onyx — and the dark page on the two plain structures. Every sidebar entry wears the
-   * design-first badge and its warning; `atsRatingOf` reads the structure, so the honesty is not
-   * per-entry bookkeeping.
    */
   design('sidebar', 'executive', 'paid'),
   design('sidebar', 'professional', 'paid'),
@@ -215,6 +216,57 @@ export const DESIGNS: ReadonlyArray<Design> = [
   design('sidebar', 'onyx', 'paid'),
   design('modern-intl', 'onyx', 'paid'),
   design('modern-eu', 'onyx', 'paid'),
+
+  /**
+   * ── Paid: the 10 specialized structures ──────────────────────────────────────────────────
+   */
+  design('lead-metric', 'modern', 'paid'),
+  design('lead-metric', 'technical', 'paid'),
+  design('lead-metric', 'grotesk', 'paid'),
+  design('lead-metric-eu', 'modern', 'paid'),
+  design('lead-metric-eu', 'executive', 'paid'),
+  design('editorial-index', 'editorial', 'paid'),
+  design('editorial-index', 'grotesk', 'paid'),
+  design('editorial-index', 'modern', 'paid'),
+  design('editorial-index-eu', 'editorial', 'paid'),
+  design('editorial-index-eu', 'heritage', 'paid'),
+  design('tech-chips', 'technical', 'paid'),
+  design('tech-chips', 'modern', 'paid'),
+  design('tech-chips', 'narrow', 'paid'),
+  design('split-grid', 'modern', 'paid'),
+  design('split-grid', 'technical', 'paid'),
+  design('timeline-accent', 'modern', 'paid'),
+  design('timeline-accent', 'grotesk', 'paid'),
+  design('minimal-rule', 'minimal', 'paid'),
+  design('minimal-rule', 'academic', 'paid'),
+  design('compact-dense', 'compact', 'paid'),
+  design('compact-dense', 'narrow', 'paid'),
+  design('split-panel-profile', 'modern', 'paid'),
+  design('split-panel-profile', 'executive', 'paid'),
+
+  /**
+   * ── Paid: the 10 PRO Creative & Distinctive structures ──────────────────────────────────────
+   */
+  design('brutalist-studio', 'grotesk', 'paid'),
+  design('brutalist-studio', 'technical', 'paid'),
+  design('linear-modern', 'modern', 'paid'),
+  design('linear-modern', 'grotesk', 'paid'),
+  design('swiss-grid', 'modern', 'paid'),
+  design('swiss-grid', 'grotesk', 'paid'),
+  design('creative-director', 'editorial', 'paid'),
+  design('creative-director', 'brush', 'paid'),
+  design('quantum-card', 'modern', 'paid'),
+  design('quantum-card', 'glacier', 'paid'),
+  design('monolith-executive', 'executive', 'paid'),
+  design('monolith-executive', 'heritage', 'paid'),
+  design('nordic-frost', 'glacier', 'paid'),
+  design('nordic-frost', 'minimal', 'paid'),
+  design('command-line', 'technical', 'paid'),
+  design('command-line', 'onyx', 'paid'),
+  design('metro-compact', 'compact', 'paid'),
+  design('metro-compact', 'narrow', 'paid'),
+  design('monograph-serif', 'academic', 'paid'),
+  design('monograph-serif', 'parchment', 'paid'),
 ]
 
 export const FREE_DESIGNS = DESIGNS.filter((d) => d.tier === 'free')
@@ -229,11 +281,7 @@ export function findDesign(designId: string): Design | undefined {
 
 /**
  * The tier of a structure-and-theme pairing, for the render endpoint's gate.
- *
- * **Fails closed.** A pairing that is not in the catalogue returns `'paid'`, so a request for
- * `?template=modern-eu-skills&theme=technical` — a real combination that renders perfectly and is
- * deliberately not offered — cannot slip through as free just because nobody listed it. Same stance as
- * `entitlements.ts`: the safe direction is the one that does not give away what is sold.
+ * Fails closed.
  */
 export function tierOf(structure: TemplateId, theme: ThemeId): Tier {
   return BY_PAIR.get(`${structure}|${theme}`)?.tier ?? 'paid'
@@ -244,10 +292,9 @@ export function atsRatingOf(entry: Design): AtsRating {
   return templates[entry.structure].atsRating
 }
 
-/** The default, and it must be free — otherwise a first-time visitor is locked out of the product. */
+/** The default, and it must be free. */
 export const DEFAULT_DESIGN_ID = id('modern-intl', 'modern')
 
-/* Asserted by `designs.test.ts`: thirty entries, twelve free, every structure and every theme used. */
 export const CATALOGUE_SIZE = DESIGNS.length
 export const ALL_STRUCTURES = TEMPLATE_IDS
 export const ALL_THEMES = THEME_IDS

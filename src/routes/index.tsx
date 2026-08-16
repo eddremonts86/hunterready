@@ -58,11 +58,14 @@ import type {
 import type { BulletRewrite } from '@/optimize/rewrite'
 import { shiftTarget } from '@/optimize/rewrite-shift'
 import { diffResumes } from '@/optimize/variant-diff'
-import { tierOf } from '@/render/designs'
+import { DESIGNS, tierOf } from '@/render/designs'
 import { Resume } from '@/schema/resume'
 import type { FieldProvenance } from '@/schema/provenance'
 import { needsReview } from '@/schema/provenance'
 import { estimateFit } from '@/render/fit'
+import { quoteFamily, withColours } from '@/render/themes/custom'
+import { DesignAxes } from '@/components/design-axes'
+import { styleOf } from '@/render/themes/style'
 import { getTheme } from '@/render/themes'
 import type { ThemeId } from '@/render/themes'
 import { localeOptions, resolveLocale } from '@/render/locale'
@@ -159,7 +162,7 @@ const STEPS_HOW = [
   {
     icon: 'file' as const,
     title: 'Start from a file, or from nothing',
-    body: 'A PDF, a Word file, plain text, or a photo of a printed page — or an empty one, if this is your first. No account either way.',
+    body: 'A PDF, a Word file, plain text, or a photo of a printed page. Or an empty one, if this is your first. No account either way.',
   },
   {
     icon: 'pencil' as const,
@@ -169,7 +172,7 @@ const STEPS_HOW = [
   {
     icon: 'download' as const,
     title: 'Download it',
-    body: 'A clean, well-set A4 PDF — or a Word file, for the portals that ask for one. Both checked by reading the finished document back.',
+    body: 'A clean, well-set A4 PDF, or a Word file for the portals that ask for one. We check both by reading the finished document back.',
   },
 ]
 
@@ -186,7 +189,7 @@ const STEPS_HOW = [
 const MECHANISMS = [
   {
     icon: 'verified' as const,
-    title: 'Verified by a test, not a claim',
+    title: 'A test checks every design, on every build',
     body: 'Every design is rendered, read back with a separate parser, and checked field by field in reading order.',
     how: 'A design that loses a field does not ship',
   },
@@ -194,13 +197,13 @@ const MECHANISMS = [
     icon: 'shield' as const,
     title: 'It cannot invent anything',
     body: 'Suggestions sharpen your own wording. A number, employer, date or outcome that is not already in your CV is refused.',
-    how: 'Blocked in code, not asked for in a prompt',
+    how: 'The guard runs in code, before the suggestion reaches you',
   },
   {
     icon: 'lock' as const,
-    title: 'Your CV is not our training data',
+    title: 'Your CV never becomes training data',
     body: 'Your phone number and street address are removed before any model sees the text, and you can keep the whole thing on our own server.',
-    how: 'Declining leaves it on this machine',
+    how: 'Say no and it stays on this machine',
   },
 ]
 
@@ -313,7 +316,7 @@ const COMPARISON = [
   },
   {
     alone:
-      'A tool sharpens a line by adding a number nobody gave it — and you defend it at the interview.',
+      'A tool sharpens a line by adding a number nobody gave it, and you defend it at the interview.',
     here: 'A claim that is not already in your CV is refused, in code.',
   },
   {
@@ -332,18 +335,18 @@ const COMPARISON = [
 const FAQ = [
   {
     q: 'What happens to my CV?',
-    a: 'It is read, corrected by you, and rendered back. Your phone number and street address are stripped before any model sees the text. Without an account nothing is stored at all — close the tab and it is gone. With one, it is kept until you delete it or ninety days pass since your last visit, whichever comes first.',
+    a: 'It is read, corrected by you, and rendered back. Your phone number and street address are stripped before any model sees the text. Without an account nothing is stored at all, so closing the tab is the end of it. With one, it is kept until you delete it or ninety days pass since your last visit, whichever comes first.',
   },
   {
     q: 'Can the employer tell I used this?',
-    a: 'There is nothing to tell. What you download is your own CV, in a layout that parses cleanly, with wording you accepted line by line. We do not write claims into it — that is enforced in code, not asked for in a prompt.',
+    a: 'There is nothing to tell. What you download is your own CV, in a layout that parses cleanly, with wording you accepted line by line. We never write a claim into it, and the code will not let us.',
   },
   {
     q: 'Do I have to pay?',
-    a: 'No. Upload, correct, and download without an account and without paying. A paid plan adds the larger model, all sixty designs and CVs remembered between visits — and it is not open yet.',
+    a: 'No. Upload, correct, and download without an account and without paying. A paid plan adds the larger model, all sixty designs, and CVs remembered between visits. It is not open yet.',
   },
   {
-    q: 'What does "a CV screening software can read" actually mean?',
+    q: 'What does "a CV that screening software can read" mean?',
     a: 'Employers run your file through software that turns it back into fields before a person sees it. We do the same thing to what we produce, with an independent parser, and check every field came back in the right order. A design that loses one does not ship.',
   },
   {
@@ -615,9 +618,22 @@ async function downloadDocument(
   templateId: TemplateId,
   themeId: ThemeId,
   format: 'pdf' | 'docx' = 'pdf',
+  axes: {
+    fonts?: { body?: string; heading?: string }
+    colours?: { accent?: string; paper?: string }
+  } = {},
 ): Promise<void> {
+  /* The chosen axes travel with the request, so the file matches the preview. */
+  const extra = new URLSearchParams()
+  if (axes.fonts?.body !== undefined) extra.set('bodyFont', axes.fonts.body)
+  if (axes.fonts?.heading !== undefined)
+    extra.set('headingFont', axes.fonts.heading)
+  if (axes.colours?.accent !== undefined)
+    extra.set('accent', axes.colours.accent)
+  if (axes.colours?.paper !== undefined) extra.set('paper', axes.colours.paper)
+  const suffix = extra.toString() === '' ? '' : `&${extra.toString()}`
   await saveRendered(
-    `/api/render?template=${templateId}&theme=${themeId}&download=1&format=${format}`,
+    `/api/render?template=${templateId}&theme=${themeId}&download=1&format=${format}${suffix}`,
     resume,
     `CV.${format}`,
   )
@@ -649,18 +665,23 @@ function useDownloads() {
       templateId: TemplateId,
       themeId: ThemeId,
       wanted: 'pdf' | 'docx' = 'pdf',
+      /* The reader's axes, so the file that lands matches the preview they were looking at. */
+      axes: {
+        fonts?: { body?: string; heading?: string }
+        colours?: { accent?: string; paper?: string }
+      } = {},
     ) => {
       // Two clicks would build the same document twice and save two copies to Downloads.
       if (format !== undefined) return
       setFormat(wanted)
       setFailure(undefined)
       try {
-        await downloadDocument(resume, templateId, themeId, wanted)
+        await downloadDocument(resume, templateId, themeId, wanted, axes)
       } catch (error) {
         setFailure(
           error instanceof DownloadFailed
             ? error.message
-            : 'Something went wrong building the file. Your CV is still here — try again.',
+            : 'Something went wrong building the file. Your CV is still here. Try again.',
         )
       } finally {
         setFormat(undefined)
@@ -900,6 +921,40 @@ function HunterReady() {
   const [accepted, setAccepted] = useState<Set<string>>(new Set())
   const [templateId, setTemplateId] = useState<TemplateId>('modern-intl')
   const [themeId, setThemeId] = useState<ThemeId>('modern')
+  /**
+   * The reader's own axes, layered over whichever design they picked.
+   *
+   * Kept apart from `templateId`/`themeId` rather than folded into them, because a design is a
+   * catalogued pairing that carries a tier and a parse rating, and these are adjustments on top of
+   * one. Choosing a new design keeps them, which is the point: somebody who found their colour wants
+   * to see it on the next layout too.
+   */
+  const [customFonts, setCustomFonts] = useState<{
+    body?: string
+    heading?: string
+  }>({})
+  const [customColours, setCustomColours] = useState<{
+    accent?: string
+    paper?: string
+  }>({})
+  /**
+   * The previous look, kept so one wrong click is not a hunt back through a hundred cards.
+   *
+   * One step, not a stack. Two clicks into a catalogue this size and a person is exploring rather
+   * than retracing, and an undo list they have to reason about costs more than it returns. The step
+   * covers all four axes together because that is how a look is chosen: the design, then the type and
+   * the colour laid over it.
+   */
+  const [previousLook, setPreviousLook] = useState<
+    | {
+        templateId: TemplateId
+        themeId: ThemeId
+        fonts: { body?: string; heading?: string }
+        colours: { accent?: string; paper?: string }
+        label: string
+      }
+    | undefined
+  >(undefined)
   /**
    * Targeting is a branch off the check step, not a fourth step everyone walks through.
    *
@@ -1302,7 +1357,7 @@ function HunterReady() {
 
         if (failures > 0) {
           setRewriteNote(
-            `We could not look at ${failures} of your bullets just now. The rest are below — run it again later for the missing ones.`,
+            `We could not look at ${failures} of your bullets just now. The rest are below. Run it again later for the missing ones.`,
           )
         }
       } catch {
@@ -1455,7 +1510,7 @@ function HunterReady() {
         const kept = typeof payload.kept === 'number' ? payload.kept : 0
         if (kept > 0) {
           setTranslateNote(
-            `${kept} ${kept === 1 ? 'line' : 'lines'} stayed in the original language — the translation did not keep their numbers intact, so we kept your words instead.`,
+            `${kept} ${kept === 1 ? 'line' : 'lines'} stayed in the original language. The translation did not keep their numbers intact, so we kept your words instead.`,
           )
         }
       } catch {
@@ -1590,8 +1645,10 @@ function HunterReady() {
       reference's one-decision-per-screen pattern used where the flow genuinely has one decision.
     */
     if (needsConsent(consent)) {
+      // `100dvh`, not `100vh`: on iOS Safari the address bar makes the two differ, and this screen
+      // is centred inside it, so the difference is a visible jump under the answer.
       return (
-        <div className="flex min-h-screen flex-col bg-ground">
+        <div className="flex min-h-[100dvh] flex-col bg-ground">
           <StepBar />
           <div className="flex flex-1 items-center justify-center px-4 py-10 sm:px-6">
             <ConsentGate
@@ -1830,8 +1887,8 @@ function HunterReady() {
                   style={{ animationDelay: '160ms' }}
                 >
                   Upload the file you already have. We pull out every detail and
-                  show you exactly what we found, you correct anything we got
-                  wrong, and you download a PDF that automated screening can
+                  show you exactly what we found. You correct anything we got
+                  wrong, then download a PDF that automated screening can
                   actually read.
                 </p>
 
@@ -1924,9 +1981,9 @@ function HunterReady() {
                     <span className="text-signal">.</span>
                   </h2>
                   <p className="max-w-xs text-[15px] leading-relaxed text-ink-soft">
-                    The commonest reason people put this off is not doubting it
-                    works — it is not knowing whether they are starting a
-                    two-minute job or a two-hour one.
+                    People rarely put this off because they doubt it works. They
+                    put it off because they cannot tell whether they are
+                    starting a two-minute job or a two-hour one.
                   </p>
                 </div>
               </Reveal>
@@ -1986,7 +2043,7 @@ function HunterReady() {
                   <p className="text-lead text-ink-soft">
                     A first job, a return to work after years out, a trade where
                     nobody ever wrote one down. Same editor, same checked
-                    document at the end — it just starts empty.
+                    document at the end. It just starts empty.
                   </p>
                   <StartFromScratch onStart={startBlank} busy={busy} />
                 </div>
@@ -1994,7 +2051,10 @@ function HunterReady() {
 
               <Reveal delay={90}>
                 <div className="flex flex-col gap-3 lg:pt-2">
-                  <span className="text-meta font-semibold uppercase tracking-[0.08em] text-ink-faint">
+                  {/* Ink Soft, not Ink Faint. DESIGN.md's own rule reserves Faint (3.07:1) for rules,
+                      disabled labels and strike decoration; this is a column heading somebody reads.
+                      Measured at 3.09:1 against the 4.5:1 AA floor before the change. */}
+                  <span className="text-meta font-semibold uppercase tracking-[0.08em] text-ink-soft">
                     What it will ask for
                   </span>
                   <ul className="flex flex-col divide-y divide-hairline border-y border-hairline">
@@ -2018,7 +2078,7 @@ function HunterReady() {
                   </ul>
                   <p className="text-meta leading-relaxed text-ink-soft">
                     Add sections of your own for anything this list does not
-                    cover — courses, references, licences, publications.
+                    cover: courses, references, licences, publications.
                   </p>
                 </div>
               </Reveal>
@@ -2042,7 +2102,7 @@ function HunterReady() {
               <Reveal>
                 <span className="eyebrow">Evidence</span>
                 <h2 className="mt-4 max-w-2xl text-section text-balance text-ink">
-                  Three things we can prove, not just say
+                  Three things you can check yourself
                   <span className="text-signal">.</span>
                 </h2>
               </Reveal>
@@ -2099,7 +2159,7 @@ function HunterReady() {
                 </h2>
                 <p className="on-ink-soft mt-6 max-w-2xl text-lead">
                   Your CV probably parses fine. The problem is that there is no
-                  way to find out before you send it — and the ways it fails are
+                  way to find out before you send it, and the ways it fails are
                   invisible in the document you are looking at.
                 </p>
               </Reveal>
@@ -2166,9 +2226,12 @@ function HunterReady() {
                     Before you start
                     <span className="text-signal">.</span>
                   </h2>
+                  {/* Said "the three that actually stop people" while the list held five. A page
+                      whose whole argument is that we check things should not miscount its own
+                      section, and the number was load-bearing for nobody. */}
                   <p className="max-w-xs text-[15px] leading-relaxed text-ink-soft">
-                    The three that actually stop people, answered straight.
-                    Anything still unclear is worth an email.
+                    The questions that actually stop people. Anything still
+                    unclear is worth an email.
                   </p>
                 </div>
               </Reveal>
@@ -2247,13 +2310,13 @@ function HunterReady() {
             <div className="flex flex-col gap-3">
               <Wordmark className="text-[17px]" />
               <p className="max-w-xs text-[13px] leading-relaxed text-ink-soft">
-                A CV that automated screening can actually read — checked by
-                parsing it back, not by claiming it parses.
+                A CV that automated screening can actually read. We check by
+                parsing it back, rather than claiming it parses.
               </p>
             </div>
 
             <div className="flex flex-col gap-2.5">
-              <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
+              <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-soft">
                 The product
               </span>
               <button
@@ -2279,7 +2342,7 @@ function HunterReady() {
             </div>
 
             <div className="flex flex-col gap-2.5">
-              <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
+              <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-soft">
                 Straight answers
               </span>
               <a
@@ -2298,10 +2361,10 @@ function HunterReady() {
           </div>
           <div className="border-t border-hairline">
             <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
-              <p className="text-meta leading-relaxed text-ink-faint">
+              <p className="text-meta leading-relaxed text-ink-soft">
                 HunterReady is in development and free to use. There is no
-                company behind it yet and no paid plan open — when there is,
-                both will be named here.
+                company behind it yet and no paid plan open. When there is, both
+                will be named here.
               </p>
             </div>
           </div>
@@ -2311,7 +2374,41 @@ function HunterReady() {
   }
 
   const template = templates[templateId]
-  const theme = getTheme(themeId)
+  /*
+    The preview is painted with the same two functions the renderer uses, so what is on screen and
+    what downloads cannot drift. `withColours` throws on a pairing below the floor; the picker never
+    submits one, and the catch keeps a bad value from blanking the workspace.
+  */
+  const theme = (() => {
+    const base = getTheme(themeId)
+    let next = base
+    try {
+      next = withColours(base, customColours)
+    } catch {
+      /* Refused pairing: keep the design's own colours until the picker offers a legible one. */
+    }
+    if (customFonts.body === undefined && customFonts.heading === undefined) {
+      return next
+    }
+    return {
+      ...next,
+      typography: {
+        ...next.typography,
+        body: {
+          ...next.typography.body,
+          fontFamily: quoteFamily(
+            customFonts.body ?? next.typography.body.fontFamily,
+          ),
+        },
+        heading: {
+          ...next.typography.heading,
+          fontFamily: quoteFamily(
+            customFonts.heading ?? next.typography.heading.fontFamily,
+          ),
+        },
+      },
+    }
+  })()
 
   // ── The branch: targeting one job ────────────────────────────────────────────────────────
   if (targeting) {
@@ -2586,7 +2683,16 @@ function HunterReady() {
                   disabled={downloads.busyFormat !== undefined}
                   aria-busy={downloads.busyFormat === 'pdf'}
                   onClick={() =>
-                    void downloads.start(loaded.resume, templateId, themeId)
+                    void downloads.start(
+                      loaded.resume,
+                      templateId,
+                      themeId,
+                      'pdf',
+                      {
+                        fonts: customFonts,
+                        colours: customColours,
+                      },
+                    )
                   }
                   className="btn btn-quiet px-3.5 py-1.5 text-[13px]"
                 >
@@ -2729,18 +2835,46 @@ function HunterReady() {
               no file and no reading — telling them to check it, and counting details we were unsure of
               in a document nobody parsed, is a sentence with no referent.
             */}
+            {/*
+              The heading follows the panel, because it used to lie on four screens out of five.
+
+              It branched on where the document came from and never on which panel was open, so
+              "Check what we read." sat over the design gallery and over the account controls, and
+              under it "Your dates and job titles are the ones worth a second look" made a claim
+              about a screen the person had already left. A title that describes the wrong screen is
+              worse than no title: it is the one thing on the page a reader trusts without checking.
+
+              Each line is the one fact that screen is about, said once (reference/clarify.md), and
+              none of them names a side of the layout, because on a phone there are no sides.
+            */}
             <h1 className="text-display text-ink">
-              {loaded.origin === 'blank'
-                ? 'Write your CV'
-                : 'Check what we read'}
+              {panel === 'check'
+                ? loaded.origin === 'blank'
+                  ? 'Write your CV'
+                  : 'Check what we read'
+                : panel === 'wording'
+                  ? 'Sharpen the wording'
+                  : panel === 'design'
+                    ? 'Choose how it looks'
+                    : panel === 'job'
+                      ? 'Aim it at one job'
+                      : 'Your account'}
               <span className="text-signal">.</span>
             </h1>
             <p className="text-[14px] text-ink-soft">
-              {loaded.origin === 'blank'
-                ? 'Fill in what you have. The page on the right is the document as it will arrive.'
-                : toCheck > 0
-                  ? `${toCheck} ${toCheck === 1 ? 'detail is' : 'details are'} worth your eyes. Everything else looked clear.`
-                  : 'Your dates and job titles are the ones worth a second look.'}
+              {panel === 'check'
+                ? loaded.origin === 'blank'
+                  ? 'Fill in what you have. The preview updates as you type, and you can download at any point.'
+                  : toCheck > 0
+                    ? `${toCheck} ${toCheck === 1 ? 'detail is' : 'details are'} worth your eyes. Everything else looked clear.`
+                    : 'Your dates and job titles are the ones worth a second look.'
+                : panel === 'wording'
+                  ? 'Suggestions on your own lines. Nothing changes unless you accept it.'
+                  : panel === 'design'
+                    ? 'Every layout here has been read back and checked field by field.'
+                    : panel === 'job'
+                      ? 'Paste an advert and see what it asks for that your CV already shows.'
+                      : 'Sign in to keep your CV between visits, or take everything with you.'}
             </p>
           </div>
         </div>
@@ -2778,23 +2912,35 @@ function HunterReady() {
             />
 
             <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-2 lg:pr-1">
-              {panel === 'check' && loaded.warnings.length > 0 && (
-                <div className="rounded-card border border-caution/25 bg-caution-wash p-4">
-                  <h2 className="text-[13px] font-semibold text-caution">
-                    Worth knowing
-                  </h2>
-                  <ul className="mt-2 flex flex-col gap-1.5">
-                    {loaded.warnings.map((warning, i) => (
-                      <li
-                        key={i}
-                        className="text-[13px] leading-relaxed text-ink"
-                      >
-                        {warning}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              {panel === 'check' &&
+                (loaded.warnings.length > 0 || fit.advice !== undefined) && (
+                  <div className="rounded-card border border-caution/25 bg-caution-wash p-4">
+                    <h2 className="text-[13px] font-semibold text-caution">
+                      Worth knowing
+                    </h2>
+                    <ul className="mt-2 flex flex-col gap-1.5">
+                      {loaded.warnings.map((warning, i) => (
+                        <li
+                          key={i}
+                          className="text-[13px] leading-relaxed text-ink"
+                        >
+                          {warning}
+                        </li>
+                      ))}
+                      {/*
+                        Length advice belongs beside the other remarks about the document's content,
+                        not as a caption over the render. It is last because it is the softest: the
+                        others describe something we could not read, this one describes a judgement
+                        call that is the candidate's to make.
+                      */}
+                      {fit.advice !== undefined && (
+                        <li className="text-[13px] leading-relaxed text-ink">
+                          {fit.advice}
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                )}
 
               {panel === 'check' && (
                 <ReviewForm
@@ -2902,7 +3048,7 @@ function HunterReady() {
                               {stage.label}
                               {stage.detail === undefined
                                 ? ''
-                                : ` — ${stage.detail}`}
+                                : `. ${stage.detail}`}
                             </span>
                           </li>
                         ))}
@@ -2949,7 +3095,7 @@ function HunterReady() {
                           role="status"
                           className="text-meta leading-relaxed text-ink-soft"
                         >
-                          One pass over every bullet — the longer your history,
+                          One pass over every bullet. The longer your history,
                           the longer this takes.
                         </span>
                       )}
@@ -3209,13 +3355,72 @@ function HunterReady() {
                     <p className="text-[13px] leading-relaxed text-ink-soft">
                       The layout decides what a reader meets first. The type
                       decides how it sounds. Both are free to change at any
-                      point — nothing about your CV is rewritten.
+                      point, and nothing about your CV is rewritten.
+                    </p>
+                    {/*
+                      Said here because a control that only appears on hover is a control most people
+                      never find. The card's "Full page" button is deliberately quiet so that a
+                      hundred of them do not shout; the cost of that is one sentence of telling.
+                    */}
+                    <p className="text-[13px] leading-relaxed text-ink-soft">
+                      To see a whole page before choosing, use{' '}
+                      <strong className="font-semibold text-ink">
+                        Full page
+                      </strong>{' '}
+                      on any card. From there the arrows, or the left and right
+                      keys, walk the rest without closing it.
                     </p>
                   </div>
+
+                  {previousLook !== undefined && (
+                    /*
+                      Offered rather than announced: a banner every time somebody picks a card would be
+                      noise on the action they most repeat. It sits where the change happened and says
+                      what it goes back *to*, because "Undo" alone asks the reader to remember.
+                    */
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTemplateId(previousLook.templateId)
+                        setThemeId(previousLook.themeId)
+                        setCustomFonts(previousLook.fonts)
+                        setCustomColours(previousLook.colours)
+                        setPreviousLook(undefined)
+                      }}
+                      className="btn btn-quiet self-start px-3 py-1.5 text-[13px]"
+                    >
+                      <Icon name="arrow-left" className="h-4 w-4" />
+                      Back to {previousLook.label}
+                    </button>
+                  )}
+
+                  <DesignAxes
+                    axes={{ fonts: customFonts, colours: customColours }}
+                    defaults={{
+                      body: getTheme(
+                        themeId,
+                      ).typography.body.fontFamily.replace(/^["']|["']$/g, ''),
+                      heading: getTheme(
+                        themeId,
+                      ).typography.heading.fontFamily.replace(
+                        /^["']|["']$/g,
+                        '',
+                      ),
+                      accent:
+                        styleOf(getTheme(themeId)).accent ??
+                        getTheme(themeId).colors.primary,
+                      paper: getTheme(themeId).colors.background,
+                    }}
+                    onChange={(next) => {
+                      setCustomFonts(next.fonts)
+                      setCustomColours(next.colours)
+                    }}
+                  />
 
                   <DesignGallery
                     templateId={templateId}
                     themeId={themeId}
+                    resume={loaded.resume}
                     /*
                       `=== true` on purpose: the field is `undefined` until the server answers, and an
                       unknown entitlement must draw as locked rather than as unlocked. A padlock that
@@ -3224,6 +3429,17 @@ function HunterReady() {
                     */
                     entitled={consent.paidDesigns === true}
                     onChoose={(design) => {
+                      setPreviousLook({
+                        templateId,
+                        themeId,
+                        fonts: customFonts,
+                        colours: customColours,
+                        label:
+                          DESIGNS.find(
+                            (d) =>
+                              d.structure === templateId && d.theme === themeId,
+                          )?.label ?? 'the last look',
+                      })
                       setTemplateId(design.structure)
                       setThemeId(design.theme)
                     }}
@@ -3254,7 +3470,16 @@ function HunterReady() {
                 disabled={downloads.busyFormat !== undefined || lockedDesign}
                 aria-busy={downloads.busyFormat === 'pdf'}
                 onClick={() =>
-                  void downloads.start(loaded.resume, templateId, themeId)
+                  void downloads.start(
+                    loaded.resume,
+                    templateId,
+                    themeId,
+                    'pdf',
+                    {
+                      fonts: customFonts,
+                      colours: customColours,
+                    },
+                  )
                 }
                 className="btn btn-primary w-full px-6 py-3 text-[15px]"
               >
@@ -3381,15 +3606,17 @@ function HunterReady() {
             {lockedDesign && (
               <p className="border-b border-caution/25 bg-caution-wash px-4 py-2 text-[13px] leading-relaxed text-ink">
                 This design is part of the paid plan. You can see it here, and
-                download any design marked <strong>Included</strong> — they
+                download any design marked <strong>Included</strong>, which
                 produce the same document, checked by the same parse test.
               </p>
             )}
-            {fit.advice !== undefined && (
-              <p className="border-b border-hairline bg-band px-4 py-2 text-[13px] leading-relaxed text-ink-soft">
-                {fit.advice}
-              </p>
-            )}
+            {/*
+              The fit advice used to sit here, in a band across the top of the paper. It is a remark
+              about the *content* — that a fifteen-year history squeezed onto one page has probably
+              lost something — and content is what the Check panel is for. Above the document it read
+              as a caption on the render, which is the one thing it is not about, and it was there on
+              every panel including the ones where nobody is editing anything.
+            */}
             {/*
               Comparing replaces the preview rather than opening beside it or over it. A modal would put
               the achievement in a box to be dismissed, and a third column would shrink both sheets to

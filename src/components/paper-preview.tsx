@@ -47,6 +47,16 @@ import type { PdfcnTheme } from '@/components/pdf/theme-types'
 import type { Resume } from '@/schema/resume'
 
 /** A4 at 96 dpi, the unit takumi lays out in. */
+/**
+ * The steps a reader moves through, not a free slider.
+ *
+ * A slider on a document invites fiddling and lands on 87%, where the type is neither fitted nor a
+ * comfortable size. Seven stops cover the two real intentions: see the whole page, or read the words.
+ * 125% earns its place because the jump from life-size to 150% is the one a reader makes most, and
+ * skipping it forces a choice between too small and too large.
+ */
+const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3] as const
+
 const SHEET_WIDTH = 794
 const SHEET_HEIGHT = 1123
 
@@ -74,7 +84,26 @@ export function PaperPreview({
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const measureRef = useRef<HTMLDivElement>(null)
-  const [scale, setScale] = useState(1)
+  /**
+   * A multiplier on the fitted scale, because fitting is not the same as reading.
+   *
+   * `scale` answers "how much of this sheet can I show in the space I was given", and it is clamped
+   * at 1 so a page never draws larger than life by accident. On a laptop half-screen that lands
+   * around 0.55, where 10pt body text is about six pixels tall and the document is a picture of a CV
+   * rather than a CV. This is the reader's own answer to that, and it multiplies rather than replaces
+   * so the fit stays the baseline every step is relative to.
+   */
+  /**
+   * What the scale is *for*, rather than only what it is.
+   *
+   * `'width'` fills the space with the page, which is the reading posture. `'page'` shows the whole
+   * sheet at once, which is the judging posture: it is the only one that answers "does this land on
+   * one page and how does the whole thing sit". A number is a size the reader picked, and it stops
+   * following the container so a chosen size does not evaporate when the window moves.
+   */
+  const [mode, setMode] = useState<'width' | 'page' | number>('width')
+  const [box, setBox] = useState({ width: 0, height: 0 })
+  const [current, setCurrent] = useState(0)
   /**
    * Where each page starts, as an offset into the laid-out content.
    *
@@ -85,20 +114,75 @@ export function PaperPreview({
 
   const { page } = theme.spacing
   const usable = SHEET_HEIGHT - page.marginTop - page.marginBottom
+  /*
+    One number, derived rather than stored, so the two fit modes cannot drift out of step with the
+    container the way a cached scale does.
+  */
+  const fitWidth =
+    box.width === 0 ? 1 : Math.max(0.2, (box.width - 32) / SHEET_WIDTH)
+  const fitPage =
+    box.height === 0
+      ? fitWidth
+      : Math.max(0.2, Math.min(fitWidth, (box.height - 32) / SHEET_HEIGHT))
+  const effective =
+    mode === 'width' ? Math.min(1, fitWidth) : mode === 'page' ? fitPage : mode
 
   useEffect(() => {
     const element = containerRef.current
     if (element === null) return
-
     const observer = new ResizeObserver(() => {
-      // Leave a little air so the sheet reads as an object on a surface, not a full bleed.
-      const next = (element.clientWidth - 32) / SHEET_WIDTH
-      setScale(Math.min(1, Math.max(0.2, next)))
+      setBox({ width: element.clientWidth, height: element.clientHeight })
     })
-
     observer.observe(element)
     return () => observer.disconnect()
   }, [])
+
+  /** The vertical stride of one page at the current size: the sheet plus the gap under it. */
+  const stride = (SHEET_HEIGHT + 24) * effective
+
+  const goToPage = (index: number) => {
+    const element = containerRef.current
+    if (element === null) return
+    const clamped = Math.max(0, Math.min(breaks.length - 1, index))
+    element.scrollTo({ top: clamped * stride, behavior: 'smooth' })
+    setCurrent(clamped)
+  }
+
+  /*
+    Ctrl-wheel and trackpad pinch, registered by hand.
+
+    React's `onWheel` is attached passively, so its `preventDefault` is ignored and the browser keeps
+    the gesture for its own zoom: the whole interface grows and the document does not. The only way to
+    claim it is a listener declared `{ passive: false }`, which React's prop cannot express.
+
+    Declared as a ref-following effect rather than inline so the cleanup is real, and `nudge` is read
+    from a ref so the listener does not need re-attaching on every size change.
+  */
+  const nudgeRef = useRef<(direction: 1 | -1) => void>(() => {})
+  useEffect(() => {
+    const element = containerRef.current
+    if (element === null) return
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return
+      event.preventDefault()
+      nudgeRef.current(event.deltaY < 0 ? 1 : -1)
+    }
+    element.addEventListener('wheel', onWheel, { passive: false })
+    return () => element.removeEventListener('wheel', onWheel)
+  }, [])
+
+  /** Step to the next size up or down from wherever the reader currently is. */
+  const nudge = (direction: 1 | -1) => {
+    const at = effective
+    const next =
+      direction === 1
+        ? (ZOOM_STEPS.find((z) => z > at + 0.001) ??
+          ZOOM_STEPS[ZOOM_STEPS.length - 1])
+        : ([...ZOOM_STEPS].reverse().find((z) => z < at - 0.001) ??
+          ZOOM_STEPS[0])
+    setMode(next)
+  }
+  nudgeRef.current = nudge
 
   /**
    * Measure, then decide where the pages break.
@@ -197,53 +281,164 @@ export function PaperPreview({
   } as const
 
   return (
-    <div ref={containerRef} className="flex-1 overflow-auto bg-band p-4">
+    <div className="flex min-h-0 flex-1 flex-col">
       {/*
+        The control sits above the paper rather than floating over it, because a button on top of the
+        document is a button covering the document at exactly the moment somebody zoomed in to see
+        what was underneath it.
+      */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b border-hairline bg-ground px-3 py-1.5">
+        {/*
+          Page navigation on the left, because it is about *where* you are, and the count already
+          existed: `breaks.length` was being used to write "2 pages" and for nothing else. Zoomed to
+          200%, reaching the second page was a long blind scroll.
+        */}
+        <span className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => goToPage(current - 1)}
+            disabled={current <= 0}
+            aria-label="Previous page"
+            className="btn btn-quiet px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            &lsaquo;
+          </button>
+          <span className="tally min-w-[4.5rem] text-center text-meta text-ink-soft">
+            {breaks.length === 1
+              ? '1 page'
+              : `${current + 1} of ${breaks.length}`}
+          </span>
+          <button
+            type="button"
+            onClick={() => goToPage(current + 1)}
+            disabled={current >= breaks.length - 1}
+            aria-label="Next page"
+            className="btn btn-quiet px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            &rsaquo;
+          </button>
+        </span>
+
+        <span className="flex items-center gap-1">
+          {/*
+            The two postures, named. "Width" fills the space to read the words; "Page" shows the whole
+            sheet to judge whether it lands on one. Both are pressed states rather than plain buttons,
+            because which one you are in changes what the percentage beside them means.
+          */}
+          <button
+            type="button"
+            onClick={() => setMode('width')}
+            aria-pressed={mode === 'width'}
+            className={`btn px-2.5 py-1 text-[12px] ${mode === 'width' ? 'btn-primary' : 'btn-quiet'}`}
+          >
+            Width
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('page')}
+            aria-pressed={mode === 'page'}
+            className={`btn px-2.5 py-1 text-[12px] ${mode === 'page' ? 'btn-primary' : 'btn-quiet'}`}
+          >
+            Page
+          </button>
+
+          <span className="mx-1 h-4 w-px bg-hairline" />
+
+          <button
+            type="button"
+            onClick={() => nudge(-1)}
+            disabled={effective <= ZOOM_STEPS[0] + 0.001}
+            aria-label="Zoom out"
+            className="btn btn-quiet px-2 py-1 text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            &minus;
+          </button>
+          {/*
+            The size against a real page, not a percentage of the fit. "100%" then means life-size,
+            which is the number somebody wants when they ask how big this is.
+          */}
+          <span className="tally min-w-[3.5rem] text-center text-meta text-ink-soft">
+            {Math.round(effective * 100)}%
+          </span>
+          <button
+            type="button"
+            onClick={() => nudge(1)}
+            disabled={effective >= ZOOM_STEPS[ZOOM_STEPS.length - 1] - 0.001}
+            aria-label="Zoom in"
+            className="btn btn-quiet px-2 py-1 text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            +
+          </button>
+        </span>
+      </div>
+
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-auto bg-band p-4"
+        onScroll={(event) => {
+          // Which page is under the top of the viewport. Cheap, and it keeps the counter honest when
+          // somebody scrolls by hand rather than using the arrows.
+          const at = Math.round(event.currentTarget.scrollTop / stride)
+          if (at !== current)
+            setCurrent(Math.max(0, Math.min(breaks.length - 1, at)))
+        }}
+      >
+        {/*
         The measurer: one off-screen copy at full width, laid out but never seen.
 
         `position: absolute` with `visibility: hidden` rather than `display: none` — a display-none subtree
         has no layout at all, so every offsetHeight would read zero and every CV would be one page.
         `aria-hidden` and `inert` so the duplicate is not announced twice or reachable by keyboard.
       */}
-      <div
-        ref={measureRef}
-        aria-hidden
-        inert
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: -99999,
-          width: SHEET_WIDTH - page.marginLeft - page.marginRight,
-          visibility: 'hidden',
-          pointerEvents: 'none',
-        }}
-      >
-        <Template resume={resume} theme={theme} />
-      </div>
-
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          // Real reserved height: pages, their gaps, and the scale they are drawn at. The old version
-          // reserved one page whatever the content, which is why a second page escaped the scroll area.
-          height:
-            (SHEET_HEIGHT * breaks.length + 24 * (breaks.length - 1)) * scale,
-        }}
-      >
         <div
+          ref={measureRef}
+          aria-hidden
+          inert
           style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 24,
-            transform: `scale(${scale})`,
-            transformOrigin: 'top center',
+            position: 'absolute',
+            top: 0,
+            left: -99999,
+            width: SHEET_WIDTH - page.marginLeft - page.marginRight,
+            visibility: 'hidden',
+            pointerEvents: 'none',
           }}
         >
-          {breaks.map((offset, index) => (
-            <div key={index} style={sheetStyle}>
-              {/*
+          <Template resume={resume} theme={theme} />
+        </div>
+
+        {/*
+        A box the exact size of the scaled document, with the sheets drawn from its top-left corner.
+
+        The transform origin used to be `top center`, which is invisible while the page is being shrunk
+        to fit and wrong the moment it is magnified: the sheet grows past both edges at once, and a
+        scroll container cannot scroll left of zero, so the left margin of the document became
+        unreachable. Anchoring at the corner and reserving the real footprint means both axes scroll.
+      */}
+        <div
+          style={{
+            width: SHEET_WIDTH * effective,
+            height:
+              (SHEET_HEIGHT * breaks.length + 24 * (breaks.length - 1)) *
+              effective,
+            margin: '0 auto',
+            position: 'relative',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 24,
+              transform: `scale(${effective})`,
+              transformOrigin: 'top left',
+            }}
+          >
+            {breaks.map((offset, index) => (
+              <div key={index} style={sheetStyle}>
+                {/*
                 Each sheet shows content from its own break up to the **next** break — not a fixed page
                 height — and that distinction is the fix for content appearing twice.
 
@@ -256,27 +451,28 @@ export function PaperPreview({
                 Real pages behave the way this now does: a page that ends early leaves white space below,
                 which is exactly what takumi produces when `breakInside: 'avoid'` pushes an entry over.
               */}
-              <div
-                style={{
-                  height: Math.min(
-                    usable,
-                    (breaks[index + 1] ?? Infinity) - offset,
-                  ),
-                  overflow: 'hidden',
-                }}
-              >
                 <div
                   style={{
-                    transform: `translateY(-${offset}px)`,
-                    // Rendered at the content width, so a wrap here matches the measurer exactly.
-                    width: SHEET_WIDTH - page.marginLeft - page.marginRight,
+                    height: Math.min(
+                      usable,
+                      (breaks[index + 1] ?? Infinity) - offset,
+                    ),
+                    overflow: 'hidden',
                   }}
                 >
-                  <Template resume={resume} theme={theme} />
+                  <div
+                    style={{
+                      transform: `translateY(-${offset}px)`,
+                      // Rendered at the content width, so a wrap here matches the measurer exactly.
+                      width: SHEET_WIDTH - page.marginLeft - page.marginRight,
+                    }}
+                  >
+                    <Template resume={resume} theme={theme} />
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </div>

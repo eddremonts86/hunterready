@@ -177,6 +177,59 @@ export function needsConsent(state: ConsentState): boolean {
   )
 }
 
+/**
+ * The two marks, and the one rule they follow.
+ *
+ * Inline SVG on the same terms as every other icon in this app (`dropzone`, `target-panel`,
+ * `review-form`): a 24 box, `currentColor`, round caps, `aria-hidden` because the title beside it
+ * already says the word. No icon library — `lucide-react` is in the tree only because the vendored
+ * `components/ui` pulls it, and reaching for it here would start a second convention.
+ *
+ * They are **descriptive, not evaluative**. One shows the text leaving the box, one shows it staying
+ * in the rack, which is the single mechanical difference the screen is asking about. Both are the
+ * same size, the same stroke and the same Ink Soft — never Signal, which in this system means
+ * *chosen*, and never a shield or a lock on the local option, because a safety glyph on one answer
+ * is an argument, and DESIGN.md rules arguments out of this decision.
+ */
+function LeavesIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M18 13.5V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4.5" />
+      <path d="M14 4h6v6" />
+      <path d="M20 4l-8.5 8.5" />
+    </svg>
+  )
+}
+
+function StaysIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <rect x="3.5" y="4.5" width="17" height="6" rx="1.6" />
+      <rect x="3.5" y="13.5" width="17" height="6" rx="1.6" />
+      <path d="M7 7.5h.01" />
+      <path d="M7 16.5h.01" />
+    </svg>
+  )
+}
+
 export function ConsentGate({
   provider,
   onDecide,
@@ -190,13 +243,19 @@ export function ConsentGate({
       aria-labelledby="consent-heading"
       className="mx-auto flex w-full max-w-xl flex-col gap-7"
     >
-      <div className="flex flex-col gap-3 text-center">
-        <h2 id="consent-heading" className="text-display text-ink">
+      <div
+        className="rise flex flex-col gap-3 text-center"
+        style={{ animationDelay: '40ms' }}
+      >
+        <h2 id="consent-heading" className="text-display text-balance text-ink">
           Who should read your CV?
         </h2>
-        <p className="text-lead text-ink-soft">
-          Either way we pull out your details and you check them. The only
-          difference is which computer does the reading.
+        {/* `pretty`, not `balance`: DESIGN.md's rule puts `balance` on display type, and on a phone a
+            balanced four-line paragraph pulls into a narrow ragged column. `pretty` only fixes the
+            orphan. */}
+        <p className="text-lead mx-auto max-w-[34rem] text-pretty text-ink-soft">
+          Both options read your file and pull out the same details for you to
+          check. The one difference is whether the text leaves our machines.
         </p>
       </div>
 
@@ -209,22 +268,62 @@ export function ConsentGate({
         says "not buried in a ToS checkbox". So both options are the same choice card, in the same
         order every time, and neither is pre-selected.
 
-        The reference's stacked option cards are exactly the right form for it: two answers, each
-        with a title and the one sentence that actually distinguishes them.
+        ## Three lines each, on the system's own ladder
+
+        Title / Body / Meta, which is how DESIGN.md gets hierarchy — weight and size, never a second
+        typeface and never an icon. Each card answers the same three questions in the same order, so
+        the two are read as a comparison rather than as two paragraphs:
+
+          1. What is this?          (Title)
+          2. What happens to my file? (Body)
+          3. What does it cost me?   (Meta)
+
+        The third line is the one the previous version buried inside the second, and it is the only
+        line where the two options genuinely differ in the user's favour or against it. Keeping it
+        the same size and colour on both cards is what stops the comparison becoming a nudge.
       */}
-      <div className="flex flex-col gap-3">
+      {/*
+        One `rise` on the container, not one per card, and this is the whole of the motion decision.
+
+        A staggered entrance is the house cadence (the landing hero runs 40 / 100 / 160 / 220 / 280ms)
+        and it is wrong *here*: whichever card arrives first is the one the eye is on when the screen
+        settles, and DESIGN.md's Don't is explicit — neither side of a consent decision may be styled
+        as the obvious answer. A 60ms head start is styling, in the one dimension nobody audits.
+
+        So the furniture staggers and the two answers arrive together, in the same frame.
+      */}
+      <div
+        className="rise flex flex-col gap-3"
+        style={{ animationDelay: '120ms' }}
+      >
         <button
           type="button"
           onClick={() => onDecide('granted')}
           className="choice"
         >
-          <span className="flex flex-col gap-0.5">
-            <span className="text-[16px] font-semibold">
-              Send it to {provider}
-            </span>
-            <span className="text-[14px] leading-relaxed text-ink-soft">
-              The larger model, and the most accurate read. Its text goes to{' '}
-              {provider} and nowhere else; we do not keep a copy.
+          <span className="flex items-start gap-3.5">
+            <LeavesIcon className="mt-0.5 h-5 w-5 shrink-0 text-ink-soft" />
+            <span className="flex flex-col gap-1">
+              <span className="text-title">Send it to {provider}</span>
+              <span className="text-[0.9375rem] leading-relaxed text-ink-soft">
+                The text of your CV goes to {provider}, the company whose larger
+                model we pay for. It goes nowhere else, and we keep no copy.
+              </span>
+              {/*
+                The second sentence is the one this screen owed people and did not say.
+
+                "We do not keep a copy" is a claim about *us*, and reads as though it settles the
+                question. It does not: docs/07-privacy.md still carries zero-retention terms as a
+                thing to confirm, so we cannot state what the provider does on their side. Saying
+                so plainly is both the honest option and the more informative one, and it is the
+                same discipline `fabrication.ts` enforces on the model — do not assert what
+                nothing backs.
+              */}
+              <span className="text-meta text-ink-soft">
+                The most accurate read, and the best chance with an unusual
+                layout. What happens to the text on their side is their terms,
+                not ours.
+              </span>
             </span>
           </span>
         </button>
@@ -234,29 +333,58 @@ export function ConsentGate({
           hardware — smaller than the one above, so a very unusual layout may need more correcting,
           and that is the whole of the trade. Overstating it would be dishonest; understating it
           makes the private choice look like a penalty.
+
+          The title said "Keep it on **your** server" while its own body said "our own machines".
+          On the one screen whose entire subject is whose machine holds the file, that was the
+          wrong word in the loudest position.
         */}
         <button
           type="button"
           onClick={() => onDecide('declined')}
           className="choice"
         >
-          <span className="flex flex-col gap-0.5">
-            <span className="text-[16px] font-semibold">
-              Keep it on your server
-            </span>
-            <span className="text-[14px] leading-relaxed text-ink-soft">
-              A model running on our own machines, so the file never leaves
-              them. It is smaller, so an unusual layout may leave you a little
-              more to correct.
+          <span className="flex items-start gap-3.5">
+            <StaysIcon className="mt-0.5 h-5 w-5 shrink-0 text-ink-soft" />
+            <span className="flex flex-col gap-1">
+              <span className="text-title">Keep it on our server</span>
+              <span className="text-[0.9375rem] leading-relaxed text-ink-soft">
+                A smaller model reads it on the machine you uploaded to. The
+                file never leaves that machine, and no other company is
+                involved.
+              </span>
+              <span className="text-meta text-ink-soft">
+                Slower than the larger model, and an unusual layout will leave
+                you more to correct.
+              </span>
             </span>
           </span>
         </button>
       </div>
 
-      <div className="flex flex-col items-center gap-2 text-center">
+      {/*
+        Promoted out of the footnote, because it is the answer to the question people actually have.
+
+        This sentence was `text-meta` at the bottom of the screen, sharing a line with a stale
+        pointer to Account. It is the one fact here that is *true of both answers* and that the
+        reader can go and verify (`src/structure/redact.ts`, applied in `extract.ts` before the
+        call), so it belongs between the two cards and the fine print rather than under it. On the
+        Band, so it reads as a shared condition rather than as a third option.
+      */}
+      <p
+        className="rise rounded-card border border-hairline bg-band px-5 py-4 text-[0.9375rem] leading-relaxed text-ink"
+        style={{ animationDelay: '180ms' }}
+      >
+        Either way, your phone number and street address are taken out of the
+        text before any model reads it, and put back on your copy afterwards.
+      </p>
+
+      <div
+        className="rise flex flex-col items-center gap-2 text-center"
+        style={{ animationDelay: '240ms' }}
+      >
         <p className="text-meta text-ink-soft">
-          Your phone number and street address are removed before either model
-          sees the text. You can change this whenever you like, under Account.
+          You can switch at any time from the header. This answer is remembered
+          in this browser only, and is not sent anywhere.
         </p>
         <a
           href="/privacy"
@@ -338,7 +466,7 @@ export function ProcessingChoice({
             disabled: !entitled,
             hint: entitled
               ? `The larger model. Its text goes to ${provider} and nowhere else; we keep no copy.`
-              : 'The larger model needs an account on the paid plan. Until then your CV is read here and never leaves this machine — which is the more private half of the deal, not the lesser one.',
+              : 'The larger model needs an account on the paid plan. Until then your CV is read here and never leaves this machine, which is the more private half of the deal, not the lesser one.',
             /*
               Both branches stay. `entitled` is the server's answer, so while ADR-030's suspension is
               on nobody sees the second one — and when the switch goes off it is true again, unedited.

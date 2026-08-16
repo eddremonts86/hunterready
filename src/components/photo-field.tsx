@@ -156,9 +156,9 @@ export function PhotoField({
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <p className="text-meta leading-relaxed text-ink-soft">
             {value === undefined
-              ? 'Normal on a CV in Denmark, Germany or Spain. It stays in this browser — we never send it anywhere.'
+              ? 'Normal on a CV in Denmark, Germany or Spain. It stays in this browser. We never send it anywhere.'
               : shown
-                ? 'Top right of your CV. It stays in this browser — we never send it anywhere.'
+                ? 'Top right of your CV. It stays in this browser. We never send it anywhere.'
                 : 'Saved, but the International layout leaves photos off, so it is not on the document.'}
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -244,7 +244,7 @@ export function PhotoField({
 
       {value !== undefined && sourceRef.current === undefined && (
         <p className="text-meta leading-relaxed text-ink-soft">
-          Add the photo again to change its shape or framing — we keep the
+          Add the photo again to change its shape or framing. We keep the
           picture, not the original file.
         </p>
       )}

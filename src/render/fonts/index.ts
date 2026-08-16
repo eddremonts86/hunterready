@@ -14,6 +14,7 @@
  */
 import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import { FAMILY_SLUGS } from './families'
 
 interface FontLoader {
   name: string
@@ -33,19 +34,6 @@ const FONT_DIRS = [
 ]
 
 /** Family name → the fontsource package slug the files are named after. */
-const FAMILY_SLUGS: ReadonlyMap<string, string> = new Map([
-  ['Source Sans 3', 'source-sans-3'],
-  ['Source Serif 4', 'source-serif-4'],
-  ['Courier Prime', 'courier-prime'],
-  ['Archivo Narrow', 'archivo-narrow'],
-  ['Caveat Brush', 'caveat-brush'],
-  // The character expansion (ADR-025): display, classical, grotesque, warm, geometric.
-  ['Playfair Display', 'playfair-display'],
-  ['EB Garamond', 'eb-garamond'],
-  ['Space Grotesk', 'space-grotesk'],
-  ['Lora', 'lora'],
-  ['Josefin Sans', 'josefin-sans'],
-])
 
 /** Weights to try per family. A missing weight is survivable; a missing 400 is not. */
 const WEIGHTS = [400, 600, 700]
@@ -154,7 +142,7 @@ export async function loadThemeFonts(theme: {
 }
 
 /** Families this build can render. Asserted by a test. */
-export const REGISTERED_FAMILIES = [...FAMILY_SLUGS.keys()]
+export { REGISTERED_FAMILIES } from './families'
 
 /** Exposed for the asset-copy script and for tests. */
 export const FONT_SOURCE_DIR = 'src/render/fonts/files'

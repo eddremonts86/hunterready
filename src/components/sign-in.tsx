@@ -99,7 +99,7 @@ export function SignIn({
         {!compact && (
           <p className="text-meta leading-relaxed text-ink-soft">
             We keep it for {RETENTION_DAYS} days after your last visit, then
-            delete it — and you can delete it yourself at any time.{' '}
+            delete it, and you can delete it yourself at any time.{' '}
             <a
               href="/privacy"
               className="font-medium text-signal underline decoration-signal/30 underline-offset-4 hover:decoration-signal"

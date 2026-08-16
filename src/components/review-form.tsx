@@ -628,7 +628,7 @@ export function ReviewForm({
           </span>
           <span className="text-[13px] leading-snug text-ink-soft">
             {authoring
-              ? 'of 5 — none of them is compulsory'
+              ? 'of 5, none of them compulsory'
               : ocr
                 ? 'read from a picture'
                 : total === 0
@@ -641,7 +641,7 @@ export function ReviewForm({
       {ocr && (
         <p className="text-[13px] leading-relaxed text-ink-soft">
           We know how sure we were about the words we found, but not about
-          whether we read them off the page correctly — so the whole thing needs
+          whether we read them off the page correctly, so the whole thing needs
           your eyes, not just the parts we flagged.
         </p>
       )}
@@ -654,23 +654,32 @@ export function ReviewForm({
       {authoring && (
         <p className="text-[13px] leading-relaxed text-ink-soft">
           Nothing here is required except your name. Add what you have, in any
-          order — the document on the right updates as you type, and you can
+          order. The document beside the form updates as you type, and you can
           download it at any point.
         </p>
       )}
 
-      {!authoring && !ocr && total === 0 && (
-        <p className="text-[13px] leading-relaxed text-ink-soft">
-          This time we could not tell which fields to double-check, so please
-          read through all of them — especially the dates and job titles.
-        </p>
-      )}
+      {/*
+        Deliberately no paragraph for the `total === 0` case, and this is the removal rather than an
+        omission.
+
+        Three elements were saying one thing. The page subtitle carries the advice ("your dates and
+        job titles are the ones worth a second look"), the tally beside it carries the state ("Check
+        everything" over "we could not tell which fields"), and a paragraph underneath repeated both
+        and added "read through all of them", which is what "Check everything" already says in two
+        words. The reader was being told the same thing three times in three registers, which reads
+        as insistence rather than as help (reference/distill.md).
+
+        The `ocr` and `flaggedCount === 0` branches keep their paragraphs: each says something the
+        tally cannot, namely *why* the whole document needs eyes in one case and that nothing looked
+        uncertain in the other.
+      */}
 
       {!authoring && !ocr && flaggedCount === 0 && total > 0 && (
         <p className="text-[13px] leading-relaxed text-ink-soft">
           Nothing looked uncertain. Still worth a glance at your dates and job
-          titles — those are the ones that cost you an interview if they are
-          wrong.
+          titles, because those are the ones that cost you an interview if they
+          are wrong.
         </p>
       )}
 
@@ -773,8 +782,8 @@ export function ReviewForm({
         {resume.work.length === 0 && (
           <p className="text-[13px] leading-relaxed text-ink-soft">
             {authoring
-              ? 'One entry per job — the most recent first. A job you left, a placement, an apprenticeship or self-employment all count.'
-              : 'We did not find any jobs. That is usually a sign the file was hard to read — check the original, or add them here.'}
+              ? 'One entry per job, the most recent first. A job you left, a placement, an apprenticeship or self-employment all count.'
+              : 'We did not find any jobs. That is usually a sign the file was hard to read. check the original, or add them here.'}
           </p>
         )}
         {resume.work.map((item, i) => (
@@ -833,7 +842,7 @@ export function ReviewForm({
               </span>
               {item.highlights.length === 0 && (
                 <p className="text-meta leading-relaxed text-ink-soft">
-                  Nothing here yet. One line per thing you did — what you were
+                  Nothing here yet. One line per thing you did: what you were
                   responsible for, and the size of it.
                 </p>
               )}
@@ -867,7 +876,7 @@ export function ReviewForm({
                 removeRow(
                   'work',
                   i,
-                  [item.role, item.company].filter(Boolean).join(' — ') ||
+                  [item.role, item.company].filter(Boolean).join(', ') ||
                     'that job',
                 )
               }
@@ -902,8 +911,8 @@ export function ReviewForm({
         {resume.education.length === 0 && (
           <p className="text-[13px] leading-relaxed text-ink-soft">
             {authoring
-              ? 'Whatever you have. A course or a certificate counts, and so does an apprenticeship — leave it empty if there is nothing to put here.'
-              : 'We did not find any. Add what you have — a course or a certificate counts, and so does an apprenticeship.'}
+              ? 'Whatever you have. A course or a certificate counts, and so does an apprenticeship. Leave it empty if there is nothing to put here.'
+              : 'We did not find any. Add what you have: a course or a certificate counts, and so does an apprenticeship.'}
           </p>
         )}
         {resume.education.map((item, i) => (
@@ -963,7 +972,7 @@ export function ReviewForm({
                 removeRow(
                   'education',
                   i,
-                  [item.degree, item.institution].filter(Boolean).join(' — ') ||
+                  [item.degree, item.institution].filter(Boolean).join(', ') ||
                     'that entry',
                 )
               }
@@ -1002,8 +1011,8 @@ export function ReviewForm({
         {resume.skills.length === 0 && (
           <p className="text-[13px] leading-relaxed text-ink-soft">
             {authoring
-              ? 'Group them however your trade does — the headings are yours, not a fixed list. "Clinical", "Machines I have run", "Languages".'
-              : 'We did not find any. Group them however your trade does — the headings are yours, not a fixed list.'}
+              ? 'Group them however your trade does. The headings are yours, not a fixed list. "Clinical", "Machines I have run", "Languages".'
+              : 'We did not find any. Group them however your trade does. The headings are yours, not a fixed list.'}
           </p>
         )}
         {resume.skills.map((group, i) => (

@@ -51,7 +51,7 @@ export const Route = createFileRoute('/privacy')({
    */
   head: () => ({
     meta: [
-      { title: 'What we do with your CV — HunterReady' },
+      { title: 'What we do with your CV | HunterReady' },
       {
         name: 'description',
         content:
@@ -133,14 +133,14 @@ function Privacy() {
           <p className="max-w-[62ch] text-lead text-ink-soft">
             The short version: we read it, we show you what we read, and if you
             have not signed in, we forget it. If you have, we keep it for{' '}
-            {RETENTION_DAYS} days after your last visit and then delete it — and
+            {RETENTION_DAYS} days after your last visit and then delete it, and
             you can delete it yourself at any moment.
           </p>
         </div>
 
         <Section title="What we process">
           <p>
-            Whatever is in the file you upload — your name, contact details,
+            Whatever is in the file you upload: your name, contact details,
             employment history, education, and anything else you have written on
             your CV. We do not ask for anything you have not already put there.
           </p>
@@ -169,7 +169,7 @@ function Privacy() {
                 <strong className="font-semibold text-ink">
                   That is the only place it goes
                 </strong>{' '}
-                — never to an advertiser, a recruiter, a job board, or anyone
+                and never to an advertiser, a recruiter, a job board, or anyone
                 else.
               </p>
               {/*
@@ -184,8 +184,8 @@ function Privacy() {
                 reading your file into fields, suggesting stronger wording for a
                 bullet, aiming your summary at an advert you pasted, reading
                 that advert, drafting a cover letter, and translating your
-                document when you switch its language. Nothing runs on its own —
-                each of those starts with a button you press.
+                document when you switch its language. Nothing runs on its own.
+                Each of those starts with a button you press.
               </p>
               <p className="text-ink-soft">
                 Your phone number and street address are removed{' '}
@@ -193,16 +193,16 @@ function Privacy() {
                   when we first read your file
                 </strong>
                 . They do not help a model read a CV, so they never leave our
-                server. The later features send only the part they work on — a
-                bullet, your summary, the section being translated — and your
+                server. The later features send only the part they work on: a
+                bullet, your summary, the section being translated, and your
                 phone number, email address and links are not among them.
               </p>
               <p className="text-ink-soft">
                 You can decline, and you can change your mind at any time under{' '}
                 <strong className="font-semibold text-ink">Account</strong>. If
                 you say no, everything above runs on a model on our own server
-                instead — it never leaves our machines, and no other company
-                sees it. It is a smaller model, so you may have a little more to
+                instead. It never leaves our machines, and no other company sees
+                it. It is a smaller model, so you may have a little more to
                 correct.
               </p>
               {/*
@@ -218,7 +218,7 @@ function Privacy() {
                 ) : (
                   <>
                     This is offered to everyone at the moment, account or not.
-                    It is normally part of the paid plan — we have opened it up
+                    It is normally part of the paid plan. We have opened it up
                     while the model on our own server is too slow on the machine
                     it runs on to be worth waiting for.{' '}
                     <strong className="font-semibold text-ink">
@@ -243,7 +243,7 @@ function Privacy() {
           </p>
           <p>
             If you sign in so we can remember your CV between visits, then we do
-            store it — that is the point of the account, and it would be
+            store it. That is the point of the account, and it would be
             dishonest to describe it any other way. We keep it for{' '}
             <strong className="font-semibold text-ink">
               {RETENTION_DAYS} days
@@ -306,8 +306,9 @@ function Privacy() {
           </p>
           <p className="text-ink-soft">
             Those log entries are the one thing that survives deleting your
-            account — an audit trail the audited person can erase would not be
-            one. Your identity is removed from them, so what is left says that
+            account, because an audit trail the audited person can erase would
+            not be one. Your identity is removed from them, so what is left says
+            that
             <em> a</em> record was read, not whose.
           </p>
         </Section>
@@ -321,7 +322,7 @@ function Privacy() {
           <p>
             You can create a link that lets anyone read one of your CVs without
             signing in. While it is open, anyone who has the link can read that
-            CV and download it as a PDF — including someone it was forwarded to.
+            CV and download it as a PDF, including someone it was forwarded to.
           </p>
           <p>
             Every link{' '}
@@ -335,7 +336,7 @@ function Privacy() {
           </p>
           <p className="text-ink-soft">
             We count how many times a link has been opened so you can see
-            whether it was used. We do not record who opened it, or when — that
+            whether it was used. We do not record who opened it, or when. That
             would be a log of people reading your CV, which is not ours to keep.
             Links are never shown to search engines.
           </p>
@@ -355,7 +356,7 @@ function Privacy() {
             Under the GDPR you have the right of access, correction, erasure,
             restriction, portability and objection. Without an account they are
             answered by the design, because we hold nothing about you. With one,
-            they are answered by two buttons rather than a support email —
+            they are answered by two buttons rather than a support email:
             download everything we hold, or delete all of it, both below. For
             anything else, write to{' '}
             <a
@@ -376,7 +377,7 @@ function Privacy() {
               ? `You have agreed to your CV being sent to ${provider ?? 'the model provider'}.`
               : consent.choice === 'declined'
                 ? 'You have chosen to have your CV read on our server only.'
-                : 'You have not been asked yet — we ask before your first upload.'}
+                : 'You have not been asked yet. We ask before your first upload.'}
           </p>
           {consent.choice !== undefined && (
             <button

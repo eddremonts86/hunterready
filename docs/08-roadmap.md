@@ -5,7 +5,13 @@ Estimates assume focused solo work with AI assistance. They are sizing, not comm
 HunterReady is a real, monetized product (confirmed 2026-08-13), so v0.5 and v1.0 are
 commitments rather than aspirations — the accounts, payments and GDPR work gets built.
 
-## v0.1 — "It works" (≈2 weeks) · in progress
+**Read [What is actually open](#what-is-actually-open) first.** The per-version sections below are a
+record of how each release went, and they kept their original "still to do" lists after the work was
+done — four items in v0.3 and v0.5 were listed as open here while the code was shipped and reachable,
+which is how a stale roadmap manufactures work that already exists. The consolidated list at the
+bottom is the one that is maintained; a version section is history.
+
+## v0.1 — "It works" (≈2 weeks) · shipped
 
 The scope Edd asked for, nothing more.
 
@@ -18,14 +24,23 @@ The scope Edd asked for, nothing more.
 - ATS round-trip test green in CI
 - Deployed to Coolify
 
-**Done so far (2026-08-13):** Block 0 scaffold, Block 1 render-path spike — the
-production WASM bug found and fixed. Next: Block 1b production-parity test.
-
 Detailed blocks: [10-plan-v0.1.md](10-plan-v0.1.md).
 
 **Done means:** Edd runs his own CV through it and would send the output.
 
-## v0.2 — "It's reliable" · in progress
+**All fifteen blocks shipped, and the deploy with them** — the line that used to sit here ("Block 0
+scaffold, Block 1 render-path spike, next Block 1b") outlived its truth by ten releases. The Coolify
+deploy is not asserted from the deploy log but from work done _against_ production since: v0.10.1's fit
+defect was found walking the live site end to end, and ADR-030's numbers (102 s, then 171 s, as an
+anonymous visitor) were measured there.
+
+**One verifier check was never runnable and still is not.** Check 5 — "deliberate production error →
+Sentry payload contains no CV content" — assumed an error reporter that was never wired. There is no
+Sentry in `src` or in `package.json`. The privacy rule it was standing in for is real and holds by
+construction (no CV content in logs, errors or telemetry), but nothing _verifies_ it at runtime, and a
+check nobody can run is not a check. Carried to the open list.
+
+## v0.2 — "It's reliable" · shipped, three real-world fixtures owed
 
 Quality, not features. The gap between a demo and something usable.
 
@@ -146,7 +161,7 @@ Still to do:
   should hunt it further until he does.
 - MiniMax sometimes returns no provenance.
 
-## v0.3 — "It improves the CV" · in progress
+## v0.3 — "It improves the CV" · shipped
 
 The first feature a competitor cannot trivially copy.
 
@@ -180,13 +195,28 @@ Both corrections came from running it, not from reasoning about it. The model ab
 the guard flagged `Led` and `Supported` as invented names because a rationale quotes the wording it
 changed. See ADR-016's rule: the failure you have observed beats the one you imagined.
 
+### Shipped later, and this list did not say so
+
+Three of the four items below sat under "still to do" long after they were built and reachable —
+exactly the failure this file warns about at the top. Corrected 2026-08-16 by checking each against
+the code rather than against the list:
+
+- **Template `showcase`** — [`src/render/templates/showcase.tsx`](../src/render/templates/showcase.tsx),
+  in the registry and in `designs.ts` as a paid design across three character axes (ADR-026 records the
+  honest rating of its sidebar).
+- **Answers to `questions` as source material** — captured and joined to the grounding set in
+  `rewrite.ts`, and the same pattern reused by `summary.ts` and `cover-letter.ts`.
+- **The rewrite cache** — `rewriteCacheKey` is used in `rewrite.ts`, and the key covers the answers as
+  well as the bullet, so answering a question does not serve back the pre-answer suggestion.
+
 ### Still to do
 
-- Template `showcase` (2-column, honestly labelled design-first)
-- Answers to `questions` fed back as source material — they are asked, not yet captured
-- A cache in front of the rewrite call. `rewriteCacheKey` exists and nothing uses it yet, so a
-  re-run pays for every bullet again.
-- Model routing per docs/06: extraction and rewriting currently share one provider.
+- **Model routing per [docs/06](06-ai-optimization.md#model-routing-cost).** Still one provider for
+  every task: `resolveProvider` / `resolveLocalProvider` split **local vs third-party**, which is the
+  entitlement axis from ADR-023, not the per-task cost axis docs/06 tabulates (Haiku for extraction,
+  Opus for rewriting, Sonnet for advert reading). This is now a decision before it is work — the two
+  ADRs since have made the local/third-party line the one the product actually charges on, so the
+  docs/06 table may be worth retiring rather than implementing. Do not leave it stated and unbuilt.
 
 ## v0.4 — "It targets a job" · shipped
 
@@ -274,9 +304,10 @@ authorisation on 2026-08-14 to store CVs and delete them after 90 days of inacti
   two documents, so they needed no storage and were written before it existed.
 - ✅ **GDPR controls**: export, delete-everything, 90-day retention from `lastSeenAt`, and an access log
   that survives erasure with its subject nulled.
-- ⬜ **Encryption at rest.** Still open, and still for the reason ADR-018 gave: "encrypted" with the key
-  in the same env file beside the data is a compliance sentence, not a protection. It needs a
-  key-management decision, not code.
+- ✅ **Encryption at rest** — deferred out of v0.5 for the reason ADR-018 gave ("encrypted" with the key
+  in the same env file beside the data is a compliance sentence, not a protection), then shipped in v1.0
+  once that key-management decision was made. See [v1.0](#v10--its-a-product--two-shipped-two-open)
+  and ADR-021. This line said `⬜` while the v1.0 section said `✅` — one file, two answers.
 
 ### What was actually wrong with v0.5
 
@@ -344,10 +375,30 @@ small disaster. The draft is editable and the edit is what downloads, as `.docx`
 evidenced requirements, and left the missing one alone. Its own rationale showed the retry loop working —
 attempt one used `ICU`, which is in neither document, and attempt two wrote it out.
 
-## v0.8 — "It speaks the language"
+## v0.8 — "It speaks the language" · shipped
 
 Multi-language output: EN / ES / DA. The _document_, not just the chrome — section headings, date
-formats and regional conventions per locale. Latin-Extended coverage is already proven in the fonts.
+formats and regional conventions per locale ([`src/render/locale.ts`](../src/render/locale.ts)), in the
+PDF templates and in the `.docx` writer. Latin-Extended coverage was already proven in the fonts.
+
+Two things worth keeping:
+
+- **This is the ATS ruleset, not an exception to it.** docs/05 clause 6 mandates standard section
+  headings because real parsers key on them — and a Danish screener keys on `Erfaring`, not
+  `Experience`. Rendering English headings on a Danish CV was the violation; localizing them is the
+  correct reading of the rule.
+- **A hand-written month table rather than `Intl`.** `Intl.DateTimeFormat` produces different Spanish
+  abbreviations across Node versions and ICU builds (`sept.` or `sep.`), and the ATS round-trip test
+  asserts exact strings. Thirty-six abbreviations are cheaper than a document whose dates change shape
+  on a runtime upgrade.
+
+**Then its line moved, by its owner.** v0.8 localized furniture only, on the argument that a
+mistranslated job title is a wrong claim about someone's career. That argument was about _silent_
+translation. Whole-document translation on demand ([`src/optimize/translate.ts`](../src/optimize/translate.ts))
+is the opposite — the person picks a language and asks — so it ships with guards instead of a refusal:
+digits must survive verbatim, proper nouns are never sent, and a field whose translation fails a guard
+keeps its own original. The failure mode is "one line stayed in Danish", never "one line now says
+something else". ADR-029 records the `personalDetails` half of the decision.
 
 ## v0.9 — "It can be shown" · shipped
 
@@ -379,7 +430,7 @@ refused while the link still worked, revoked from the owner's screen, and then a
 token that never existed. Eighteen repository tests cover expiry, revocation, cross-account isolation and
 erasure.
 
-## v1.0 — "It's a product" · one item shipped, two open
+## v1.0 — "It's a product" · two shipped, two open
 
 - ✅ **Encryption at rest** (`src/db/crypto.ts`, ADR-021) — AES-256-GCM in the existing `jsonb` column, so
   no migration. Protects a stolen disk, a leaked snapshot, a copied backup, and anyone with database read
@@ -387,10 +438,13 @@ erasure.
   `/privacy` states the limit in the same paragraph and reads the real state from the server so it cannot
   claim encryption on an installation with no key. **Losing the key loses every stored CV** — the runbook
   carries the backup obligation.
-- ⬜ **Pricing and payments.** The numbers are Edd's, and docs/09's open question 7 now lays out three
-  concrete shapes rather than an open field. The architecture already draws the line for one of them: the
-  free stateless path stores nothing (ADR-004), and everything that costs money — model calls, storage —
-  needs an account.
+- ⬜ **Pricing and payments.** The last genuinely blocking item, and the shape is no longer open: docs/09's
+  question 7 chose subscription with a free stateless tier on 2026-08-14, and ADR-023 already built the
+  line it needs — the free stateless path stores nothing (ADR-004), the third-party model is
+  entitlement-gated, and `auth_users.plan` decides. What is missing is three things, in this order:
+  **the numbers**, **a payment provider**, and **an endpoint that sets `plan`** — today the column is
+  read everywhere and written nowhere, deliberately (ADR-023: "a paid tier over HTTP is not a feature"),
+  so there is currently no way to become a paying customer.
 - ✅ **Cyrillic and Greek** (`scripts/make-fonts.mjs`, ADR-022). Not the subset list it looked like:
   takumi-pdf 0.6.4 cannot reach the glyphs in fontsource's range-subset `woff2` files, so adding
   `cyrillic` to the bundler copies twelve files and changes nothing. The fix is a format change —
@@ -400,7 +454,10 @@ erasure.
   renders in both PDF and `.docx`, in every template.
 - ⬜ **CJK.** A separate question, and still a real one: no Source face has it and Noto Sans CJK is
   10–16 MB per weight. That is a decision about the deployed image and about which market it is for.
-  Right-to-left needs more than a font — the renderer's bidi behaviour is unverified.
+- ⬜ **Right-to-left.** Not the same item, and listing it inside CJK hid it. A font is the smaller half:
+  the renderer's bidi behaviour is **unverified**, so the honest status is "unknown", not "missing
+  glyphs". Establishing what takumi does with an Arabic or Hebrew string is the first move, and it is
+  cheap — the same probe-before-vendoring order that ADR-022 got right for Cyrillic.
 
 ## v0.10 — "It can be written from nothing" · shipped 2026-08-15
 
@@ -441,6 +498,60 @@ CV written here is measured from the moment before the fit.
 **Cost:** one session. **Left open:** pricing and payments (still the last thing between here and
 v1.0), and the free tier's speed on the production box (ADR-027 — the lever is taking the model call
 off the blocking path, not a faster engine).
+
+## What is actually open
+
+Checked against the code on 2026-08-16, not against the lists above. **This is the maintained list**;
+everything higher in this file is the record of a release. When an item here closes, close it here.
+
+### Blocking v1.0
+
+1. **Pricing and payments.** Numbers, provider, and an endpoint that sets `plan`. See v1.0 above and
+   docs/09 question 7 — the shape is decided, so this is now work plus two numbers, not a design
+   question.
+2. **Name and domain** (docs/09 question 8). `.dev`/`.app`/`.com` availability and trademark never
+   checked, and it was always marked "needed by v1.0". Cheap, and it gets more expensive the later it
+   is asked.
+
+### Costing money today
+
+3. **The exit from ADR-030.** `HR_THIRD_PARTY_FOR_ALL=true` means every anonymous visitor spends
+   third-party tokens. The switch flips back when the local model can read an advert in seconds, and
+   ADR-027 already named the lever: **take the model call off the blocking path**, not a faster engine.
+   The concern that ADR remained worried about — "`/api/rewrite` already rate-limits; ingestion does
+   not" — is closed: `/api/ingest`, `/api/target`, `/api/translate` and `/api/cover-letter` all
+   rate-limit now.
+
+### Ingestion quality — all three are missing inputs, not missing code
+
+4. **A real Canva/Enhancv export** with genuinely _overlapping_ column spans. Interleaved ordering is
+   covered by `two-column-interleaved.pdf`; overlap defeats a different rule.
+5. **A real photographed CV** — perspective skew, uneven lighting, shadow. `scanned.pdf` is a clean
+   rasterization and cannot fake any of it.
+6. **A genuine multi-page CV**, still owed to Block 4's page-break verifier.
+7. **MiniMax sometimes returns no provenance**, which costs the review step its "where did this come
+   from" answer on the affected fields.
+
+### Needs one sentence from Edd
+
+8. **Does the private Spanish CV have a formal education section at all?** Measured, not assumed: of
+   103 extracted lines, **zero** contain `formacion`, `educacion`, `estudios` or `academic` in any
+   form, and its headings read like a portfolio-shaped profile. So either extraction loses the region
+   entirely or there is nothing to find. Nobody should hunt this further until it is answered.
+
+### Stated but unbuilt, so it has to be decided
+
+9. **Model routing (docs/06).** Implement the per-task table or retire it. See v0.3.
+10. **Verifier 5 has no instrument.** The v0.1 spec's privacy check assumed an error reporter that was
+    never wired — there is no Sentry in the repo. Either add one and keep the check, or replace the
+    check with one that runs against what exists. The rule it protects (no CV content in logs, errors or
+    telemetry) is the one rule in CLAUDE.md with no automated proof behind it.
+
+### Not open, despite appearances
+
+- **CJK and RTL** are v1.0 items on the list above, but neither blocks the release the way pricing
+  does: they are decisions about which market the deployed image is for. RTL's status is _unverified_,
+  not _broken_ — see v1.0.
 
 ## Deliberately parked
 

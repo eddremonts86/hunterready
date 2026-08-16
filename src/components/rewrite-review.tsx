@@ -177,7 +177,7 @@ export function RewriteReview({
 
       {suggestions.length === 0 && (
         <p className="text-[13px] leading-relaxed text-ink-soft">
-          We did not find wording worth changing. That is a good sign — it means
+          We did not find wording worth changing. That is a good sign. It means
           your bullets already lead with what you did.
         </p>
       )}
@@ -287,7 +287,7 @@ export function RewriteReview({
             */}
             {busy && (
               <span className="text-meta leading-relaxed text-ink-soft">
-                One pass over every bullet — the longer your history, the longer
+                One pass over every bullet. The longer your history, the longer
                 this takes.
               </span>
             )}

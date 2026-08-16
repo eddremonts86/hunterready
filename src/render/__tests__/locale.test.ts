@@ -157,3 +157,30 @@ describe('a rendered document is set in its own language', () => {
     expect(text).not.toContain('Present')
   })
 })
+
+/**
+ * The guard for the failure this file did not catch.
+ *
+ * Two templates shipped with twelve kickers hardcoded in Spanish, and they printed that way over an
+ * English CV. Nothing caught it: the ATS round-trip only asserts that the *real* headings survive in
+ * reading order, and those were localized correctly all along. A kicker is extra decorative text
+ * beside a correct heading, which is exactly the shape a field-level check cannot see.
+ *
+ * So this asserts the property rather than the symptom: no template may hold a literal in the
+ * `kicker` prop. Anything a reader sees has to come from the locale table, whatever language it is.
+ */
+describe('no template hardcodes furniture text', () => {
+  it('every kicker comes from the locale table', async () => {
+    const { readdir, readFile } = await import('node:fs/promises')
+    const dir = new URL('../templates/', import.meta.url)
+    const files = (await readdir(dir)).filter((f) => f.endsWith('.tsx'))
+    const offenders: Array<string> = []
+    for (const file of files) {
+      const source = await readFile(new URL(file, dir), 'utf8')
+      for (const match of source.matchAll(/kicker=\{?"([^"]+)"/g)) {
+        offenders.push(`${file}: kicker="${match[1]}"`)
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+})

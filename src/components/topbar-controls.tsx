@@ -181,9 +181,13 @@ export function ModelMenu({
           aria-hidden
           className={`h-2 w-2 rounded-full ${usingProvider ? 'bg-signal' : 'bg-affirm'}`}
         />
-        <span className="hidden sm:inline">
-          {usingProvider ? provider : 'Read here'}
-        </span>
+        {/*
+          The label stays at every width. It used to be `hidden sm:inline`, which left a phone with a
+          bare coloured dot in a pill: a control that says nothing about itself, on the one screen
+          where there is no hover to reveal it. The `aria-label` meant a screen reader was told what
+          it was and a sighted person was not, which is the wrong way round for an affordance.
+        */}
+        <span>{usingProvider ? provider : 'Read here'}</span>
       </button>
 
       {open && (
@@ -285,7 +289,7 @@ function UpgradeNote() {
         already the switch; a provider only has to write to it. See docs/08-roadmap.md.
       */}
       <p className="text-[12px] font-medium text-ink">
-        Paid plans are not open yet — this is the last piece before v1.0.
+        Paid plans are not open yet. This is the last piece before v1.0.
       </p>
     </div>
   )

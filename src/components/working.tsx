@@ -73,9 +73,7 @@ export function Working({
       <Spinner className="h-3.5 w-3.5 shrink-0 text-signal" />
       <span>
         {label}
-        {hint !== undefined && (
-          <span className="text-ink-faint"> — {hint}</span>
-        )}
+        {hint !== undefined && <span className="text-ink-faint">. {hint}</span>}
       </span>
     </p>
   )
