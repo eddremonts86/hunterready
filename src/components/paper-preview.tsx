@@ -82,7 +82,6 @@ export function PaperPreview({
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const measureRef = useRef<HTMLDivElement>(null)
-  const [scale, setScale] = useState(1)
   /**
    * A multiplier on the fitted scale, because fitting is not the same as reading.
    *
@@ -92,7 +91,17 @@ export function PaperPreview({
    * rather than a CV. This is the reader's own answer to that, and it multiplies rather than replaces
    * so the fit stays the baseline every step is relative to.
    */
-  const [zoom, setZoom] = useState(1)
+  /**
+   * What the scale is *for*, rather than only what it is.
+   *
+   * `'width'` fills the space with the page, which is the reading posture. `'page'` shows the whole
+   * sheet at once, which is the judging posture: it is the only one that answers "does this land on
+   * one page and how does the whole thing sit". A number is a size the reader picked, and it stops
+   * following the container so a chosen size does not evaporate when the window moves.
+   */
+  const [mode, setMode] = useState<'width' | 'page' | number>('width')
+  const [box, setBox] = useState({ width: 0, height: 0 })
+  const [current, setCurrent] = useState(0)
   /**
    * Where each page starts, as an offset into the laid-out content.
    *
@@ -103,22 +112,75 @@ export function PaperPreview({
 
   const { page } = theme.spacing
   const usable = SHEET_HEIGHT - page.marginTop - page.marginBottom
-  const effective = scale * zoom
-  const step = ZOOM_STEPS.indexOf(zoom as (typeof ZOOM_STEPS)[number])
+  /*
+    One number, derived rather than stored, so the two fit modes cannot drift out of step with the
+    container the way a cached scale does.
+  */
+  const fitWidth =
+    box.width === 0 ? 1 : Math.max(0.2, (box.width - 32) / SHEET_WIDTH)
+  const fitPage =
+    box.height === 0
+      ? fitWidth
+      : Math.max(0.2, Math.min(fitWidth, (box.height - 32) / SHEET_HEIGHT))
+  const effective =
+    mode === 'width' ? Math.min(1, fitWidth) : mode === 'page' ? fitPage : mode
 
   useEffect(() => {
     const element = containerRef.current
     if (element === null) return
-
     const observer = new ResizeObserver(() => {
-      // Leave a little air so the sheet reads as an object on a surface, not a full bleed.
-      const next = (element.clientWidth - 32) / SHEET_WIDTH
-      setScale(Math.min(1, Math.max(0.2, next)))
+      setBox({ width: element.clientWidth, height: element.clientHeight })
     })
-
     observer.observe(element)
     return () => observer.disconnect()
   }, [])
+
+  /** The vertical stride of one page at the current size: the sheet plus the gap under it. */
+  const stride = (SHEET_HEIGHT + 24) * effective
+
+  const goToPage = (index: number) => {
+    const element = containerRef.current
+    if (element === null) return
+    const clamped = Math.max(0, Math.min(breaks.length - 1, index))
+    element.scrollTo({ top: clamped * stride, behavior: 'smooth' })
+    setCurrent(clamped)
+  }
+
+  /*
+    Ctrl-wheel and trackpad pinch, registered by hand.
+
+    React's `onWheel` is attached passively, so its `preventDefault` is ignored and the browser keeps
+    the gesture for its own zoom: the whole interface grows and the document does not. The only way to
+    claim it is a listener declared `{ passive: false }`, which React's prop cannot express.
+
+    Declared as a ref-following effect rather than inline so the cleanup is real, and `nudge` is read
+    from a ref so the listener does not need re-attaching on every size change.
+  */
+  const nudgeRef = useRef<(direction: 1 | -1) => void>(() => {})
+  useEffect(() => {
+    const element = containerRef.current
+    if (element === null) return
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return
+      event.preventDefault()
+      nudgeRef.current(event.deltaY < 0 ? 1 : -1)
+    }
+    element.addEventListener('wheel', onWheel, { passive: false })
+    return () => element.removeEventListener('wheel', onWheel)
+  }, [])
+
+  /** Step to the next size up or down from wherever the reader currently is. */
+  const nudge = (direction: 1 | -1) => {
+    const at = effective
+    const next =
+      direction === 1
+        ? (ZOOM_STEPS.find((z) => z > at + 0.001) ??
+          ZOOM_STEPS[ZOOM_STEPS.length - 1])
+        : ([...ZOOM_STEPS].reverse().find((z) => z < at - 0.001) ??
+          ZOOM_STEPS[0])
+    setMode(next)
+  }
+  nudgeRef.current = nudge
 
   /**
    * Measure, then decide where the pages break.
@@ -223,46 +285,102 @@ export function PaperPreview({
         document is a button covering the document at exactly the moment somebody zoomed in to see
         what was underneath it.
       */}
-      <div className="flex items-center justify-end gap-1 border-b border-hairline bg-ground px-3 py-1.5">
-        <button
-          type="button"
-          onClick={() => setZoom(ZOOM_STEPS[Math.max(0, step - 1)])}
-          disabled={step <= 0}
-          aria-label="Zoom out"
-          className="btn btn-quiet px-2 py-1 text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          &minus;
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b border-hairline bg-ground px-3 py-1.5">
         {/*
-          The figure is the size on screen against the real page, not a percentage of the fit. "100%"
-          then means the sheet is life-size, which is the number somebody is actually looking for when
-          they ask how big this is.
+          Page navigation on the left, because it is about *where* you are, and the count already
+          existed: `breaks.length` was being used to write "2 pages" and for nothing else. Zoomed to
+          200%, reaching the second page was a long blind scroll.
         */}
-        <span className="tally min-w-[3.5rem] text-center text-meta text-ink-soft">
-          {Math.round(effective * 100)}%
+        <span className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => goToPage(current - 1)}
+            disabled={current <= 0}
+            aria-label="Previous page"
+            className="btn btn-quiet px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            &lsaquo;
+          </button>
+          <span className="tally min-w-[4.5rem] text-center text-meta text-ink-soft">
+            {breaks.length === 1
+              ? '1 page'
+              : `${current + 1} of ${breaks.length}`}
+          </span>
+          <button
+            type="button"
+            onClick={() => goToPage(current + 1)}
+            disabled={current >= breaks.length - 1}
+            aria-label="Next page"
+            className="btn btn-quiet px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            &rsaquo;
+          </button>
         </span>
-        <button
-          type="button"
-          onClick={() =>
-            setZoom(ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, step + 1)])
-          }
-          disabled={step >= ZOOM_STEPS.length - 1}
-          aria-label="Zoom in"
-          className="btn btn-quiet px-2 py-1 text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          +
-        </button>
-        <button
-          type="button"
-          onClick={() => setZoom(1)}
-          disabled={zoom === 1}
-          className="btn btn-quiet ml-1 px-2.5 py-1 text-[12px] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Fit
-        </button>
+
+        <span className="flex items-center gap-1">
+          {/*
+            The two postures, named. "Width" fills the space to read the words; "Page" shows the whole
+            sheet to judge whether it lands on one. Both are pressed states rather than plain buttons,
+            because which one you are in changes what the percentage beside them means.
+          */}
+          <button
+            type="button"
+            onClick={() => setMode('width')}
+            aria-pressed={mode === 'width'}
+            className={`btn px-2.5 py-1 text-[12px] ${mode === 'width' ? 'btn-primary' : 'btn-quiet'}`}
+          >
+            Width
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('page')}
+            aria-pressed={mode === 'page'}
+            className={`btn px-2.5 py-1 text-[12px] ${mode === 'page' ? 'btn-primary' : 'btn-quiet'}`}
+          >
+            Page
+          </button>
+
+          <span className="mx-1 h-4 w-px bg-hairline" />
+
+          <button
+            type="button"
+            onClick={() => nudge(-1)}
+            disabled={effective <= ZOOM_STEPS[0] + 0.001}
+            aria-label="Zoom out"
+            className="btn btn-quiet px-2 py-1 text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            &minus;
+          </button>
+          {/*
+            The size against a real page, not a percentage of the fit. "100%" then means life-size,
+            which is the number somebody wants when they ask how big this is.
+          */}
+          <span className="tally min-w-[3.5rem] text-center text-meta text-ink-soft">
+            {Math.round(effective * 100)}%
+          </span>
+          <button
+            type="button"
+            onClick={() => nudge(1)}
+            disabled={effective >= ZOOM_STEPS[ZOOM_STEPS.length - 1] - 0.001}
+            aria-label="Zoom in"
+            className="btn btn-quiet px-2 py-1 text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            +
+          </button>
+        </span>
       </div>
 
-      <div ref={containerRef} className="flex-1 overflow-auto bg-band p-4">
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-auto bg-band p-4"
+        onScroll={(event) => {
+          // Which page is under the top of the viewport. Cheap, and it keeps the counter honest when
+          // somebody scrolls by hand rather than using the arrows.
+          const at = Math.round(event.currentTarget.scrollTop / stride)
+          if (at !== current)
+            setCurrent(Math.max(0, Math.min(breaks.length - 1, at)))
+        }}
+      >
         {/*
         The measurer: one off-screen copy at full width, laid out but never seen.
 
