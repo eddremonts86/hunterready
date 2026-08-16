@@ -159,7 +159,7 @@ const STEPS_HOW = [
   {
     icon: 'file' as const,
     title: 'Start from a file, or from nothing',
-    body: 'A PDF, a Word file, plain text, or a photo of a printed page — or an empty one, if this is your first. No account either way.',
+    body: 'A PDF, a Word file, plain text, or a photo of a printed page. Or an empty one, if this is your first. No account either way.',
   },
   {
     icon: 'pencil' as const,
@@ -169,7 +169,7 @@ const STEPS_HOW = [
   {
     icon: 'download' as const,
     title: 'Download it',
-    body: 'A clean, well-set A4 PDF — or a Word file, for the portals that ask for one. Both checked by reading the finished document back.',
+    body: 'A clean, well-set A4 PDF, or a Word file for the portals that ask for one. We check both by reading the finished document back.',
   },
 ]
 
@@ -186,7 +186,7 @@ const STEPS_HOW = [
 const MECHANISMS = [
   {
     icon: 'verified' as const,
-    title: 'Verified by a test, not a claim',
+    title: 'A test checks every design, on every build',
     body: 'Every design is rendered, read back with a separate parser, and checked field by field in reading order.',
     how: 'A design that loses a field does not ship',
   },
@@ -194,13 +194,13 @@ const MECHANISMS = [
     icon: 'shield' as const,
     title: 'It cannot invent anything',
     body: 'Suggestions sharpen your own wording. A number, employer, date or outcome that is not already in your CV is refused.',
-    how: 'Blocked in code, not asked for in a prompt',
+    how: 'The guard runs in code, before the suggestion reaches you',
   },
   {
     icon: 'lock' as const,
-    title: 'Your CV is not our training data',
+    title: 'Your CV never becomes training data',
     body: 'Your phone number and street address are removed before any model sees the text, and you can keep the whole thing on our own server.',
-    how: 'Declining leaves it on this machine',
+    how: 'Say no and it stays on this machine',
   },
 ]
 
@@ -313,7 +313,7 @@ const COMPARISON = [
   },
   {
     alone:
-      'A tool sharpens a line by adding a number nobody gave it — and you defend it at the interview.',
+      'A tool sharpens a line by adding a number nobody gave it, and you defend it at the interview.',
     here: 'A claim that is not already in your CV is refused, in code.',
   },
   {
@@ -332,18 +332,18 @@ const COMPARISON = [
 const FAQ = [
   {
     q: 'What happens to my CV?',
-    a: 'It is read, corrected by you, and rendered back. Your phone number and street address are stripped before any model sees the text. Without an account nothing is stored at all — close the tab and it is gone. With one, it is kept until you delete it or ninety days pass since your last visit, whichever comes first.',
+    a: 'It is read, corrected by you, and rendered back. Your phone number and street address are stripped before any model sees the text. Without an account nothing is stored at all, so closing the tab is the end of it. With one, it is kept until you delete it or ninety days pass since your last visit, whichever comes first.',
   },
   {
     q: 'Can the employer tell I used this?',
-    a: 'There is nothing to tell. What you download is your own CV, in a layout that parses cleanly, with wording you accepted line by line. We do not write claims into it — that is enforced in code, not asked for in a prompt.',
+    a: 'There is nothing to tell. What you download is your own CV, in a layout that parses cleanly, with wording you accepted line by line. We never write a claim into it, and the code will not let us.',
   },
   {
     q: 'Do I have to pay?',
-    a: 'No. Upload, correct, and download without an account and without paying. A paid plan adds the larger model, all sixty designs and CVs remembered between visits — and it is not open yet.',
+    a: 'No. Upload, correct, and download without an account and without paying. A paid plan adds the larger model, all sixty designs, and CVs remembered between visits. It is not open yet.',
   },
   {
-    q: 'What does "a CV screening software can read" actually mean?',
+    q: 'What does "a CV that screening software can read" mean?',
     a: 'Employers run your file through software that turns it back into fields before a person sees it. We do the same thing to what we produce, with an independent parser, and check every field came back in the right order. A design that loses one does not ship.',
   },
   {
@@ -1590,8 +1590,10 @@ function HunterReady() {
       reference's one-decision-per-screen pattern used where the flow genuinely has one decision.
     */
     if (needsConsent(consent)) {
+      // `100dvh`, not `100vh`: on iOS Safari the address bar makes the two differ, and this screen
+      // is centred inside it, so the difference is a visible jump under the answer.
       return (
-        <div className="flex min-h-screen flex-col bg-ground">
+        <div className="flex min-h-[100dvh] flex-col bg-ground">
           <StepBar />
           <div className="flex flex-1 items-center justify-center px-4 py-10 sm:px-6">
             <ConsentGate
@@ -1830,8 +1832,8 @@ function HunterReady() {
                   style={{ animationDelay: '160ms' }}
                 >
                   Upload the file you already have. We pull out every detail and
-                  show you exactly what we found, you correct anything we got
-                  wrong, and you download a PDF that automated screening can
+                  show you exactly what we found. You correct anything we got
+                  wrong, then download a PDF that automated screening can
                   actually read.
                 </p>
 
@@ -1924,9 +1926,9 @@ function HunterReady() {
                     <span className="text-signal">.</span>
                   </h2>
                   <p className="max-w-xs text-[15px] leading-relaxed text-ink-soft">
-                    The commonest reason people put this off is not doubting it
-                    works — it is not knowing whether they are starting a
-                    two-minute job or a two-hour one.
+                    People rarely put this off because they doubt it works. They
+                    put it off because they cannot tell whether they are
+                    starting a two-minute job or a two-hour one.
                   </p>
                 </div>
               </Reveal>
@@ -1986,7 +1988,7 @@ function HunterReady() {
                   <p className="text-lead text-ink-soft">
                     A first job, a return to work after years out, a trade where
                     nobody ever wrote one down. Same editor, same checked
-                    document at the end — it just starts empty.
+                    document at the end. It just starts empty.
                   </p>
                   <StartFromScratch onStart={startBlank} busy={busy} />
                 </div>
@@ -2018,7 +2020,7 @@ function HunterReady() {
                   </ul>
                   <p className="text-meta leading-relaxed text-ink-soft">
                     Add sections of your own for anything this list does not
-                    cover — courses, references, licences, publications.
+                    cover: courses, references, licences, publications.
                   </p>
                 </div>
               </Reveal>
@@ -2042,7 +2044,7 @@ function HunterReady() {
               <Reveal>
                 <span className="eyebrow">Evidence</span>
                 <h2 className="mt-4 max-w-2xl text-section text-balance text-ink">
-                  Three things we can prove, not just say
+                  Three things you can check yourself
                   <span className="text-signal">.</span>
                 </h2>
               </Reveal>
@@ -2099,7 +2101,7 @@ function HunterReady() {
                 </h2>
                 <p className="on-ink-soft mt-6 max-w-2xl text-lead">
                   Your CV probably parses fine. The problem is that there is no
-                  way to find out before you send it — and the ways it fails are
+                  way to find out before you send it, and the ways it fails are
                   invisible in the document you are looking at.
                 </p>
               </Reveal>
@@ -2166,9 +2168,12 @@ function HunterReady() {
                     Before you start
                     <span className="text-signal">.</span>
                   </h2>
+                  {/* Said "the three that actually stop people" while the list held five. A page
+                      whose whole argument is that we check things should not miscount its own
+                      section, and the number was load-bearing for nobody. */}
                   <p className="max-w-xs text-[15px] leading-relaxed text-ink-soft">
-                    The three that actually stop people, answered straight.
-                    Anything still unclear is worth an email.
+                    The questions that actually stop people. Anything still
+                    unclear is worth an email.
                   </p>
                 </div>
               </Reveal>
@@ -2247,8 +2252,8 @@ function HunterReady() {
             <div className="flex flex-col gap-3">
               <Wordmark className="text-[17px]" />
               <p className="max-w-xs text-[13px] leading-relaxed text-ink-soft">
-                A CV that automated screening can actually read — checked by
-                parsing it back, not by claiming it parses.
+                A CV that automated screening can actually read. We check by
+                parsing it back, rather than claiming it parses.
               </p>
             </div>
 
@@ -2300,8 +2305,8 @@ function HunterReady() {
             <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
               <p className="text-meta leading-relaxed text-ink-faint">
                 HunterReady is in development and free to use. There is no
-                company behind it yet and no paid plan open — when there is,
-                both will be named here.
+                company behind it yet and no paid plan open. When there is, both
+                will be named here.
               </p>
             </div>
           </div>
