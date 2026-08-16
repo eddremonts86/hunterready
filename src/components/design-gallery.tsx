@@ -35,6 +35,12 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Resume } from '@/schema/resume'
 import { DesignPreviewDialog } from './design-preview-dialog'
 import { Section } from './design-axes'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 /** The order a card shows as three words, because it is the structural difference a person can act on. */
 const ORDER_WORDS: Record<string, Array<string>> = {
@@ -380,24 +386,31 @@ export function DesignGallery({
           </span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => toggleStar(design.id)}
-          aria-label={
-            starred.includes(design.id)
-              ? `Remove ${design.label} from your marked designs`
-              : `Mark ${design.label}`
-          }
-          aria-pressed={starred.includes(design.id)}
-          className={[
-            'absolute left-3 top-3 rounded-full border px-1.5 py-1 transition-opacity',
-            starred.includes(design.id)
-              ? 'border-signal-edge bg-signal-wash text-signal opacity-100'
-              : 'border-hairline-strong bg-ground/95 text-ink-soft opacity-0 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100',
-          ].join(' ')}
-        >
-          <Star filled={starred.includes(design.id)} />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => toggleStar(design.id)}
+              aria-label={
+                starred.includes(design.id)
+                  ? `Remove ${design.label} from your marked designs`
+                  : `Mark ${design.label}`
+              }
+              aria-pressed={starred.includes(design.id)}
+              className={[
+                'absolute left-3 top-3 rounded-full border px-1.5 py-1 transition-opacity',
+                starred.includes(design.id)
+                  ? 'border-signal-edge bg-signal-wash text-signal opacity-100'
+                  : 'border-hairline-strong bg-ground/95 text-ink-soft opacity-0 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100',
+              ].join(' ')}
+            >
+              <Star filled={starred.includes(design.id)} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {starred.includes(design.id) ? 'Remove your mark' : 'Mark this one'}
+          </TooltipContent>
+        </Tooltip>
 
         <button
           type="button"
@@ -412,74 +425,76 @@ export function DesignGallery({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <DesignPreviewDialog
-        design={previewing}
-        /* The gallery's own order: everything included first, then the paid half. */
-        designs={ordered}
-        resume={resume}
-        onClose={() => setPreviewing(undefined)}
-        onChoose={onChoose}
-        onNavigate={setPreviewing}
-        current={DESIGNS.find(
-          (d) => d.structure === templateId && d.theme === themeId,
-        )}
-      />
-      {starred.length > 0 && (
-        /*
+    <TooltipProvider delayDuration={400}>
+      <div className="flex flex-col gap-4">
+        <DesignPreviewDialog
+          design={previewing}
+          /* The gallery's own order: everything included first, then the paid half. */
+          designs={ordered}
+          resume={resume}
+          onClose={() => setPreviewing(undefined)}
+          onChoose={onChoose}
+          onNavigate={setPreviewing}
+          current={DESIGNS.find(
+            (d) => d.structure === templateId && d.theme === themeId,
+          )}
+        />
+        {starred.length > 0 && (
+          /*
           First, and only when it has something in it. An empty "Marked" header on every visit is a
           promise of a feature rather than a feature, and it would push the catalogue down the page
           for the many people who never mark anything.
         */
-        <Section title="Marked" count={starred.length}>
+          <Section title="Marked" count={starred.length}>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {ordered
+                .filter((design) => starred.includes(design.id))
+                .map((design) => (
+                  <Card key={design.id} design={design} />
+                ))}
+            </div>
+          </Section>
+        )}
+
+        <Section title="Included" count={free.length}>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {ordered
-              .filter((design) => starred.includes(design.id))
-              .map((design) => (
-                <Card key={design.id} design={design} />
-              ))}
+            {free.map((design) => (
+              <Card key={design.id} design={design} />
+            ))}
           </div>
         </Section>
-      )}
 
-      <Section title="Included" count={free.length}>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {free.map((design) => (
-            <Card key={design.id} design={design} />
-          ))}
-        </div>
-      </Section>
-
-      {/*
+        {/*
         Folded shut by default, and that is a judgement rather than a default: ninety-one paid cards
         under twelve included ones meant the included set was a strip at the top of a very long
         column. Closed, the two sets are the same size on screen, which is what a comparison needs.
       */}
-      <Section
-        title={entitled ? 'Also yours' : 'Paid plan'}
-        count={paid.length}
-        defaultOpen={false}
-      >
-        <div className="flex flex-col gap-2">
-          {!entitled && (
-            /*
+        <Section
+          title={entitled ? 'Also yours' : 'Paid plan'}
+          count={paid.length}
+          defaultOpen={false}
+        >
+          <div className="flex flex-col gap-2">
+            {!entitled && (
+              /*
             Said once, at the top of the locked set, rather than as a sales line on each of eighteen cards.
             And it says what the free ones *are* rather than what they lack: the ATS guarantee is not the
             thing being sold, and implying it is would be the kind of pressure this product does not use.
           */
-            <p className="text-meta leading-relaxed text-ink-soft">
-              Every design above renders the same document, checked by the same
-              parse test. These add different typefaces and a different order of
-              sections.
-            </p>
-          )}
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {paid.map((design) => (
-              <Card key={design.id} design={design} />
-            ))}
+              <p className="text-meta leading-relaxed text-ink-soft">
+                Every design above renders the same document, checked by the
+                same parse test. These add different typefaces and a different
+                order of sections.
+              </p>
+            )}
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {paid.map((design) => (
+                <Card key={design.id} design={design} />
+              ))}
+            </div>
           </div>
-        </div>
-      </Section>
-    </div>
+        </Section>
+      </div>
+    </TooltipProvider>
   )
 }

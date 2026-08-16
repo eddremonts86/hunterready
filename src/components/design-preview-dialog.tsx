@@ -31,6 +31,7 @@ import { getTheme } from '@/render/themes'
 import { templates } from '@/render/templates/registry'
 import type { Design } from '@/render/designs'
 import { PaperPreview } from './paper-preview'
+import { Skeleton } from '@/components/ui/skeleton'
 
 function Chevron({ direction }: { direction: 'left' | 'right' }) {
   return (
@@ -152,6 +153,8 @@ export function DesignPreviewDialog({
   const theme = getTheme(design.theme)
   const template = templates[design.structure]
   const shown = showingSample && sample !== undefined ? sample : resume
+  /* The one moment this dialog waits on the network: the sample, fetched only if asked for. */
+  const fetchingSample = showingSample && sample === undefined
   const at = designs.findIndex((d) => d.id === design.id)
   const previous = at > 0 ? designs[at - 1] : undefined
   const next = at >= 0 && at < designs.length - 1 ? designs[at + 1] : undefined
@@ -270,7 +273,31 @@ export function DesignPreviewDialog({
         )}
 
         <div className="flex min-h-0 flex-1">
-          {comparing && current !== undefined ? (
+          {fetchingSample ? (
+            /*
+              A skeleton shaped like the sheet it replaces, rather than a spinner in the middle of an
+              empty box. The dialog is already the size of an A4 page, so a spinner would leave a
+              large hole and then fill it, which reads as a jump; an outline of the page reads as the
+              page arriving.
+            */
+            <div className="flex flex-1 items-start justify-center bg-band p-6">
+              <div className="flex w-full max-w-[794px] flex-col gap-4 rounded-card bg-ground p-8">
+                <Skeleton className="h-8 w-1/2" />
+                <Skeleton className="h-3 w-1/3" />
+                <Skeleton className="mt-4 h-3 w-full" />
+                <Skeleton className="h-3 w-11/12" />
+                <Skeleton className="mt-6 h-4 w-28" />
+                {[0, 1, 2].map((row) => (
+                  <div key={row} className="flex flex-col gap-2">
+                    <Skeleton className="h-3 w-2/3" />
+                    <Skeleton className="h-2.5 w-1/3" />
+                    <Skeleton className="h-2.5 w-full" />
+                    <Skeleton className="h-2.5 w-10/12" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : comparing && current !== undefined ? (
             /*
               Side by side, each labelled, with the one in use on the left because that is the thing
               being compared *against*. They share the dialog's width, so each is narrower than a
