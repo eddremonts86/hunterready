@@ -30,28 +30,28 @@ import { useEffect, useState } from 'react'
 const DEMO = {
   initials: 'MS',
   name: 'Marta Sørensen',
-  headline: 'Registered Nurse — Intensive Care',
+  headline: 'Registered Nurse, Intensive Care',
   jobs: [
     {
       role: 'Shift Lead Nurse, Intensive Care',
       company: 'Rigshospitalet',
-      dates: '2019 — Present',
+      dates: '2019 - Present',
     },
     {
       role: 'Nurse, Post-Operative Recovery',
       company: 'Herlev Hospital',
-      dates: '2016 — 2019',
+      dates: '2016 - 2019',
     },
     {
       role: 'Nurse, General Surgical Ward',
       company: 'Herlev Hospital',
-      dates: '2014 — 2016',
+      dates: '2014 - 2016',
       // The point of the whole card. A product that claims a perfect read is a product that is
       // lying; the one that says "this line I am unsure about" is the one you can trust.
       flagged: true,
     },
   ],
-  education: 'BSc Nursing — Københavns Professionshøjskole',
+  education: 'BSc Nursing, Københavns Professionshøjskole',
   skills: ['Intensive care', 'Ventilator management', 'Triage'],
 }
 
@@ -220,7 +220,7 @@ export function ReadBackDemo() {
 
       {/* The label that keeps this an illustration rather than a claim (DESIGN.md: No Invented Proof). */}
       <p className="text-center text-meta text-ink-soft">
-        A sample CV, read back field by field — this is the screen you get after
+        A sample CV, read back field by field. This is the screen you get after
         uploading.
       </p>
     </div>
