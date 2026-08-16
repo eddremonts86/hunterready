@@ -31,7 +31,7 @@ import { styleOf } from '@/render/themes/style'
 import { templates } from '@/render/templates/registry'
 import type { TemplateId } from '@/render/templates/registry'
 import type { ThemeId } from '@/render/themes'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Resume } from '@/schema/resume'
 import { DesignPreviewDialog } from './design-preview-dialog'
 import { Section } from './design-axes'
@@ -206,6 +206,22 @@ function Specimen({ design }: { design: Design }) {
   )
 }
 
+function Star({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinejoin="round"
+      className="h-3.5 w-3.5"
+    >
+      <path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.7-5.2-2.7-5.2 2.7 1-5.7L3.5 9.7l5.9-.9z" />
+    </svg>
+  )
+}
+
 function Lock() {
   return (
     <svg
@@ -239,6 +255,41 @@ export function DesignGallery({
   resume: Resume
 }) {
   const [previewing, setPreviewing] = useState<Design | undefined>(undefined)
+  /**
+   * Designs somebody marked on the way past.
+   *
+   * A hundred and three cards is more than anyone holds in their head, so "the one I liked twenty
+   * cards ago" stops being recoverable by scrolling. Kept in `localStorage` rather than on the
+   * account, for the same reason the consent answer is: it is a preference about this browser, not a
+   * fact about a person, and it costs nothing to lose.
+   */
+  const [starred, setStarred] = useState<ReadonlyArray<string>>([])
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('hunterready.starred-designs.v1')
+      const parsed: unknown = raw === null ? [] : JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        setStarred(parsed.filter((id): id is string => typeof id === 'string'))
+      }
+    } catch {
+      /* Private browsing, or a corrupt entry. An empty list is a fine answer. */
+    }
+  }, [])
+
+  const toggleStar = (id: string) => {
+    const next = starred.includes(id)
+      ? starred.filter((entry) => entry !== id)
+      : [...starred, id]
+    setStarred(next)
+    try {
+      localStorage.setItem(
+        'hunterready.starred-designs.v1',
+        JSON.stringify(next),
+      )
+    } catch {
+      /* The mark still holds for this visit. */
+    }
+  }
   const free = DESIGNS.filter((d) => d.tier === 'free')
   const paid = DESIGNS.filter((d) => d.tier === 'paid')
   /*
@@ -331,6 +382,25 @@ export function DesignGallery({
 
         <button
           type="button"
+          onClick={() => toggleStar(design.id)}
+          aria-label={
+            starred.includes(design.id)
+              ? `Remove ${design.label} from your marked designs`
+              : `Mark ${design.label}`
+          }
+          aria-pressed={starred.includes(design.id)}
+          className={[
+            'absolute left-3 top-3 rounded-full border px-1.5 py-1 transition-opacity',
+            starred.includes(design.id)
+              ? 'border-signal-edge bg-signal-wash text-signal opacity-100'
+              : 'border-hairline-strong bg-ground/95 text-ink-soft opacity-0 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100',
+          ].join(' ')}
+        >
+          <Star filled={starred.includes(design.id)} />
+        </button>
+
+        <button
+          type="button"
           onClick={() => setPreviewing(design)}
           aria-label={`See ${design.label} as a full page`}
           className="absolute right-3 top-3 rounded-full border border-hairline-strong bg-ground/95 px-2 py-1 text-[11px] font-semibold text-ink-soft opacity-0 transition-opacity hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
@@ -351,7 +421,27 @@ export function DesignGallery({
         onClose={() => setPreviewing(undefined)}
         onChoose={onChoose}
         onNavigate={setPreviewing}
+        current={DESIGNS.find(
+          (d) => d.structure === templateId && d.theme === themeId,
+        )}
       />
+      {starred.length > 0 && (
+        /*
+          First, and only when it has something in it. An empty "Marked" header on every visit is a
+          promise of a feature rather than a feature, and it would push the catalogue down the page
+          for the many people who never mark anything.
+        */
+        <Section title="Marked" count={starred.length}>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {ordered
+              .filter((design) => starred.includes(design.id))
+              .map((design) => (
+                <Card key={design.id} design={design} />
+              ))}
+          </div>
+        </Section>
+      )}
+
       <Section title="Included" count={free.length}>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {free.map((design) => (

@@ -58,7 +58,7 @@ import type {
 import type { BulletRewrite } from '@/optimize/rewrite'
 import { shiftTarget } from '@/optimize/rewrite-shift'
 import { diffResumes } from '@/optimize/variant-diff'
-import { tierOf } from '@/render/designs'
+import { DESIGNS, tierOf } from '@/render/designs'
 import { Resume } from '@/schema/resume'
 import type { FieldProvenance } from '@/schema/provenance'
 import { needsReview } from '@/schema/provenance'
@@ -937,6 +937,24 @@ function HunterReady() {
     accent?: string
     paper?: string
   }>({})
+  /**
+   * The previous look, kept so one wrong click is not a hunt back through a hundred cards.
+   *
+   * One step, not a stack. Two clicks into a catalogue this size and a person is exploring rather
+   * than retracing, and an undo list they have to reason about costs more than it returns. The step
+   * covers all four axes together because that is how a look is chosen: the design, then the type and
+   * the colour laid over it.
+   */
+  const [previousLook, setPreviousLook] = useState<
+    | {
+        templateId: TemplateId
+        themeId: ThemeId
+        fonts: { body?: string; heading?: string }
+        colours: { accent?: string; paper?: string }
+        label: string
+      }
+    | undefined
+  >(undefined)
   /**
    * Targeting is a branch off the check step, not a fourth step everyone walks through.
    *
@@ -3354,6 +3372,28 @@ function HunterReady() {
                     </p>
                   </div>
 
+                  {previousLook !== undefined && (
+                    /*
+                      Offered rather than announced: a banner every time somebody picks a card would be
+                      noise on the action they most repeat. It sits where the change happened and says
+                      what it goes back *to*, because "Undo" alone asks the reader to remember.
+                    */
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTemplateId(previousLook.templateId)
+                        setThemeId(previousLook.themeId)
+                        setCustomFonts(previousLook.fonts)
+                        setCustomColours(previousLook.colours)
+                        setPreviousLook(undefined)
+                      }}
+                      className="btn btn-quiet self-start px-3 py-1.5 text-[13px]"
+                    >
+                      <Icon name="arrow-left" className="h-4 w-4" />
+                      Back to {previousLook.label}
+                    </button>
+                  )}
+
                   <DesignAxes
                     axes={{ fonts: customFonts, colours: customColours }}
                     defaults={{
@@ -3389,6 +3429,17 @@ function HunterReady() {
                     */
                     entitled={consent.paidDesigns === true}
                     onChoose={(design) => {
+                      setPreviousLook({
+                        templateId,
+                        themeId,
+                        fonts: customFonts,
+                        colours: customColours,
+                        label:
+                          DESIGNS.find(
+                            (d) =>
+                              d.structure === templateId && d.theme === themeId,
+                          )?.label ?? 'the last look',
+                      })
                       setTemplateId(design.structure)
                       setThemeId(design.theme)
                     }}

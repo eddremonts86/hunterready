@@ -56,6 +56,7 @@ export function DesignPreviewDialog({
   onClose,
   onChoose,
   onNavigate,
+  current,
 }: {
   /** The design to draw. `undefined` closes the dialog. */
   design?: Design
@@ -70,10 +71,21 @@ export function DesignPreviewDialog({
   onClose: () => void
   onChoose: (design: Design) => void
   onNavigate: (design: Design) => void
+  /** Whatever the reader is using now, so the comparison is against their actual document. */
+  current?: Design
 }) {
   const ref = useRef<HTMLDialogElement>(null)
   const [sample, setSample] = useState<Resume | undefined>(undefined)
   const [showingSample, setShowingSample] = useState(false)
+  /**
+   * Two sheets at once, against the design already in use.
+   *
+   * "Do I like this?" is a question somebody can answer alone; "is this better than what I have?"
+   * needs both in one glance, and walking between them with the arrows turns the comparison into a
+   * memory test. The other half is deliberately the *current* design rather than the previous card,
+   * because the decision being made is whether to replace what they have.
+   */
+  const [comparing, setComparing] = useState(false)
 
   useEffect(() => {
     const node = ref.current
@@ -211,6 +223,16 @@ export function DesignPreviewDialog({
               >
                 {showingSample ? 'Show my CV' : 'Show a full sample'}
               </button>
+              {current !== undefined && current.id !== design.id && (
+                <button
+                  type="button"
+                  onClick={() => setComparing(!comparing)}
+                  aria-pressed={comparing}
+                  className={`btn px-3 py-1.5 text-[13px] ${comparing ? 'btn-primary' : 'btn-quiet'}`}
+                >
+                  {comparing ? 'One at a time' : 'Compare with mine'}
+                </button>
+              )}
             </div>
 
             <span className="flex items-center gap-1">
@@ -248,11 +270,42 @@ export function DesignPreviewDialog({
         )}
 
         <div className="flex min-h-0 flex-1">
-          <PaperPreview
-            resume={shown}
-            theme={theme}
-            Template={template.Component}
-          />
+          {comparing && current !== undefined ? (
+            /*
+              Side by side, each labelled, with the one in use on the left because that is the thing
+              being compared *against*. They share the dialog's width, so each is narrower than a
+              single view: the trade is legibility of one against the ability to see both, and seeing
+              both is the whole reason somebody asked.
+            */
+            <div className="grid min-h-0 flex-1 grid-cols-2 divide-x divide-hairline">
+              <div className="flex min-h-0 flex-col">
+                <span className="border-b border-hairline bg-band px-3 py-1.5 text-meta font-semibold text-ink-soft">
+                  Yours now · {current.label}
+                </span>
+                <PaperPreview
+                  resume={shown}
+                  theme={getTheme(current.theme)}
+                  Template={templates[current.structure].Component}
+                />
+              </div>
+              <div className="flex min-h-0 flex-col">
+                <span className="border-b border-hairline bg-signal-wash px-3 py-1.5 text-meta font-semibold text-signal">
+                  This one · {design.label}
+                </span>
+                <PaperPreview
+                  resume={shown}
+                  theme={theme}
+                  Template={template.Component}
+                />
+              </div>
+            </div>
+          ) : (
+            <PaperPreview
+              resume={shown}
+              theme={theme}
+              Template={template.Component}
+            />
+          )}
         </div>
       </div>
     </dialog>
