@@ -148,7 +148,12 @@ export function DesignPreviewDialog({
     <dialog
       ref={ref}
       aria-labelledby="design-preview-heading"
-      className="m-auto w-[min(96vw,900px)] rounded-card border border-hairline bg-ground p-0 backdrop:bg-ink/40"
+      /*
+        Sized to the sheet, not to a round number. An A4 preview is 794px wide and cannot stretch, so
+        a 900px dialog left 53px of centring space on each side of the document while the header
+        started at 20px: three different left edges in one box. 794 + two 24px gutters is 842.
+      */
+      className="m-auto w-[min(96vw,842px)] rounded-card border border-hairline bg-ground p-0 backdrop:bg-ink/40"
     >
       <div className="flex max-h-[92vh] flex-col">
         {/*
@@ -160,8 +165,8 @@ export function DesignPreviewDialog({
           sitting between the arrows and the close, so the destructive-looking end of the row and the
           committing one were neighbours.
         */}
-        <div className="relative border-b border-hairline px-5 py-3.5 pr-14">
-          <span className="flex flex-col">
+        <div className="relative border-b border-hairline px-6 py-3.5">
+          <span className="flex flex-col pr-10">
             <span id="design-preview-heading" className="text-title text-ink">
               {design.label}
             </span>
@@ -172,7 +177,7 @@ export function DesignPreviewDialog({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="btn btn-quiet absolute right-4 top-3.5 px-2.5 py-1.5"
+            className="btn btn-quiet absolute right-5 top-3.5 px-2.5 py-1.5"
           >
             <svg
               aria-hidden
