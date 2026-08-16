@@ -24,6 +24,16 @@ import type { TemplateId } from './templates/registry'
 export interface RenderOptions {
   templateId?: TemplateId
   themeId?: ThemeId
+  /**
+   * Type chosen by the reader, replacing what the theme names.
+   *
+   * A theme is a coherent set of decisions and stays the default. This is the door out of it, for the
+   * person who wants this layout in that face — and it is also the only way to prove a bundled family
+   * actually reaches takumi, which is the check ADR-022 exists to insist on. A family not in
+   * `FAMILY_SLUGS` throws rather than drawing nothing, because the renderer's silence on an unknown
+   * face is the failure mode that ADR is about.
+   */
+  fonts?: { body?: string; heading?: string }
 }
 
 export interface RenderResult {
@@ -52,7 +62,38 @@ export async function renderResume(
 ): Promise<RenderResult> {
   const { render, measure } = await import('takumi-pdf')
 
-  const theme = getTheme(options.themeId ?? DEFAULT_THEME_ID)
+  const base = getTheme(options.themeId ?? DEFAULT_THEME_ID)
+  /*
+    Quoted, always. takumi parses `fontFamily` as CSS, and CSS rejects an unquoted family name that
+    ends in a digit: "Source Sans 3" fails with `Unexpected token: 3`. Two of the sixty families in
+    the catalogue are named that way, and quoting every one is simpler than remembering which. The
+    loader strips quotes again on its side, so both forms reach the same files.
+  */
+  const quoted = (family: string) =>
+    /^["']/.test(family) ? family : `"${family}"`
+  const theme =
+    options.fonts === undefined
+      ? base
+      : {
+          ...base,
+          typography: {
+            ...base.typography,
+            body: {
+              ...base.typography.body,
+              fontFamily:
+                options.fonts.body === undefined
+                  ? base.typography.body.fontFamily
+                  : quoted(options.fonts.body),
+            },
+            heading: {
+              ...base.typography.heading,
+              fontFamily:
+                options.fonts.heading === undefined
+                  ? base.typography.heading.fontFamily
+                  : quoted(options.fonts.heading),
+            },
+          },
+        }
   const meta = getTemplate(options.templateId ?? DEFAULT_TEMPLATE_ID)
   const { Component } = meta
   const { page } = theme.spacing
