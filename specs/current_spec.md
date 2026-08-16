@@ -1,83 +1,38 @@
-# Current Spec — HunterReady v0.1
+# Current Spec — none active
 
-**Created:** 2026-08-13
-**Status:** v0.1 complete except the Coolify deploy (needs credentials — owner's call).
-**Owner:** Edd
+**Status:** no active Spec · **Updated:** 2026-08-16
 
----
+The v0.1 Spec was archived to `ai-os/archive/2026-08-16-hunterready-v0.1.md` on 2026-08-16, per its
+own §8. It had been reporting "v0.1 complete except the Coolify deploy" while the product ran v0.10 in
+production — a stale Spec is worse than no Spec, because it answers "what are we doing?" with
+confidence and the wrong answer.
 
-## 1. Goal (one sentence)
+## Where the work actually is
 
-Ingest an existing CV in `.pdf` / `.docx` / `.doc` / `.txt` / `.md`, extract it into
-a canonical structured schema the user can review and correct, and render a
-well-designed, **verifiably ATS-parseable** PDF the user can download.
+**[docs/08-roadmap.md → What is actually open](../docs/08-roadmap.md#what-is-actually-open)** is the
+maintained list. Everything above that section in the roadmap is the record of a shipped release, kept
+for its reasoning, not a queue.
 
-## 2. Why
+The short version, as of 2026-08-16: **pricing and payments** is the only thing between here and v1.0.
 
-"Upload CV → pretty PDF" is crowded. The unsolved part is that good-looking CVs are
-usually machine-unreadable, and nobody proves otherwise. HunterReady proves it on
-every build with an automated round-trip test. That verifier is the product's spine,
-so it is built in v0.1 rather than bolted on later.
+## Starting the next one
 
-## 3. Scope
+Copy `~/Projects/ai-os/specs/spec_template.md` over this file and fill it in — objective, context,
+acceptance criteria, non-goals, blocks of ≤30 min each with a **Verify** line apiece, risks, and
+end-to-end verification.
 
-**In:**
+Two constraints this project has learned the hard way and a new Spec should carry:
 
-- 5 input formats, magic-byte detection, actionable rejections
-- Layout-aware text normalization (two-column PDF handling)
-- LLM structured extraction → Zod-validated `Resume` + per-field confidence
-- Review/edit form with low-confidence fields highlighted
-- 2 templates (`modern-intl` + `modern-eu` — both regional conventions, ADR-010) × 3
-  themes, rendered via pdfcn + takumi-pdf
-- Live preview, download, deployed to Coolify
-- Stateless: no persistence, no CV content in logs
+- **Runtime evidence, not builds.** `pnpm build` exiting 0 is not verification here; that exact
+  reading is what put a 500 in production in Block 1. Render work means opening the PDF, ingestion work
+  means the accuracy table, UI work means the browser. See CLAUDE.md.
+- **A feature is not shipped until a person can reach it.** Four features shipped as schema and
+  documentation with no path from the interface. Acceptance criteria should name the screen, not the
+  module, and the grep for a module's importers outside `__tests__` costs one command.
 
-**Out (later milestones):**
+## Definition of archive
 
-- AI rewriting, JD tailoring, scoring (v0.3–v0.4)
-- Accounts, saved versions (v0.5)
-- DOCX export, cover letters, multi-language (v1.0)
-- OCR for scanned PDFs (v0.2) — v0.1 detects and explains instead
-
-## 4. Verifier (how we know it's done)
-
-| #   | Check                    | Method                                                                          |
-| --- | ------------------------ | ------------------------------------------------------------------------------- |
-| 1   | ATS round-trip green     | `pnpm test ats` — render → extract → assert all critical fields + reading order |
-| 2   | Extraction accuracy      | field-level diff vs `fixtures/expected/*.json`: ≥95% clean, ≥85% two-column     |
-| 3   | Schema integrity         | every fixture passes `Resume.parse()`                                           |
-| 4   | End-to-end in production | upload → edit → download at the live URL, < 20 s                                |
-| 5   | Privacy                  | deliberate production error → Sentry payload contains no CV content             |
-| 6   | Taste                    | Edd would send the output PDF                                                   |
-
-Verifier 1 must itself be verified by breaking it on purpose (Block 5).
-
-## 5. Environment
-
-- Stack: TanStack Start + React 19 + TS + Tailwind v4 + shadcn/ui + pdfcn(Takumi) + Zod + react-hook-form + Vitest
-- Path: `~/Projects/eddremonts86/HunterReady/`
-- Deploy: Docker → Coolify (Hetzner), per the `coolify-deploy` skill
-- Secrets: read `dev-env/env-config/.env` first; never hardcode, never echo
-- LLM: Anthropic API — Haiku 4.5 for extraction
-
-## 6. Plan
-
-15 blocks of ≤30 min in [docs/10-plan-v0.1.md](../docs/10-plan-v0.1.md).
-**Block 1 is a spike** (takumi-pdf WASM under a production build). If it fails,
-apply ADR-005's fallback before continuing — do not build on a broken render path.
-
-## 7. Risks
-
-| Risk                                                 | Mitigation                                                                                                                                                                     |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| ~~takumi-pdf WASM fails to bundle under Vite/Nitro~~ | **Materialized and fixed 2026-08-13.** The build emitted no WASM and production 500'd; `scripts/copy-wasm.mjs` resolves it, Block 1b guards it. TanStack Start stays (ADR-005) |
-| Two-column PDF extraction is unreliable              | Block 7 normalizer with column detection; measured per fixture, not assumed                                                                                                    |
-| pdfcn license unknown                                | Confirm in Block 1; blast radius bounded — takumi-pdf underneath is a normal npm package                                                                                       |
-| Ingestion eats the whole timebox                     | It is the hard part by design; Phase B ships a working render path independently                                                                                               |
-| `.doc` support inflates the image ~450 MB            | ADR-008; instrument the `.doc` share and revisit with data                                                                                                                     |
-
-## 8. Definition of archive
-
-When all 6 verifier checks pass, move this file to
-`ai-os/archive/2026-XX-XX-hunterready-v0.1.md` with a one-line summary and reset
-`specs/current_spec.md` to the no-active-Spec template.
+When a Spec's verifier checks pass, move it to `ai-os/archive/YYYY-MM-DD-hunterready-<name>.md` with a
+one-line summary and reset this file to this template. A check that cannot be run is recorded as
+**unrun**, never as passed, and carried to the roadmap's open list — that is how the v0.1 Sentry check
+was handled.

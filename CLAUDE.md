@@ -11,8 +11,10 @@ Status: **v0.1–v0.10 shipped** — ingestion, review, PDF and DOCX export, bul
 targeting, accounts with GDPR controls, cover letters, EN/ES/DA output, expiring share links, and
 writing a CV from nothing.
 See [docs/08-roadmap.md](docs/08-roadmap.md) for what each release contains and what it cost.
-Open: pricing and payments, non-Latin script coverage (CJK and RTL). Active Spec:
-[specs/current_spec.md](specs/current_spec.md).
+**What is open lives in one place**: [that file's open list](docs/08-roadmap.md#what-is-actually-open),
+maintained; the per-version sections above it are history and their old "still to do" lists are not.
+Pricing and payments is the only item blocking v1.0. There is **no active Spec** —
+[specs/current_spec.md](specs/current_spec.md) says so and says how to start the next one.
 
 **Four features shipped as schema plus documentation and nothing else**, found one after another in a
 single session: `variant-diff`, all of v0.4's targeting, all of v0.5's persistence, and `basics.photoUrl`
