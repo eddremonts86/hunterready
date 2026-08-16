@@ -51,9 +51,11 @@ import type { Resume } from '@/schema/resume'
  * The steps a reader moves through, not a free slider.
  *
  * A slider on a document invites fiddling and lands on 87%, where the type is neither fitted nor a
- * comfortable size. Six stops cover the two real intentions: see the whole page, or read the words.
+ * comfortable size. Seven stops cover the two real intentions: see the whole page, or read the words.
+ * 125% earns its place because the jump from life-size to 150% is the one a reader makes most, and
+ * skipping it forces a choice between too small and too large.
  */
-const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 3] as const
+const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3] as const
 
 const SHEET_WIDTH = 794
 const SHEET_HEIGHT = 1123
