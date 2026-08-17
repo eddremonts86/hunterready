@@ -203,7 +203,7 @@ export function Ordered({
 }: {
   resume: Resume
   fallback?: SectionOrder
-  /** How this design draws one custom section. Spacers included — see `templates/spacer.tsx`. */
+  /** How this design draws one block. Every kind goes through it — see `templates/block.tsx`. */
   custom: (section: Resume['custom'][number], index: number) => ReactNode
   children: ReactNode
 }): ReactElement {
