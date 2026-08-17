@@ -29,6 +29,13 @@ import {
 } from '@/components/ui/tooltip'
 import { formatRange } from '@/render/format'
 import { ExtraSections } from '@/components/extra-sections'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { ButtonGroup, ButtonGroupSeparator } from '@/components/ui/button-group'
 import { orderedSections, tokenFor } from '@/render/sections'
 import type { SectionName } from '@/render/sections'
 
@@ -282,9 +289,18 @@ function AddRow({ label, onClick }: { label: string; onClick: () => void }) {
  * weights in one header row.
  */
 function HeaderIcon({ shape }: { shape: 'up' | 'down' | 'bin' }) {
+  /*
+    Arrows with a stem, not chevrons — and that is the fix rather than a preference.
+
+    "Move down" was `m6 9 6 6 6-6`, which is character for character the same path as the chevron that
+    expands the section, sitting four pixels away from it in the same row at the same weight. Two
+    controls that do entirely different things drawn as the same glyph: one opens the section, one
+    moves it past its neighbour. A stem makes it an arrow — it points somewhere, which is what moving
+    is — and leaves the bare chevron to mean "unfold", which is what it means everywhere else.
+  */
   const paths = {
-    up: <path d="m6 15 6-6 6 6" />,
-    down: <path d="m6 9 6 6 6-6" />,
+    up: <path d="M12 19V5m-6 6 6-6 6 6" />,
+    down: <path d="M12 5v14m6-6-6 6-6-6" />,
     bin: <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" />,
   }
   return (
@@ -323,11 +339,14 @@ function HeaderButton({
   label,
   onClick,
   disabled,
+  grouped = false,
   children,
 }: {
   label: string
   onClick: () => void
   disabled?: boolean
+  /** Inside a `ButtonGroup`: square off the corners so the group draws the shape, not each button. */
+  grouped?: boolean
   children: React.ReactNode
 }) {
   return (
@@ -339,7 +358,11 @@ function HeaderButton({
             onClick={onClick}
             disabled={disabled}
             aria-label={label}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-ink-faint transition-colors hover:bg-ground hover:text-ink disabled:pointer-events-none disabled:opacity-25"
+            className={`flex h-7 w-7 shrink-0 items-center justify-center text-ink-faint transition-colors hover:bg-band hover:text-ink disabled:pointer-events-none disabled:opacity-25 ${
+              grouped
+                ? 'first:rounded-l-full last:rounded-r-full'
+                : 'rounded-full'
+            }`}
           >
             {children}
           </button>
@@ -404,6 +427,86 @@ function SpacerRow({
       </label>
       {actions}
     </div>
+  )
+}
+
+/**
+ * What a person can add to their CV, and the one place the list lives.
+ *
+ * ## Why a table and not two buttons
+ *
+ * Because it is about to be longer than two. `custom` started as "a section this CV has that our
+ * schema does not name", then gained a spacer, and a spacer is not a section — it is a *block*. pdfcn
+ * publishes twenty-four components and roughly half of them are things a CV could legitimately hold:
+ * a rule between sections, a page break before the references, a paragraph that belongs to no heading,
+ * a label/value pair. Each of those is another entry here and another arm of `renderBlock`, and
+ * nothing else has to move.
+ *
+ * ## What will never be in this list
+ *
+ * Tables, page headers and footers, watermarks, QR codes and charts. Not an oversight and not a
+ * roadmap item — every one of them breaks the single promise this product makes. docs/05: a table is
+ * the commonest way a CV loses its employment history in a screener; header and footer regions are
+ * discarded by many parsers, so anything only there is gone; a chart and a QR code extract as nothing
+ * at all, which makes them a claim the reader can see and the software cannot. The round-trip test
+ * would fail every one of them, and it would be right to.
+ */
+const BLOCKS = [
+  {
+    key: 'section',
+    label: 'A section',
+    hint: 'A heading and its lines — courses, volunteering, awards, references.',
+    make: () => ({ title: '', items: [''] }),
+  },
+  {
+    key: 'space',
+    label: 'Space',
+    hint: 'Room between two sections. 25px above and below, adjustable.',
+    make: () => ({ title: '', items: [], space: DEFAULT_SPACE }),
+  },
+] as const
+
+function AddMenu({
+  onAdd,
+}: {
+  onAdd: (block: Resume['custom'][number]) => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Add something to your CV"
+        className="ml-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-hairline-strong bg-ground px-3.5 text-[13px] font-semibold text-signal transition-colors hover:bg-signal-wash"
+      >
+        <svg
+          aria-hidden
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          className="h-4 w-4"
+        >
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+        Add
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-[17rem]">
+        {BLOCKS.map((block) => (
+          <DropdownMenuItem
+            key={block.key}
+            onSelect={() => onAdd(block.make())}
+            className="flex-col items-start gap-0.5"
+          >
+            <span className="text-[14px] font-semibold text-ink">
+              {block.label}
+            </span>
+            <span className="text-[12px] leading-snug text-ink-soft">
+              {block.hint}
+            </span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -670,6 +773,10 @@ export function ReviewForm({
       items: section.items.filter((_, j) => j !== item),
     })
   }
+  /** Everything the Add menu offers lands the same way: on the end, then moved into place. */
+  const addBlock = (block: Resume['custom'][number]) =>
+    onChange({ ...resume, custom: [...resume.custom, block] })
+
   const removeCustomSection = (at: number) => {
     onChange({
       ...resume,
@@ -757,28 +864,44 @@ export function ReviewForm({
     const below = nameOf(at + 1)
     return (
       <>
-        <HeaderButton
-          label={
-            above === undefined
-              ? `${what} is already first`
-              : `Move ${what} up, above ${above}`
-          }
-          disabled={at === 0}
-          onClick={() => moveSection(at, -1)}
-        >
-          <HeaderIcon shape="up" />
-        </HeaderButton>
-        <HeaderButton
-          label={
-            below === undefined
-              ? `${what} is already last`
-              : `Move ${what} down, below ${below}`
-          }
-          disabled={at === ordered.length - 1}
-          onClick={() => moveSection(at, 1)}
-        >
-          <HeaderIcon shape="down" />
-        </HeaderButton>
+        {/*
+          The pair, joined. Two floating round icons read as two unrelated buttons that happen to be
+          adjacent; a segmented control reads as one thing with two directions, which is what it is —
+          and the shared border is what says the second button is the opposite of the first rather
+          than the next in a row of four.
+        */}
+        <ButtonGroup className="mr-0.5 rounded-full border border-hairline">
+          <HeaderButton
+            grouped
+            label={
+              above === undefined
+                ? `${what} is already first`
+                : `Move ${what} up, above ${above}`
+            }
+            disabled={at === 0}
+            onClick={() => moveSection(at, -1)}
+          >
+            <HeaderIcon shape="up" />
+          </HeaderButton>
+          {/*
+            The hairline between them. `ButtonGroup` strips the left border off every child after the
+            first, on the assumption that each child brings its own — these are bare icon buttons, so
+            without this the pair is one blank pill with two glyphs floating in it.
+          */}
+          <ButtonGroupSeparator className="bg-hairline" />
+          <HeaderButton
+            grouped
+            label={
+              below === undefined
+                ? `${what} is already last`
+                : `Move ${what} down, below ${below}`
+            }
+            disabled={at === ordered.length - 1}
+            onClick={() => moveSection(at, 1)}
+          >
+            <HeaderIcon shape="down" />
+          </HeaderButton>
+        </ButtonGroup>
         {slotIsCustom(at) && (
           <HeaderButton
             label={`Remove ${what} from the CV`}
@@ -1370,6 +1493,16 @@ export function ReviewForm({
                     : `of ${total} fields we read`}
             </span>
           </span>
+          {/*
+            Adding, as one control at the top instead of two buttons at the bottom.
+
+            They were two full-width cards under a list that grows — so the way to add a section was
+            below every section you already had, which is the wrong end of a scroll and got longer the
+            more you used it. Up here it is in the same place whatever the document holds, and it is
+            one button rather than one per kind of thing, which is what makes room for the kinds that
+            are coming (see BLOCKS in this file).
+          */}
+          <AddMenu onAdd={addBlock} />
         </div>
 
         {ocr && (
@@ -1603,57 +1736,6 @@ export function ReviewForm({
         truth about their own life, and "Volunteering" missing from the upload is not a reason it
         cannot be on the document (docs/06: their own facts are not fabrication).
       */}
-        {/*
-        Stacked, not side by side. They were a row, and the row was wrong for the place it lives: this
-        panel is resizable and its usual width is around 400px, where two buttons carrying a label and
-        a description each wrap "+ Add a section" onto three lines. A media query cannot see a panel's
-        width, only the window's, so the row looked right at every breakpoint and broken in the app.
-      */}
-        <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={() =>
-              onChange({
-                ...resume,
-                custom: [...resume.custom, { title: '', items: [''] }],
-              })
-            }
-            className="card flex w-full items-center justify-center gap-2 px-4 py-3 text-[14px] font-semibold text-signal transition-colors hover:bg-signal-wash"
-          >
-            + Add a section
-            <span className="text-[12px] font-normal text-ink-soft">
-              courses, volunteering, awards…
-            </span>
-          </button>
-          {/*
-          Room, as a thing you add rather than a setting you find.
-
-          It goes on the end and is then moved into place, which is the same gesture as adding a
-          section — the alternative was a "space above" control on every section, and that is eleven
-          new fields to express what one movable object expresses once. `items` stays an empty array
-          rather than being absent: the schema gives it a default, and a spacer that later loses its
-          `space` should degrade into an empty section, not an invalid one.
-        */}
-          <button
-            type="button"
-            onClick={() =>
-              onChange({
-                ...resume,
-                custom: [
-                  ...resume.custom,
-                  { title: '', items: [], space: DEFAULT_SPACE },
-                ],
-              })
-            }
-            className="card flex w-full items-center justify-center gap-2 px-4 py-3 text-[14px] font-semibold text-signal transition-colors hover:bg-signal-wash"
-          >
-            + Add space
-            <span className="text-[12px] font-normal text-ink-soft">
-              between two sections
-            </span>
-          </button>
-        </div>
-
         <p className="text-meta text-ink-soft">
           Marked <span className="font-semibold text-caution">check</span> means
           we were under {Math.round(CONFIDENCE_REVIEW_THRESHOLD * 100)}% sure we
