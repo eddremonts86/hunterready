@@ -30,6 +30,7 @@ function displayName(label: string): string {
   if (host.endsWith('minimax.io') || host.endsWith('minimaxi.com')) {
     return 'MiniMax'
   }
+  if (host.endsWith('deepseek.com')) return 'DeepSeek'
   if (host.endsWith('openai.com')) return 'OpenAI'
   return host
 }

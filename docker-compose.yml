@@ -53,6 +53,14 @@ services:
       MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
       MINIMAX_BASE_URL: ${MINIMAX_BASE_URL:-}
       MINIMAX_MODEL: ${MINIMAX_MODEL:-}
+      # DeepSeek, alongside MiniMax so the two can be measured on the same CVs rather than by
+      # swapping a credential in and out — see `HR_PROVIDER` in src/structure/provider.ts.
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
+      # Which one answers when several are configured. Unset, the resolution order in provider.ts
+      # applies and nothing changes for an existing deployment.
+      HR_PROVIDER: ${HR_PROVIDER:-}
       # Coolify's convention for a compose stack: `SERVICE_FQDN_<SERVICE>_<PORT>` tells its proxy which
       # container and port back this domain. It has to be declared **on the service**, not only as a
       # stack-level variable — with it missing, the deploy reports `running:healthy` (it is) while

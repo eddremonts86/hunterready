@@ -237,7 +237,12 @@ export async function extractResume(
           screen has nothing to report until the answer has already landed. `ask` climbs down to a plain
           streamed call, then an unstreamed one, if the provider will not have it.
         */
-        { signal: options.signal, onNote, reasoning: true },
+        {
+          signal: options.signal,
+          onNote,
+          reasoning: true,
+          ...(provider.forcesThinking === true ? { forcesThinking: true } : {}),
+        },
       )
     } catch (error) {
       /**

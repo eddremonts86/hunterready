@@ -79,6 +79,15 @@ const noReasoning = new Set<string>()
 
 export interface AskOptions {
   signal?: AbortSignal
+  /**
+   * The provider reasons by default and will not take a forced tool call while it does.
+   *
+   * Every rung then carries `thinking: {type:'disabled'}`, and the reasoning rung is not attempted —
+   * see `Provider.forcesThinking`. Without this, DeepSeek answers 400 to all three rungs and every
+   * upload silently degrades to the rule engine, which is exactly the failure this ladder exists to
+   * prevent and would have caused instead.
+   */
+  forcesThinking?: boolean
   /** Where the narration goes. Omitted, nothing is watched and nothing is emitted. */
   onNote?: NoteFn
   /** Field names that mean a section under another name — `REFINE_ALIASES` for the private path. */
@@ -100,19 +109,29 @@ export async function ask(
     options.reasoning === true &&
     onNote !== undefined &&
     narrationWanted() &&
+    options.forcesThinking !== true &&
     !noReasoning.has(params.model)
+
+  // Silence is the price of the forced tool call on this provider, and the forced tool call is ADR-001.
+  const base: typeof params =
+    options.forcesThinking === true
+      ? { ...params, thinking: { type: 'disabled' } }
+      : params
 
   const rungs: Array<{ params: typeof params; streamed: boolean }> = []
   if (wantsReasoning) {
     rungs.push({
       params: {
-        ...params,
+        ...base,
         thinking: { type: 'enabled', budget_tokens: budget() },
       },
       streamed: true,
     })
   }
-  rungs.push({ params, streamed: true }, { params, streamed: false })
+  rungs.push(
+    { params: base, streamed: true },
+    { params: base, streamed: false },
+  )
 
   let last: unknown
   for (const [index, rung] of rungs.entries()) {
