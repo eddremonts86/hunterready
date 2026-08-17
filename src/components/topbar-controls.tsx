@@ -224,7 +224,15 @@ export function ModelMenu({
                 aria-pressed={chosen?.id === p.id}
                 className="choice flex-col items-start gap-1 px-3.5 py-3 text-left"
               >
-                <span className="text-[14px] font-semibold">{p.name}</span>
+                {/*
+                  Tagged, because "Our own server" directly above says "Free, always" and these two
+                  are the ones that will not be. Without the tag the only priced thing in the list is
+                  the one that is permanently free, which reads as the opposite of the truth.
+                */}
+                <span className="flex items-center gap-2">
+                  <span className="text-[14px] font-semibold">{p.name}</span>
+                  <ProTag />
+                </span>
                 <span className="text-[12px] leading-relaxed text-ink-soft">
                   {`Its text goes to ${p.name} and nowhere else; we keep no copy.`}
                 </span>

@@ -486,6 +486,7 @@ export function ProcessingChoice({
       label: string
       hint?: string
       disabled?: boolean
+      pro?: boolean
     }>
     value: string
     onChange: (id: string) => void
@@ -524,10 +525,17 @@ export function ProcessingChoice({
             no default marked and no "faster" badge, because a nudge towards one company is a nudge
             about where somebody's employment history goes.
           */
+          /*
+            Tagged Pro, and the tag is the honest half of beta. The gate is the first screen anybody
+            meets, and it is the one place where "Our own server ... Free, always" sits next to two
+            options that are free only for now. Untagged, the list would teach the wrong thing at the
+            worst moment.
+          */
           ...providers.map((p) => ({
             id: p.id,
             label: p.name,
-            hint: `The larger model. Its text goes to ${p.name} and nowhere else; we keep no copy.`,
+            pro: true,
+            hint: `The larger model. Its text goes to ${p.name} and nowhere else; we keep no copy. Free for everyone while we are in beta.`,
           })),
           /*
             Kept for the visitor who has no plan: a locked option that says what it would give them.

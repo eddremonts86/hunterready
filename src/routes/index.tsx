@@ -977,6 +977,8 @@ function Segmented<T extends string>({
     label: string
     hint?: string
     disabled?: boolean
+    /** A paid capability. Shown whether or not the option is currently usable. */
+    pro?: boolean
   }>
   value: T
   onChange: (id: T) => void
@@ -1023,7 +1025,15 @@ function Segmented<T extends string>({
                 onChange(option.id)
               }}
             >
-              {option.label}
+              {/*
+                The tag rides inside the segment rather than beside the legend, because the tier is a
+                fact about one option and not about the control: "Our own server" says "Free, always"
+                and the two companies next to it will not be.
+              */}
+              <span className="flex items-center gap-1.5">
+                {option.label}
+                {option.pro === true && <ProTag subtle />}
+              </span>
             </button>
           )
         })}
@@ -3833,14 +3843,29 @@ function HunterReady() {
                   {panel === 'job' && (
                     <div className="card flex flex-col gap-3 p-4">
                       <div className="flex flex-col gap-1">
-                        <h2 className="text-[15px] font-semibold text-ink">
+                        {/*
+                          Tagged, and the sentence under it has to be exact, because `/api/target`
+                          does **not** refuse without the plan — it falls back to `resolveLocalProvider`
+                          like rewriting and translation do. What is Pro here is the larger model
+                          reading the advert, not the tab. "Pro" alone over a feature that works
+                          without Pro would be the page overstating its own paywall, which is the one
+                          direction this product cannot afford to be wrong in.
+                        */}
+                        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
                           Applying for something specific?
+                          <ProTag />
                         </h2>
                         <p className="text-[13px] leading-relaxed text-ink-soft">
                           Paste the advert and we will show you which of their
                           requirements your CV already answers, which are
                           buried, and which are missing. We never add one you
                           have not claimed.
+                        </p>
+                        <p className="mt-1 text-meta leading-relaxed text-ink-soft">
+                          Reading an advert well is what the larger model is
+                          for, and that model is Pro. It still runs on our own
+                          server without it. Free for everyone while we are in
+                          beta.
                         </p>
                       </div>
                       <button

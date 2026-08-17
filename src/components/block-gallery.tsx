@@ -44,6 +44,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { PRO_IN_BETA, ProTag } from '@/components/pro-tag'
 import { BLOCK_SPECS } from '@/render/blocks'
 import type { BlockSpec } from '@/render/blocks'
 import type { BlockKind, Resume } from '@/schema/resume'
@@ -393,14 +394,27 @@ export function BlockGallery({
               <section key={group.id} className="flex flex-col gap-3">
                 <div className="flex flex-col gap-0.5">
                   <h3
-                    className={`text-[13px] font-semibold ${
+                    className={`flex items-center gap-2 text-[13px] font-semibold ${
                       group.id === 'risky' ? 'text-caution' : 'text-ink'
                     }`}
                   >
                     {group.heading}
+                    {/*
+                      Pro on this group and only this group. The free tier is a CV that parses; the
+                      eight here are the document features that go beyond one, which makes them the
+                      natural paid half and leaves the guarantee on the free side rather than behind
+                      the till.
+
+                      The tag sits after a heading in Caution and that pairing is deliberate but odd,
+                      so it is worth naming: this group is a warning *and* a tier, and the two facts
+                      are independent. Caution says what it costs your document. Pro says what it
+                      will cost you. Nobody is being sold the warning.
+                    */}
+                    {group.id === 'risky' && <ProTag />}
                   </h3>
                   <p className="text-[12px] leading-relaxed text-ink-soft">
                     {group.note}
+                    {group.id === 'risky' ? ` ${PRO_IN_BETA}` : ''}
                   </p>
                 </div>
                 {/*
