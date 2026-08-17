@@ -123,15 +123,37 @@ the image and deliberately not on a laptop (ADR-012), so the `.doc` and OCR suit
 
 ## Commands
 
-**There is one dev environment and it is the container on `:3100`.** `vite dev` used to run alongside
-it on 3007; having both was worse than having one. The dev server reaches **no database and no model**
-— `/api/processing` answers with an empty body, extraction silently falls back to the rule engine, and
-Wording, translation, accounts and encryption-at-rest are all off — so a feature can look finished
-there and be broken in the only environment that runs it. It also cannot prove the render path at all
-(ADR-005). Do not start a second one.
+**Two loops, and the fast one is now safe to use.**
+
+`pnpm dev:ui` runs Vite on `:3007` with **`/api/*` proxied to the container on `:3100`**. Edit a
+component and it is on screen in about three seconds, with no image rebuild.
+
+This reverses the old rule, and the reason matters. The rule was "one dev environment, the container",
+because a bare `vite dev` reached no database and no model — `/api/processing` answered with an empty
+body, extraction fell back to the rule engine, and accounts, Wording, translation and
+encryption-at-rest were all off, so a feature could look finished there and be broken in the only
+environment that runs it. The proxy removes exactly that: every API call goes to the container, so the
+same Postgres, the same MiniMax, the same WASM renderer and the same entitlements answer. Verified —
+`/api/processing` through `:3007` returns `encryptsAtRest: true` and `provider: MiniMax`, and
+`/api/render` returns a real PDF.
+
+What the fast loop owns is the **client bundle**, which is the thing you are editing when you wonder
+why a moved button costs a rebuild.
+
+⚠️ **It does not replace the container for anything that ships.** ADR-005's failure — a green
+`vite dev`, a green `pnpm build`, and a 500 in production because Rollup never emitted the WASM —
+lived in the *build*, not in the browser. So before calling render work done, still:
 
 ```bash
-# After any source change. `--build` is the whole command; without it you restart the old image.
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build app   # or pnpm build && pnpm start
+```
+
+Iterate on `:3007`. Believe `:3100`.
+
+```bash
+pnpm dev:ui   # :3007, hot reload, real backend through the proxy — for iterating
+
+# The real thing. `--build` is the whole command; without it you restart the old image.
 docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build app
 ```
 
