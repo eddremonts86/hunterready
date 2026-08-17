@@ -71,6 +71,12 @@ import { WorkspaceSplit } from '@/components/workspace-split'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Toaster } from '@/components/ui/sonner'
 import { toast } from 'sonner'
 import { styleOf } from '@/render/themes/style'
@@ -933,6 +939,15 @@ function HunterReady() {
   const navigate = useNavigate({ from: Route.fullPath })
 
   const [loaded, setLoaded] = useState<Loaded | undefined>()
+  /**
+   * Whether the "Worth knowing" panel has been closed for the CV currently loaded.
+   *
+   * Keyed to the document rather than to the session: the remarks are about *this* file — a table
+   * flattened, headings guessed from the text — so a second upload has its own, and closing the first
+   * one must not hide them. `origin` and the name are enough to tell two loads apart without holding a
+   * copy of the document to compare against.
+   */
+  const [dismissedNotice, setDismissedNotice] = useState<string | undefined>()
   const [busy, setBusy] = useState(false)
   /**
    * The live stage list while a file is being read — polled from /api/progress against an id this
@@ -2772,6 +2787,15 @@ function HunterReady() {
   // ── Step 2: check what we read, and take the print ──────────────────────────────────────
   const toCheck = loaded.provenance.filter(needsReview).length
   /**
+   * Which document the "Worth knowing" panel is talking about.
+   *
+   * The warnings themselves are the identity: they are a fixed set of sentences the ingest produced
+   * about this file, so two loads that produced the same remarks are, for the purpose of "have I read
+   * this already", the same remarks. Cheaper and more honest than a document hash, which would bring
+   * the panel back every time somebody edited a bullet it does not mention.
+   */
+  const noticeKey = `${loaded.origin}|${loaded.warnings.join('|')}`
+  /**
    * What the document has gained since it arrived — the number the comparison is offered on.
    *
    * Computed every render rather than memoised: `diffResumes` walks two documents of a few hundred
@@ -2827,6 +2851,20 @@ function HunterReady() {
    */
   const lockedDesign =
     tierOf(templateId, themeId) === 'paid' && consent.paidDesigns !== true
+
+  /**
+   * One place that knows how to ask for a file, so the button and every item in its menu agree.
+   *
+   * The two controls used to build their argument lists separately, and they had already drifted: the
+   * PDF passed the reader's chosen fonts and colours, the Word button passed none. That was defensible
+   * while `.docx` had one fixed layout and no axes to carry — but it is the kind of difference that
+   * survives a refactor by accident, and the menu was about to add a third caller to copy it wrong.
+   */
+  const download = (format: 'pdf' | 'docx') =>
+    downloads.start(loaded.resume, templateId, themeId, format, {
+      fonts: customFonts,
+      colours: customColours,
+    })
 
   return (
     <div className="flex min-h-screen flex-col bg-band">
@@ -2960,12 +2998,44 @@ function HunterReady() {
 
                 <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-2 lg:pr-1">
                   {panel === 'check' &&
+                    dismissedNotice !== noticeKey &&
                     (loaded.warnings.length > 0 ||
                       fit.advice !== undefined) && (
-                      <Alert className="rounded-card border-caution/25 bg-caution-wash p-4">
-                        <AlertTitle className="text-[13px] font-semibold text-caution">
+                      <Alert className="relative rounded-card border-caution/25 bg-caution-wash p-4">
+                        <AlertTitle className="pr-7 text-[13px] font-semibold text-caution">
                           Worth knowing
                         </AlertTitle>
+                        {/*
+                          Dismissible, because it is a remark and not a blocker.
+
+                          It says how the file was read — a table flattened, headings guessed — which is
+                          worth knowing exactly once. Unclosable, it sits above the form for the whole
+                          session, taking the top of a panel that is one long list of things to correct
+                          and pushing the actual work down on every visit to the tab. Nothing is lost by
+                          closing it: everything it describes is visible in the fields it is describing,
+                          which are marked.
+
+                          It comes back when a different CV is loaded — `noticeDismissed` resets with
+                          `loaded` — because then it is a remark about a different document.
+                        */}
+                        <button
+                          type="button"
+                          onClick={() => setDismissedNotice(noticeKey)}
+                          aria-label="Dismiss this notice"
+                          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full text-caution/70 transition-colors hover:bg-caution/10 hover:text-caution"
+                        >
+                          <svg
+                            aria-hidden
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            className="h-4 w-4"
+                          >
+                            <path d="M6 6l12 12M18 6 6 18" />
+                          </svg>
+                        </button>
                         <AlertDescription>
                           <ul className="mt-2 flex flex-col gap-1.5">
                             {loaded.warnings.map((warning, i) => (
@@ -3524,67 +3594,82 @@ function HunterReady() {
             */}
                 <div className="flex shrink-0 flex-col gap-2 border-t border-hairline pt-3">
                   {/*
-                Disabled on a locked design rather than left to fail at the endpoint. `/api/render` is the
-                real gate — a client cannot be trusted with one — but letting somebody press a button whose
-                only possible outcome is a refusal is not respect for the gate, just a worse way to say no.
+                One button, and a menu beside it — Edd's ask, and the split is the point.
+
+                Two full-width buttons stacked said the choice was even. It is not: the PDF is what
+                almost everyone sends, and it is the one whose look they have just spent time choosing.
+                Word is for the portals that demand it. A split control puts the common case one click
+                away and the other one two, which is the true shape of the decision, and it gives back
+                the vertical space a second pill was taking from the panel above.
+
+                Disabled on a locked design rather than left to fail at the endpoint. `/api/render` is
+                the real gate — a client cannot be trusted with one — but letting somebody press a
+                button whose only possible outcome is a refusal is not respect for the gate, just a
+                worse way to say no.
               */}
-                  <button
-                    type="button"
-                    disabled={
-                      downloads.busyFormat !== undefined || lockedDesign
-                    }
-                    aria-busy={downloads.busyFormat === 'pdf'}
-                    onClick={() =>
-                      void downloads.start(
-                        loaded.resume,
-                        templateId,
-                        themeId,
-                        'pdf',
-                        {
-                          fonts: customFonts,
-                          colours: customColours,
-                        },
-                      )
-                    }
-                    className="btn btn-primary w-full px-6 py-3 text-[15px]"
-                  >
-                    {downloads.busyFormat === 'pdf' ? (
-                      <Spinner className="h-[18px] w-[18px]" />
-                    ) : (
-                      <Icon name="download" className="h-[18px] w-[18px]" />
-                    )}
-                    {downloads.busyFormat === 'pdf'
-                      ? 'Building your PDF…'
-                      : 'Download the PDF'}
-                  </button>
-                  {/*
-                Word, beside the PDF rather than hidden behind a menu — v0.6. Many ATS portals require or
-                prefer `.docx`, and several parse it better than any PDF. It stays the quiet button: the PDF
-                is what most people send and the one whose look they just chose.
-              */}
-                  <button
-                    type="button"
-                    disabled={
-                      downloads.busyFormat !== undefined || lockedDesign
-                    }
-                    aria-busy={downloads.busyFormat === 'docx'}
-                    onClick={() =>
-                      void downloads.start(
-                        loaded.resume,
-                        templateId,
-                        themeId,
-                        'docx',
-                      )
-                    }
-                    title="For portals that ask for a Word file"
-                    className="btn btn-quiet w-full px-4 py-2.5 text-[14px]"
-                  >
-                    <ButtonLabel
-                      busy={downloads.busyFormat === 'docx'}
-                      idle="Word (.docx)"
-                      working="Building…"
-                    />
-                  </button>
+                  <div className="flex w-full items-stretch gap-px">
+                    <button
+                      type="button"
+                      disabled={
+                        downloads.busyFormat !== undefined || lockedDesign
+                      }
+                      aria-busy={downloads.busyFormat === 'pdf'}
+                      onClick={() => void download('pdf')}
+                      className="btn btn-primary flex-1 rounded-r-none px-6 py-3 text-[15px]"
+                    >
+                      {downloads.busyFormat === 'pdf' ? (
+                        <Spinner className="h-[18px] w-[18px]" />
+                      ) : (
+                        <Icon name="download" className="h-[18px] w-[18px]" />
+                      )}
+                      {downloads.busyFormat === 'pdf'
+                        ? 'Building your PDF…'
+                        : 'Download the PDF'}
+                    </button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        disabled={
+                          downloads.busyFormat !== undefined || lockedDesign
+                        }
+                        aria-label="Choose another format"
+                        className="btn btn-primary rounded-l-none px-3 py-3 disabled:pointer-events-none disabled:opacity-50"
+                      >
+                        <Icon
+                          name="chevron-down"
+                          className="h-[18px] w-[18px]"
+                        />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-[17rem]">
+                        <DropdownMenuItem
+                          onSelect={() => void download('pdf')}
+                          className="flex-col items-start gap-0.5"
+                        >
+                          <span className="text-[14px] font-semibold text-ink">
+                            PDF
+                          </span>
+                          <span className="text-[12px] leading-snug text-ink-soft">
+                            The design you chose, checked by the parse test.
+                          </span>
+                        </DropdownMenuItem>
+                        {/*
+                          Word says what it is *for* rather than what it is. Nobody prefers .docx; they
+                          are told to upload one, and that is the moment this menu has to answer.
+                        */}
+                        <DropdownMenuItem
+                          onSelect={() => void download('docx')}
+                          className="flex-col items-start gap-0.5"
+                        >
+                          <span className="text-[14px] font-semibold text-ink">
+                            Word (.docx)
+                          </span>
+                          <span className="text-[12px] leading-snug text-ink-soft">
+                            For portals that ask for a Word file. One fixed
+                            layout, not the design.
+                          </span>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                   {lockedDesign && (
                     <p className="text-meta leading-relaxed text-ink-soft">
                       Pick a design marked Included to download, or keep this

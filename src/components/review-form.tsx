@@ -247,54 +247,132 @@ function AddRow({ label, onClick }: { label: string; onClick: () => void }) {
   )
 }
 
+/**
+ * A header control: move up, move down, remove.
+ *
+ * The glyphs are drawn here in the same 24-grid at the same 1.8 stroke as the bin in `RemoveRow`,
+ * because DESIGN.md allows one icon family and the bin is already a member of it. `lucide-react` is in
+ * the tree but only inside the vendored calendar, and borrowing from it here would put two stroke
+ * weights in one header row.
+ */
+function HeaderIcon({ shape }: { shape: 'up' | 'down' | 'bin' }) {
+  const paths = {
+    up: <path d="m6 15 6-6 6 6" />,
+    down: <path d="m6 9 6 6 6-6" />,
+    bin: <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" />,
+  }
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+    >
+      {paths[shape]}
+    </svg>
+  )
+}
+
+function HeaderButton({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-ink-faint transition-colors hover:bg-ground hover:text-ink disabled:pointer-events-none disabled:opacity-25"
+    >
+      {children}
+    </button>
+  )
+}
+
 function Section({
   title,
   count,
   flagged,
   children,
   defaultOpen,
+  actions,
 }: {
   title: string
   count?: number
-  flagged: boolean
+  /**
+   * How many fields in this section we were unsure about.
+   *
+   * A number rather than the "needs a look" pill it replaces. The pill said *that* something in the
+   * section wanted checking and never *how much*, so a section hiding one soft flag looked exactly
+   * like one hiding nine — and the only way to find out was to open all of them in turn, which is the
+   * work the collapsed list exists to save. Edd asked for the count in the header, and the header is
+   * where the decision about whether to open it gets made.
+   */
+  flagged: number
   children: React.ReactNode
   defaultOpen: boolean
+  /**
+   * Controls that act on the section itself, drawn beside the toggle rather than inside it.
+   *
+   * Beside, because a button inside a button is invalid HTML and browsers resolve it by guessing —
+   * usually by firing both, so "remove this section" would also toggle it open on the way out.
+   */
+  actions?: React.ReactNode
 }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
     <div className="card overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-band"
-      >
-        <span className="flex items-center gap-2">
-          <span className="text-[15px] font-semibold text-ink">{title}</span>
-          {count !== undefined && (
-            <span className="tally rounded-full bg-band px-1.5 py-0.5 text-[12px] font-semibold text-ink-soft">
-              {count}
-            </span>
-          )}
-          {flagged && (
-            <span className="rounded-full bg-caution-wash px-2 py-0.5 text-[11px] font-semibold text-caution">
-              needs a look
-            </span>
-          )}
-        </span>
-        <svg
-          aria-hidden
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className={`h-4 w-4 shrink-0 text-ink-faint transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+      <div className="flex items-center gap-1 pr-2 transition-colors hover:bg-band">
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          className="flex min-w-0 flex-1 items-center justify-between gap-3 px-4 py-3 text-left"
         >
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      </button>
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-[15px] font-semibold text-ink">
+              {title}
+            </span>
+            {count !== undefined && (
+              <span className="tally shrink-0 rounded-full bg-band px-1.5 py-0.5 text-[12px] font-semibold text-ink-soft">
+                {count}
+              </span>
+            )}
+            {flagged > 0 && (
+              <span className="shrink-0 rounded-full bg-caution-wash px-2 py-0.5 text-[11px] font-semibold text-caution">
+                {/* "1 to check", not "1 needs a look": it is the same word the panel's tally uses. */}
+                {flagged} to check
+              </span>
+            )}
+          </span>
+          <svg
+            aria-hidden
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`h-4 w-4 shrink-0 text-ink-faint transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+        {actions}
+      </div>
       {open && (
         <div className="flex flex-col gap-4 border-t border-hairline px-4 pb-4 pt-4">
           {children}
@@ -385,8 +463,17 @@ export function ReviewForm({
     () => provenance.filter(needsReview).map((p) => p.path),
     [provenance],
   )
+  /**
+   * How many fields under a section we were unsure about.
+   *
+   * The boundary is `prefix.` rather than a bare `startsWith`, which is a fix as well as a change:
+   * `custom.1` matched `custom.10` through `custom.19`, so the tenth section onwards lent its flags to
+   * the second. Nobody had eleven custom sections yet, which is the only reason it never showed.
+   */
   const sectionFlagged = (prefix: string) =>
-    flaggedPaths.some((path) => path.startsWith(prefix))
+    flaggedPaths.filter(
+      (path) => path === prefix || path.startsWith(`${prefix}.`),
+    ).length
 
   /** One path, one answer. An absent entry is not a flagged one: we said nothing about that field. */
   const isFlagged = (path: string) => {
@@ -483,6 +570,46 @@ export function ReviewForm({
       ...resume,
       custom: resume.custom.filter((_, i) => i !== at),
     })
+  }
+
+  /**
+   * Move a section up or down, and take its flags with it.
+   *
+   * The provenance paths are positional — `custom.2.items.0` means "the third section" and nothing
+   * else — so a swap that moves the rows and leaves the paths puts every "check this" marker on the
+   * wrong section. Same failure `shiftProvenance` exists for on insert and remove; this is the swap
+   * case, which is simpler because no path appears or disappears, only two indices trade places.
+   *
+   * The document follows immediately: every template renders `resume.custom` in array order, so this
+   * is the order on the page rather than a preference about the form.
+   */
+  const moveCustomSection = (at: number, by: -1 | 1) => {
+    const to = at + by
+    if (to < 0 || to >= resume.custom.length) return
+
+    const custom = [...resume.custom]
+    const moved = custom[at]
+    const displaced = custom[to]
+    if (moved === undefined || displaced === undefined) return
+    custom[at] = displaced
+    custom[to] = moved
+
+    const swap = (path: string) => {
+      for (const [from, into] of [
+        [at, to],
+        [to, at],
+      ] as const) {
+        const prefix = `custom.${from}`
+        if (path === prefix || path.startsWith(`${prefix}.`)) {
+          return `custom.${into}${path.slice(prefix.length)}`
+        }
+      }
+      return path
+    }
+    onChange(
+      { ...resume, custom },
+      provenance.map((entry) => ({ ...entry, path: swap(entry.path) })),
+    )
   }
 
   const removeRow = (
@@ -777,7 +904,7 @@ export function ReviewForm({
         title="Experience"
         count={resume.work.length}
         flagged={sectionFlagged('work')}
-        defaultOpen={authoring || sectionFlagged('work')}
+        defaultOpen={authoring || sectionFlagged('work') > 0}
       >
         {resume.work.length === 0 && (
           <p className="text-[13px] leading-relaxed text-ink-soft">
@@ -1081,6 +1208,37 @@ export function ReviewForm({
           count={section.items.length}
           flagged={sectionFlagged(`custom.${i}`)}
           defaultOpen={false}
+          /*
+            Reorder and remove, reachable without opening the section — Edd's ask, and the reason is
+            the same one behind the count beside the title: a decision about a section should not cost
+            an expand, a scroll to the bottom, and a collapse. The removal here does exactly what the
+            "Remove the … section" row inside does; it is the same action at the place you are already
+            looking when you decide to take it.
+          */
+          actions={
+            <>
+              <HeaderButton
+                label={`Move ${section.title || 'this section'} up`}
+                disabled={i === 0}
+                onClick={() => moveCustomSection(i, -1)}
+              >
+                <HeaderIcon shape="up" />
+              </HeaderButton>
+              <HeaderButton
+                label={`Move ${section.title || 'this section'} down`}
+                disabled={i === resume.custom.length - 1}
+                onClick={() => moveCustomSection(i, 1)}
+              >
+                <HeaderIcon shape="down" />
+              </HeaderButton>
+              <HeaderButton
+                label={`Remove the ${section.title || 'untitled'} section`}
+                onClick={() => removeCustomSection(i)}
+              >
+                <HeaderIcon shape="bin" />
+              </HeaderButton>
+            </>
+          }
         >
           <Field
             label="Section heading"
