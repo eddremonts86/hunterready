@@ -13,6 +13,8 @@
     "generate-routes": "tsr generate",
     "build": "vite build && node scripts/copy-assets.mjs",
     "start": "node .output/server/index.mjs",
+    "host": "vite build && node scripts/copy-assets.mjs && node scripts/dev/host.mjs",
+    "host:serve": "node scripts/dev/host.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

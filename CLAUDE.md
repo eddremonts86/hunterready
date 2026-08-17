@@ -140,19 +140,42 @@ same Postgres, the same MiniMax, the same WASM renderer and the same entitlement
 What the fast loop owns is the **client bundle**, which is the thing you are editing when you wonder
 why a moved button costs a rebuild.
 
-⚠️ **It does not replace the container for anything that ships.** ADR-005's failure — a green
+⚠️ **It does not replace a real build for anything that ships.** ADR-005's failure — a green
 `vite dev`, a green `pnpm build`, and a 500 in production because Rollup never emitted the WASM —
-lived in the _build_, not in the browser. So before calling render work done, still:
+lived in the _build_, not in the browser.
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build app   # or pnpm build && pnpm start
-```
+**But that build does not have to be the container, and usually should not be.** `pnpm host` builds
+and serves on `:3011` against the same Postgres and the same models, and it is the honest answer to
+"why is Docker in this loop at all". Measured on this Mac:
 
-Iterate on `:3007`. Believe `:3100`.
+|                          | `pnpm host` | `pnpm app`                                                    |
+| ------------------------ | ----------- | ------------------------------------------------------------- |
+| build                    | seconds     | 2 min warm, **10+ min** when the apt layer falls out of cache |
+| `checks.wasm` / 60 fonts | ✔           | ✔                                                             |
+| `encryptsAtRest: true`   | ✔           | ✔                                                             |
+| DeepSeek + MiniMax       | ✔           | ✔                                                             |
+| `/api/render` PDF        | ✔ 19,742 B  | ✔ 19,742 B (identical)                                        |
+| **LibreOffice (`.doc`)** | ✖           | ✔                                                             |
+| **Tesseract (OCR)**      | ✖           | ✔                                                             |
+| commit stamp             | `unknown`   | real                                                          |
+
+Three container rebuilds in one session each spent ten minutes re-downloading LibreOffice, poppler
+and three Tesseract language packs before compiling a line of the app, and not one of those rebuilds
+was for a reason to do with the code.
+
+**So: `pnpm host` is the default way to believe a build. Reach for `pnpm app` for exactly three
+things** — `.doc` ingestion, OCR of a scan, and the pre-release check that the shipping image itself
+is sound. `pnpm test:docker` covers the first two in CI form.
+
+`pnpm host` needs `db` and `llm` up; they are separate services and cheap:
+`docker compose -f docker-compose.yml -f docker-compose.local.yml up -d db llm`.
+
+Iterate on `:3007`. Believe `:3011`. Ship what `:3100` served.
 
 ```bash
 pnpm dev:ui   # :3007, hot reload, real backend through the proxy — for iterating
-pnpm app      # rebuild and restart the container, stamped with the current commit
+pnpm host     # :3011, real build, real database, real models — for believing
+pnpm app      # :3100, the shipping image — for .doc, OCR, and the last check before a release
 pnpm stale    # is :3100 serving this code, or an older image?
 ```
 

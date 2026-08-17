@@ -8,6 +8,14 @@
       "url": "http://localhost:3100"
     },
     {
+      "//": "The real build, without the image. Same Postgres, same models, same WASM renderer, same fonts, and `/api/render` returns a byte-identical PDF. What it does NOT have is LibreOffice and Tesseract, so `.doc` ingestion and OCR fail here and only here (ADR-012). This is the default way to trust a build; the container above is for those two paths and for the last check before a release.",
+      "//2": "Needs db and llm up: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d db llm",
+      "name": "hunterready-host",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["host"],
+      "port": 3011
+    },
+    {
       "//": "The fast loop, restored — and the reason the old note here said 'do not add them back' no longer holds. That entry was removed when a bare `vite dev` reached no database and no model, so a feature could look finished on 3007 and be broken in the only environment that runs it. `pnpm dev:ui` proxies every `/api/*` call to the container on 3100, so the same Postgres, the same model, the same WASM renderer and the same entitlements answer. CLAUDE.md documents the reversal and the evidence for it.",
       "//2": "What this owns is the CLIENT BUNDLE: a component edit is on screen in about three seconds with no image rebuild. It does not own the build, so it cannot retire the entry above. Iterate here, believe 3100.",
       "//3": "Needs the container up first, or every API call 502s.",
