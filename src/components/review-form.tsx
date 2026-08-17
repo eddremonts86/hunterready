@@ -522,16 +522,39 @@ function Section({
 }
 
 /** A row lifted out of the CV, kept whole so undo restores it exactly rather than approximately. */
-type Removed = {
-  /** Which list, as a provenance prefix: `work`, `education`, `skills`. */
-  list: 'work' | 'education' | 'skills'
-  at: number
-  row: unknown
-  /** The flags that belonged to it. Restored with it, or the undo would quietly launder the row. */
-  provenance: Array<FieldProvenance>
-  /** What to call it in the undo strip. Never a field we are unsure we read — see `describe`. */
-  label: string
-}
+/**
+ * A row lifted out of the CV, or a whole section, kept whole so undo restores it exactly.
+ *
+ * The section case exists because Edd's rule is one line and I got it wrong twice: **"You" is the only
+ * thing that cannot be moved or removed.** Everything else follows the same pattern, including the
+ * sections that come from the schema rather than from a person adding them — Experience, Education,
+ * Skills and the rest. A CV with no education section is a real CV, and telling somebody they may not
+ * remove one because our type system has a field for it is the tool arguing with its user.
+ *
+ * Removing one clears its list and keeps the contents here. That is what makes it safe to offer with no
+ * confirmation, which is CLAUDE.md's rule: nothing here is irreversible, and nothing warns that it is.
+ */
+type Removed =
+  | {
+      kind: 'row'
+      /** Which list, as a provenance prefix: `work`, `education`, `skills`. */
+      list: 'work' | 'education' | 'skills'
+      at: number
+      row: unknown
+      /** The flags that belonged to it. Restored with it, or undo would quietly launder the row. */
+      provenance: Array<FieldProvenance>
+      /** What to call it in the undo strip. Never a field we are unsure we read — see `describe`. */
+      label: string
+    }
+  | {
+      kind: 'section'
+      /** The schema list that was emptied. */
+      list: SectionName
+      /** Everything it held, in order. */
+      items: Array<unknown>
+      provenance: Array<FieldProvenance>
+      label: string
+    }
 
 export function ReviewForm({
   resume,
@@ -831,23 +854,28 @@ export function ReviewForm({
           </HeaderButton>
         </ButtonGroup>
         {/*
-          The bin, or the space where a bin would be.
+          The bin, on every section here.
 
-          A section that came from the CV's own structure cannot be deleted here — Experience is a
-          field of the schema, not a block somebody added — so its rail holds an empty slot rather than
-          closing up. That is what keeps every arrow in the list on the same x; the alternative moves
-          the pair right on eight rows out of eleven and reads as a layout bug.
+          Twice I reserved an empty slot for the named ones on the argument that Experience is a field
+          of the schema rather than a block somebody added. Edd's rule does not have that clause and
+          does not need one: **"You" is the only thing that cannot be moved or removed.** A CV with no
+          education section is a real CV, and refusing to remove one because our types have a field for
+          it is the tool arguing with the person whose document it is.
+
+          Disabled when the section is already empty — there is nothing to take, and a bin that does
+          nothing is the same lie as a bin that is missing.
         */}
-        {slotIsCustom(at) ? (
-          <HeaderButton
-            label={`Remove ${what} from the CV`}
-            onClick={() => removeSlot(at)}
-          >
-            <HeaderIcon shape="bin" />
-          </HeaderButton>
-        ) : (
-          <span aria-hidden className="h-7 w-7 shrink-0" />
-        )}
+        <HeaderButton
+          label={
+            emptyAt(at)
+              ? `${what} is already empty`
+              : `Remove ${what} from the CV`
+          }
+          disabled={emptyAt(at)}
+          onClick={() => removeAt(at, what)}
+        >
+          <HeaderIcon shape="bin" />
+        </HeaderButton>
       </>
     )
   }
@@ -901,12 +929,23 @@ export function ReviewForm({
     onChange({ ...named, sectionOrder: [...new Set(tokens)] })
   }
 
-  const slotIsCustom = (at: number) => ordered[at]?.kind === 'custom'
-
-  const removeSlot = (at: number) => {
+  /** Nothing to remove: a named list with no entries. A custom block always has itself to remove. */
+  const emptyAt = (at: number) => {
     const slot = ordered[at]
-    if (slot === undefined || slot.kind !== 'custom') return
-    removeCustomSection(slot.index)
+    if (slot === undefined) return true
+    if (slot.kind === 'custom') return false
+    return (resume[slot.name] as Array<unknown>).length === 0
+  }
+
+  /** One bin, two meanings: drop the block, or empty the list. Both land in the same undo strip. */
+  const removeAt = (at: number, what: string) => {
+    const slot = ordered[at]
+    if (slot === undefined) return
+    if (slot.kind === 'custom') {
+      removeCustomSection(slot.index)
+      return
+    }
+    removeSection(slot.name, what)
   }
 
   const removeRow = (
@@ -918,6 +957,7 @@ export function ReviewForm({
     const [row] = rows.splice(at, 1)
     const prefix = `${list}.${at}.`
     setRemoved({
+      kind: 'row',
       list,
       at,
       row,
@@ -932,8 +972,45 @@ export function ReviewForm({
     )
   }
 
+  /**
+   * Empty a whole section, keeping what it held so the undo strip can put it back.
+   *
+   * Its provenance goes with it, for the same reason a single row's does: restoring the content and
+   * not the flags would hand back a section that looks more certain than it was.
+   */
+  const removeSection = (list: SectionName, label: string) => {
+    const items = resume[list] as Array<unknown>
+    if (items.length === 0) return
+    const prefix = `${list}.`
+    setRemoved({
+      kind: 'section',
+      list,
+      items,
+      provenance: provenance.filter((entry) => entry.path.startsWith(prefix)),
+      label,
+    })
+    onChange(
+      { ...resume, [list]: [] },
+      provenance.filter((entry) => !entry.path.startsWith(prefix)),
+      // The rewrite suggestions are addressed by {workIndex, highlightIndex}; emptying work invalidates
+      // every one of them, which is what `work-cleared` says.
+      list === 'work' ? { kind: 'work-cleared' } : undefined,
+    )
+  }
+
   const undoRemove = () => {
     if (removed === undefined) return
+    if (removed.kind === 'section') {
+      onChange(
+        { ...resume, [removed.list]: removed.items },
+        [...provenance, ...removed.provenance],
+        // No edit descriptor on the way back: the suggestions were dropped when the section went, and
+        // re-creating coordinates for advice that no longer exists would point it at the wrong bullets.
+        undefined,
+      )
+      setRemoved(undefined)
+      return
+    }
     const rows = [...(resume[removed.list] as Array<unknown>)]
     // Clamped: the list may be shorter than it was if the parent changed underneath us.
     const at = Math.min(removed.at, rows.length)

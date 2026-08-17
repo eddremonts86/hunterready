@@ -25,6 +25,16 @@ export type StructuralEdit =
   | { kind: 'work-row'; at: number; delta: 1 | -1 }
   /** A bullet inserted or removed at `at` inside `resume.work[workIndex]`. */
   | { kind: 'work-bullet'; workIndex: number; at: number; delta: 1 | -1 }
+  /**
+   * The whole experience section emptied, or put back by an undo.
+   *
+   * Not expressible as a run of `work-row` edits: the caller applies one edit per change, and a list
+   * of N removals would have to be replayed in the right order against coordinates that move under
+   * each other. This says the thing that actually happened. It arrived when the panel learned to
+   * remove a whole section — "You is the only one that cannot be removed" — and every open suggestion
+   * about a job that is no longer there has to go with it.
+   */
+  | { kind: 'work-cleared' }
 
 interface Target {
   workIndex: number
@@ -41,6 +51,13 @@ export function shiftTarget<T extends Target>(
   entry: T,
   edit: StructuralEdit,
 ): T | undefined {
+  /*
+    Everything, dropped. Advice about a job the person deleted is advice about nothing, and that is as
+    true for the whole list at once as it is for one row. An undo restores the rows; it does not
+    restore the suggestions, because they were about a document that has been through two edits since.
+  */
+  if (edit.kind === 'work-cleared') return undefined
+
   if (edit.kind === 'work-row') {
     if (entry.workIndex < edit.at) return entry
     if (edit.delta === -1 && entry.workIndex === edit.at) return undefined
