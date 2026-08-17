@@ -28,6 +28,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { formatRange } from '@/render/format'
+import { ExtraSections } from '@/components/extra-sections'
 
 /** Matches the schema's ceiling. A gap taller than this is a blank page nobody meant to send. */
 const MAX_SPACE = 240
@@ -1340,6 +1341,29 @@ export function ReviewForm({
             onClick={() => addRow('skills', { category: '', items: [] })}
           />
         </Section>
+
+        {/*
+        The six lists the document prints and this panel used to skip — certifications, languages,
+        projects, volunteering, awards, publications. Described in one table rather than written out
+        six times, because writing them out is how four got done and six got forgotten. See
+        `extra-sections.tsx`; the chrome is handed over so the two files cannot drift on styling.
+      */}
+        <ExtraSections
+          resume={resume}
+          onChange={(next) => onChange(next)}
+          authoring={authoring}
+          chrome={{
+            index,
+            fieldClass,
+            sectionFlagged,
+            Section,
+            Field,
+            AddRow,
+            RemoveRow,
+            LineBubble,
+            AutoTextarea,
+          }}
+        />
 
         {/*
         The dynamic sections — whatever this CV carries that the fixed groups do not.

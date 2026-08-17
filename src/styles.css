@@ -793,8 +793,42 @@ body {
   --tw-ring-offset-shadow: 0 0 #0000 !important;
 }
 
-:focus-visible {
-  outline-style: solid !important;
+/**
+ * A field's focus is its border. Nothing else draws a second shape around it.
+ *
+ * This is the third pass at Edd's "quita los rings" and the first one that finds the real culprit. The
+ * ring went; the *outline* stayed, at `outline-offset: 2px`, so a focused input still wore two blue
+ * rounded rectangles — the border at the edge of the box and the outline floating two pixels outside
+ * it. On a screen that is nothing but stacked fields that reads as a rendering fault.
+ *
+ * Suppressed only for things you type into. Buttons, links, tabs and the segmented controls keep the
+ * outline, because they have no border to recolour and would otherwise have no focus indicator at all.
+ * A field does: `.field:focus` takes the border from Hairline Strong to Signal, which is a 7.8:1 change
+ * on white and satisfies WCAG 2.4.7 on its own.
+ */
+:is(input, textarea, select, [contenteditable='true']):focus-visible {
+  outline: none;
+}
+
+/**
+ * Tailwind 4 changed the default border colour to `currentColor`, and this stylesheet never noticed.
+ *
+ * shadcn's own template ships `@layer base { * { @apply border-border } }` and this project's did not,
+ * because the tokens were adapted by hand (see the alias block in `@theme`). So every vendored
+ * component with a bare `border` — the button group around the page and zoom controls, the popovers,
+ * the command palette — drew its border in **the current text colour**: Ink Soft at 5.96:1 where a
+ * 1.4:1 hairline was meant. That is the heavy grey box Edd kept seeing inside the rounded pills and
+ * calling a ring. It was never a ring; it was a hairline four times too dark.
+ *
+ * In `@layer base` so any explicit `border-<colour>` utility still wins, which is how the alert's
+ * caution border and the tab strip's Signal Edge survive this untouched.
+ */
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
+  }
 }
 
 /**

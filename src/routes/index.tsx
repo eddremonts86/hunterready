@@ -3595,7 +3595,19 @@ function HunterReady() {
               Outside the scrolling panel, so the last action never scrolls out of reach, and a full-width
               primary pill because DESIGN.md is right that it reads as one decisive action.
             */}
-                <div className="flex shrink-0 flex-col gap-2 border-t border-hairline pt-3">
+                {/*
+                  Pinned to the bottom, and `sticky` rather than `fixed`.
+
+                  It was already outside the scrolling panel, which pins it whenever the workspace owns
+                  the scroll — and on a short viewport the *page* owns the scroll instead, so the last
+                  action slid away under the fold exactly when the column was longest. `sticky bottom-0`
+                  holds it in both cases without taking it out of the flow: `fixed` would need a matching
+                  spacer under the column or the final section would sit behind it forever.
+
+                  The background is opaque and the shadow is DESIGN.md's elevation, saying the true
+                  thing — this surface is above the one scrolling past beneath it.
+                */}
+                <div className="lift sticky bottom-0 z-10 -mx-1 flex shrink-0 flex-col gap-2 border-t border-hairline bg-band px-1 pb-1 pt-3">
                   {/*
                 One button, and a menu beside it — Edd's ask, and the split is the point.
 
