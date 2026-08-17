@@ -39,6 +39,8 @@ import { AdvertForm, TargetPanel } from '@/components/target-panel'
 import { BeforeAfter } from '@/components/before-after'
 import { DesignGallery } from '@/components/design-gallery'
 import { ButtonLabel, Spinner } from '@/components/working'
+import { ModelNotes } from '@/components/model-notes'
+import type { ModelNote } from '@/components/model-notes'
 import { DownloadFailed, saveRendered } from '@/lib/download'
 import {
   clearWorkingCopy,
@@ -99,6 +101,22 @@ function Workspace() {
       <Toaster position="bottom-right" closeButton />
     </>
   )
+}
+
+/**
+ * One row of the narrated wait, exactly as `/api/progress` sends it.
+ *
+ * Declared rather than imported from `src/lib/progress.ts` because that module owns a server-side Map;
+ * a type-only import would be erased, but the shape is the wire contract between two halves of the app
+ * and writing it out is what makes that contract visible from this side.
+ */
+interface Stage {
+  label: string
+  detail?: string
+  done: boolean
+  at: number
+  /** Present only on the model call: which section of the answer is being written. */
+  notes?: Array<ModelNote>
 }
 
 interface Loaded {
@@ -921,9 +939,7 @@ function HunterReady() {
    * client minted. What turns a five-minute spinner into a narrated wait (task: Edd's complaint that
    * the user "no tiene puta idea de lo que está pasando").
    */
-  const [stages, setStages] = useState<
-    Array<{ label: string; detail?: string; done: boolean; at: number }>
-  >([])
+  const [stages, setStages] = useState<Array<Stage>>([])
   const progressIdRef = useRef<string | undefined>(undefined)
   const [error, setError] = useState<string | undefined>()
   const consent = useProcessingConsent()
@@ -1198,14 +1214,7 @@ function HunterReady() {
         )
         .then((payload) => {
           if (Array.isArray(payload.steps)) {
-            setStages(
-              payload.steps as Array<{
-                label: string
-                detail?: string
-                done: boolean
-                at: number
-              }>,
-            )
+            setStages(payload.steps as Array<Stage>)
           }
         })
         .catch(() => {
@@ -1791,6 +1800,14 @@ function HunterReady() {
                         <span className="text-meta text-ink-soft">
                           {stage.detail}
                         </span>
+                      )}
+                      {/*
+                        The long stage narrating itself. Only the model call carries notes, and only
+                        while it streams, so every other row is unchanged — including on the screens
+                        that render this same list for a translation or a cover letter.
+                      */}
+                      {stage.notes !== undefined && (
+                        <ModelNotes notes={stage.notes} />
                       )}
                     </span>
 

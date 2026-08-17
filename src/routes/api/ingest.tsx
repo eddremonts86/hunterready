@@ -13,7 +13,7 @@ import { extractResume } from '@/structure/extract'
 import { resolveLocalProvider, resolveProvider } from '@/structure/provider'
 import { sanityWarnings } from '@/structure/sanity'
 import { checkRateLimit, clientKey } from '@/lib/rate-limit'
-import { progressEnd, progressReporter } from '@/lib/progress'
+import { progressEnd, progressNoter, progressReporter } from '@/lib/progress'
 import { errorEvent, event, requestId } from '@/lib/log'
 import { mayUseThirdParty } from '@/lib/entitlements'
 
@@ -138,6 +138,9 @@ export const Route = createFileRoute('/api/ingest')({
         const extracted = await extractResume(ingested.normalized.text, {
           useProvider: mayUseProvider,
           onProgress,
+          // The long stage narrating itself: which section of the answer the model is writing, as it
+          // streams. Keys and counts — see `src/structure/narrate.ts` for why it can never be more.
+          onNote: progressNoter(progressId),
         })
         if (!extracted.ok) {
           if (progressId !== undefined) progressEnd(progressId)

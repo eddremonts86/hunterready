@@ -17,12 +17,27 @@
  * are numbers. There is deliberately no API for putting free text in, so the next contributor cannot
  * accidentally narrate a phone number.
  *
+ * `progressNote` extends that without weakening it. It is the sub-narration of the one long stage — the
+ * model writing its answer, section by section — and it takes a **`NarrationKey`, not a string**: a
+ * closed union of the field names in our own schema. The English never travels; the client looks it up
+ * in `NARRATION`. So the guarantee above is still enforced by the compiler rather than by care.
+ *
  * ## Why polling and not SSE
  *
  * The upload is one long POST the client already holds open; a second streaming response would mean two
  * concurrent connections through every proxy between a phone and this server. A 700ms GET against an
  * in-memory map is boring, survives every proxy, and disappears when the POST resolves. Boring wins.
  */
+
+import type { NarrationKey } from '@/structure/narrate'
+
+/** One section of the model's answer, as it is written. Key and count — see `narrate.ts`. */
+export interface ProgressNote {
+  key: NarrationKey
+  count: number
+  /** True once the model has moved on to another section. */
+  done: boolean
+}
 
 export interface ProgressStep {
   /** A fixed English stage label from this repo. The client localises; the wire stays English. */
@@ -32,6 +47,8 @@ export interface ProgressStep {
   done: boolean
   /** Epoch ms when the step started, so the client can show a truthful elapsed time. */
   at: number
+  /** What the model has written so far, within this step. Absent on steps that do not narrate. */
+  notes?: Array<ProgressNote>
 }
 
 interface ProgressState {
@@ -90,6 +107,9 @@ export function progressStep(id: string, label: string, detail?: string): void {
   if (last !== undefined && last.label === label && !last.done) {
     const attempt = Number(/attempt (\d+)/.exec(last.detail ?? '')?.[1] ?? '1')
     last.detail = detail ?? `attempt ${attempt + 1}`
+    // A retry writes its answer again from the top, so the sub-narration starts over with it. Leaving
+    // the old notes in place would show a second run appearing to resume where the first stopped.
+    delete last.notes
     state.updatedAt = Date.now()
     store.set(id, state)
     return
@@ -106,6 +126,50 @@ export function progressStep(id: string, label: string, detail?: string): void {
   store.set(id, state)
 }
 
+/**
+ * Record that the model is now working on a given section of the CV.
+ *
+ * Attaches to the **current** step rather than creating one: "reading your CV and structuring it" is
+ * one thing happening, and splitting it into eleven rows would make the list jump under the reader
+ * every second or two. The notes are a sub-list inside that row.
+ *
+ * ## Revisiting a section moves the marker, it does not add a row
+ *
+ * Reasoning does not proceed in order. A model works out the job titles, wonders about a date, goes
+ * back to the employer — and later writes all of it out again in schema order, which reports the same
+ * sections a second time. Appending each report would draw a growing, repeating list that tells the
+ * reader nothing about where the work is.
+ *
+ * So the list is the sections *seen*, in first-seen order, with exactly one marked open. Coming back to
+ * one lights its existing row again. `done` therefore means "not what it is on right now" rather than
+ * "finished forever", which is the honest reading when the thing being described is attention.
+ *
+ * Counts only ever climb, so the reasoning pass (which has no counts) cannot blank a number the writing
+ * pass has already put there.
+ *
+ * A repair round clears the notes in `progressStep`, so a retried extraction narrates itself from the
+ * top rather than appearing to carry on from where the failed attempt stopped.
+ */
+export function progressNote(
+  id: string,
+  key: NarrationKey,
+  count: number,
+): void {
+  const state = store.get(id)
+  const step = state?.steps[state.steps.length - 1]
+  if (state === undefined || step === undefined || step.done) return
+  const notes = step.notes ?? (step.notes = [])
+  const seen = notes.find((note) => note.key === key)
+  for (const note of notes) note.done = true
+  if (seen === undefined) {
+    notes.push({ key, count, done: false })
+  } else {
+    seen.count = Math.max(seen.count, count)
+    seen.done = false
+  }
+  state.updatedAt = Date.now()
+}
+
 /** Update the current step's detail — the OCR page counter ticking, nothing else changing. */
 export function progressDetail(id: string, detail: string): void {
   const state = store.get(id)
@@ -119,7 +183,10 @@ export function progressDetail(id: string, detail: string): void {
 export function progressEnd(id: string): void {
   const state = store.get(id)
   if (state === undefined) return
-  for (const step of state.steps) step.done = true
+  for (const step of state.steps) {
+    step.done = true
+    for (const note of step.notes ?? []) note.done = true
+  }
   state.updatedAt = Date.now()
 }
 
@@ -134,4 +201,12 @@ export type ProgressFn = (label: string, detail?: string) => void
 export function progressReporter(id: string | undefined): ProgressFn {
   if (id === undefined || !isProgressId(id)) return () => {}
   return (label, detail) => progressStep(id, label, detail)
+}
+
+/** The sub-narration reporter, bound to one id. A no-op when there is no id to narrate to. */
+export type NoteFn = (key: NarrationKey, count: number) => void
+
+export function progressNoter(id: string | undefined): NoteFn {
+  if (id === undefined || !isProgressId(id)) return () => {}
+  return (key, count) => progressNote(id, key, count)
 }

@@ -446,6 +446,18 @@ body {
     animation: rise 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
+  /**
+   * `.rise`, shortened, for something arriving *inside* an object rather than as one.
+   *
+   * The narration rows under a running stage appear one at a time while the model writes, and 16px of
+   * travel over 720ms is a page-level entrance — inside a card it reads as the list lurching. Same
+   * curve, a third of the distance, half the time: enough to see that a row is new, not enough to
+   * pull the eye off the row above it.
+   */
+  .slip {
+    animation: slip 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
   /** Scroll reveal. Starts hidden; `data-in` is set by the observer in `components/reveal.tsx`. */
   .reveal {
     opacity: 0;
@@ -683,6 +695,17 @@ body {
   from {
     opacity: 0;
     transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes slip {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
   }
   to {
     opacity: 1;

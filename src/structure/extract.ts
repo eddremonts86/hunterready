@@ -21,6 +21,8 @@ import { recoverMissingHighlights } from './recover'
 import { errorEvent } from '@/lib/log'
 import { findPhone, redactForLlm, reinstateDeep } from './redact'
 import { unwrapToolInput } from './tool-input'
+import { ask } from './ask'
+import type { NoteFn } from '@/lib/progress'
 
 const MAX_TOKENS = 8192
 const MAX_REPAIRS = 2
@@ -44,6 +46,14 @@ export interface ExtractOptions {
   signal?: AbortSignal
   /** Live narration for the waiting screen. Stage labels and counts only — never document content. */
   onProgress?: (label: string, detail?: string) => void
+  /**
+   * The finer narration *inside* the model call: which section of the answer is being written.
+   *
+   * Separate from `onProgress` rather than a second argument to it, because the two are different
+   * kinds of fact — one is a stage of the pipeline, the other is a key of our own schema — and the
+   * type is what keeps free text out of the second. See `narrate.ts`.
+   */
+  onNote?: NoteFn
   /**
    * Set false when the user declined to have their CV sent to a third-party model provider.
    *
@@ -127,6 +137,7 @@ export async function extractResume(
    * So the local model corrects the rules instead of replacing them. See `local-refine.ts`.
    */
   const onProgress = options.onProgress ?? (() => {})
+  const onNote = options.onNote
 
   if (options.useProvider === false) {
     const local = resolveLocalProvider()
@@ -157,6 +168,7 @@ export async function extractResume(
       provenance,
       provider: local,
       signal: options.signal,
+      onNote,
     })
     return {
       ok: true,
@@ -200,7 +212,8 @@ export async function extractResume(
     let response: Anthropic.Message
     try {
       onProgress('The model is reading your CV and structuring it')
-      response = await client.messages.create(
+      response = await ask(
+        client,
         {
           model,
           max_tokens: MAX_TOKENS,
@@ -217,7 +230,14 @@ export async function extractResume(
           tool_choice: { type: 'tool', name: 'submit_cv' },
           messages,
         },
-        { signal: options.signal },
+        /*
+          Reasoning asked for here and nowhere else. This is the call that takes half a minute, and
+          measured against MiniMax it is the only one whose wait has anything observable in it — the
+          tool JSON arrives in a single delta at the very end, so without the thinking channel the
+          screen has nothing to report until the answer has already landed. `ask` climbs down to a plain
+          streamed call, then an unstreamed one, if the provider will not have it.
+        */
+        { signal: options.signal, onNote, reasoning: true },
       )
     } catch (error) {
       /**

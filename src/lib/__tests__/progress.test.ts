@@ -4,6 +4,8 @@ import {
   progressDetail,
   progressEnd,
   progressGet,
+  progressNote,
+  progressNoter,
   progressReporter,
   progressStep,
 } from '@/lib/progress'
@@ -67,5 +69,117 @@ describe('the live-progress store', () => {
     const key = id()
     progressStep(key, 'Reading the scanned pages', `page ${2} of ${3}`)
     expect(progressGet(key)[0].detail).toBe('page 2 of 3')
+  })
+})
+
+describe('the sub-narration of the model call', () => {
+  const structuring = (key: string) =>
+    progressStep(key, 'The model is reading your CV and structuring it')
+
+  it('hangs the sections off the running step instead of adding rows', () => {
+    const key = id()
+    progressStep(key, 'Opening the file')
+    structuring(key)
+    progressNote(key, 'basics', 0)
+    progressNote(key, 'work', 2)
+    expect(progressGet(key)).toHaveLength(2)
+    expect(progressGet(key)[1].notes).toEqual([
+      { key: 'basics', count: 0, done: true },
+      { key: 'work', count: 2, done: false },
+    ])
+  })
+
+  it('moves the count of the open section without opening another', () => {
+    const key = id()
+    structuring(key)
+    progressNote(key, 'work', 1)
+    progressNote(key, 'work', 2)
+    progressNote(key, 'work', 3)
+    expect(progressGet(key)[0].notes).toEqual([
+      { key: 'work', count: 3, done: false },
+    ])
+  })
+
+  it('never walks a count backwards, whatever the stream replays', () => {
+    const key = id()
+    structuring(key)
+    progressNote(key, 'work', 4)
+    progressNote(key, 'work', 1)
+    expect(progressGet(key)[0].notes?.[0].count).toBe(4)
+  })
+
+  it('lights an existing row again instead of adding a second one', () => {
+    /*
+      Reasoning wanders — work, then a date, then back to work — and the writing pass afterwards reports
+      every section a second time. Appending each report would draw a repeating list that says nothing
+      about where the work is.
+    */
+    const key = id()
+    structuring(key)
+    progressNote(key, 'work', 0)
+    progressNote(key, 'education', 0)
+    progressNote(key, 'work', 0)
+    const notes = progressGet(key)[0].notes ?? []
+    expect(notes.map((n) => n.key)).toEqual(['work', 'education'])
+    expect(notes.find((n) => n.key === 'work')?.done).toBe(false)
+    expect(notes.find((n) => n.key === 'education')?.done).toBe(true)
+  })
+
+  it('keeps exactly one section open at a time', () => {
+    const key = id()
+    structuring(key)
+    for (const section of ['basics', 'work', 'education', 'skills'] as const) {
+      progressNote(key, section, 0)
+    }
+    expect(
+      (progressGet(key)[0].notes ?? []).filter((n) => !n.done),
+    ).toHaveLength(1)
+  })
+
+  it('keeps a count the writing pass reported when reasoning revisits the section', () => {
+    // The reasoning watcher has no counts and reports 0. It must not blank a real number.
+    const key = id()
+    structuring(key)
+    progressNote(key, 'work', 5)
+    progressNote(key, 'work', 0)
+    expect(progressGet(key)[0].notes?.[0].count).toBe(5)
+  })
+
+  it('starts the narration over when the model has another go', () => {
+    /*
+      A repair round re-runs the whole tool call, so the sections arrive again from the top. Keeping the
+      first attempt's notes would draw a second run as though it were resuming — "your skills" already
+      ticked while the model is back at the name.
+    */
+    const key = id()
+    structuring(key)
+    progressNote(key, 'basics', 0)
+    progressNote(key, 'work', 3)
+    structuring(key)
+    expect(progressGet(key)).toHaveLength(1)
+    expect(progressGet(key)[0].detail).toBe('attempt 2')
+    expect(progressGet(key)[0].notes).toBeUndefined()
+  })
+
+  it('closes the open section when the work ends', () => {
+    const key = id()
+    structuring(key)
+    progressNote(key, 'work', 2)
+    progressEnd(key)
+    expect(progressGet(key)[0].notes?.every((note) => note.done)).toBe(true)
+  })
+
+  it('ignores notes arriving with no step to hang them on, or after the end', () => {
+    const key = id()
+    expect(() => progressNote(key, 'work', 1)).not.toThrow()
+    expect(progressGet(key)).toEqual([])
+    structuring(key)
+    progressEnd(key)
+    progressNote(key, 'work', 1)
+    expect(progressGet(key)[0].notes).toBeUndefined()
+  })
+
+  it('a noter bound to no id is a silent no-op', () => {
+    expect(() => progressNoter(undefined)('work', 3)).not.toThrow()
   })
 })

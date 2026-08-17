@@ -33,6 +33,9 @@ import { z } from 'zod'
 import type { Resume } from '@/schema/resume'
 import type { FieldProvenance } from '@/schema/provenance'
 import type { Provider } from './provider'
+import { ask } from './ask'
+import { REFINE_ALIASES } from './narrate'
+import type { NoteFn } from '@/lib/progress'
 
 /**
  * Deliberately tiny, and tolerant on purpose, and every allowance below is a shape a 3B model actually produced.
@@ -128,6 +131,8 @@ export async function refineLocally(input: {
   provenance: Array<FieldProvenance>
   provider: Provider
   signal?: AbortSignal
+  /** Which part of the draft is being checked, live. Section keys only — see `narrate.ts`. */
+  onNote?: NoteFn
 }): Promise<RefineResult> {
   const unchanged: RefineResult = {
     resume: input.draft,
@@ -135,34 +140,48 @@ export async function refineLocally(input: {
     corrections: 0,
   }
 
+  const params: Anthropic.MessageCreateParamsNonStreaming = {
+    model: input.provider.model,
+    max_tokens: 900,
+    temperature: 0,
+    system: SYSTEM,
+    tools: [
+      {
+        name: 'submit_corrections',
+        description: 'Report only the fields the parser got wrong.',
+        input_schema: z.toJSONSchema(Corrections, {
+          io: 'input',
+          reused: 'inline',
+        }) as Anthropic.Tool['input_schema'],
+      },
+    ],
+    tool_choice: { type: 'tool', name: 'submit_corrections' },
+    messages: [
+      {
+        role: 'user',
+        content: `THE CV TEXT:\n${input.normalizedText}\n\nWHAT THE PARSER PRODUCED:\n${draftFor(input.draft)}\n\nReport only what is wrong. Call submit_corrections.`,
+      },
+    ],
+  }
+
   let response: Anthropic.Message
   try {
-    response = await input.provider.client.messages.create(
-      {
-        model: input.provider.model,
-        max_tokens: 900,
-        temperature: 0,
-        system: SYSTEM,
-        tools: [
-          {
-            name: 'submit_corrections',
-            description: 'Report only the fields the parser got wrong.',
-            input_schema: z.toJSONSchema(Corrections, {
-              io: 'input',
-              reused: 'inline',
-            }) as Anthropic.Tool['input_schema'],
-          },
-        ],
-        tool_choice: { type: 'tool', name: 'submit_corrections' },
-        messages: [
-          {
-            role: 'user',
-            content: `THE CV TEXT:\n${input.normalizedText}\n\nWHAT THE PARSER PRODUCED:\n${draftFor(input.draft)}\n\nReport only what is wrong. Call submit_corrections.`,
-          },
-        ],
-      },
-      { signal: input.signal },
-    )
+    /**
+     * Streamed, for the same reason the third-party path is: this is the longest wait in the product.
+     * A 3B model on a shared CPU takes minutes over this one call, and unstreamed those minutes are a
+     * single unchanging line of text. What streams is the corrections JSON, whose keys map to sections
+     * through `REFINE_ALIASES` — so the screen names the part of the CV being checked, and never a
+     * value from it.
+     *
+     * The fallback is the whole function's habit: on any failure the draft stands. Here that means one
+     * unstreamed retry before giving up, since a local Ollama that cannot stream should cost narration
+     * rather than every correction it would have made.
+     */
+    response = await ask(input.provider.client, params, {
+      signal: input.signal,
+      onNote: input.onNote,
+      aliases: REFINE_ALIASES,
+    })
   } catch {
     return unchanged
   }
