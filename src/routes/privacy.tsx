@@ -369,6 +369,23 @@ function Privacy() {
           </p>
         </Section>
 
+        {/*
+          Beta, on the page about trust, because that is where it costs something to omit.
+
+          Everything else on this page is a promise about what happens to somebody's CV. A product
+          that changes often can change those, and a privacy notice that does not say so is asking to
+          be read as more settled than it is. It names the one thing that will not move.
+        */}
+        <p className="text-[14px] leading-relaxed text-ink-soft">
+          <strong className="font-semibold text-ink">
+            HunterReady is in beta.
+          </strong>{' '}
+          Features, layouts and wording change often, and this page changes with
+          them. What does not change is the rule underneath it: nothing is sent
+          anywhere you have not named, and nothing is kept that you have not
+          asked us to keep.
+        </p>
+
         {/* Where you stand right now, on the page that explains the choice. A privacy notice that
             cannot tell you what you already agreed to is asking you to remember for it. */}
         <div className="flex flex-col items-start gap-3 rounded-card border border-signal-edge bg-signal-wash p-5">

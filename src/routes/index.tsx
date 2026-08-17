@@ -529,8 +529,44 @@ function Icon({
  */
 function Wordmark({ className = 'text-[17px]' }: { className?: string }) {
   return (
-    <span className={`font-bold tracking-[-0.03em] text-ink ${className}`}>
-      HunterReady<span className="text-signal">.</span>
+    <span className="inline-flex items-baseline gap-2">
+      <span className={`font-bold tracking-[-0.03em] text-ink ${className}`}>
+        HunterReady<span className="text-signal">.</span>
+      </span>
+      {/*
+        Beside the name, on every screen, because that is what "beta" is a fact about.
+
+        Not a banner: a strip somebody dismisses is a strip that stops being true the moment they
+        dismiss it, and this stays true. A chip next to the mark is the smallest thing that is on
+        screen whenever the product is, and `title` carries the sentence for anyone who wants it.
+      */}
+      <BetaChip />
+    </span>
+  )
+}
+
+/**
+ * "This is beta and it can change under you."
+ *
+ * ## Why it is said in four places and not one
+ *
+ * Because the sentence answers a different question in each. Beside the mark it says what the product
+ * *is*; on the landing page it sets the expectation before somebody uploads anything; beside Download
+ * it says what the file they are about to rely on is; on the privacy page it says the terms of the
+ * thing they are trusting can move. One notice at the top would be read once and would not be there at
+ * the two moments that matter.
+ *
+ * ## And why it is not a dismissible banner
+ *
+ * A banner somebody closes stops saying it. This does not change and neither should the notice.
+ */
+function BetaChip() {
+  return (
+    <span
+      title="HunterReady is in beta. Features and layouts can change at any time, and your saved CVs may need re-checking after an update."
+      className="rounded-full border border-hairline-strong px-1.5 py-px text-[10px] font-bold uppercase tracking-[0.08em] text-ink-soft"
+    >
+      Beta
     </span>
   )
 }
@@ -1925,6 +1961,19 @@ function HunterReady() {
                   <span aria-hidden className="h-3.5 w-[3px] bg-signal" />
                   Your CV, read back to you
                 </span>
+
+                {/*
+                  Said here rather than only in the header, because this is the sentence somebody needs
+                  *before* they hand over their employment history, not after. Ordinary body text and
+                  not a warning colour: beta is a fact about the product, not a fault in it.
+                */}
+                <p
+                  className="rise text-[13px] leading-relaxed text-ink-soft"
+                  style={{ animationDelay: '60ms' }}
+                >
+                  HunterReady is in beta. It works, and it changes often: what
+                  you see here can move or improve at any time.
+                </p>
 
                 {/*
                   No manual <br />, and `text-balance` instead.
@@ -3710,6 +3759,17 @@ function HunterReady() {
                       one to compare.
                     </p>
                   )}
+                  {/*
+                    The last thing under the button that produces the file.
+
+                    Somebody about to send this to an employer should know the tool that made it is
+                    still moving. Not a warning — the file is real and the parse check is real — but a
+                    beta that never says so is a beta hoping nobody notices.
+                  */}
+                  <p className="text-meta leading-relaxed text-ink-faint">
+                    Beta: designs and wording can change between visits. The
+                    file you download does not.
+                  </p>
                   {downloads.failure !== undefined && (
                     <p
                       role="status"

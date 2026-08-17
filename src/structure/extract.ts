@@ -113,6 +113,28 @@ function toolSchema(): Record<string, unknown> {
   })
 }
 
+/**
+ * `{ resume: object, provenance: array[3] }` — the keys and kinds of a value, never its contents.
+ *
+ * Safe to log by construction: the keys come from our own schema and the kinds are `object`, `array`,
+ * `string`. A CV's text cannot reach it, because no value is ever read.
+ */
+function describeShape(value: unknown): string {
+  if (value === null || typeof value !== 'object') return typeof value
+  if (Array.isArray(value)) return `array[${value.length}]`
+  return `{ ${Object.entries(value)
+    .slice(0, 8)
+    .map(([key, inner]) => {
+      const kind = Array.isArray(inner)
+        ? `array[${inner.length}]`
+        : inner === null
+          ? 'null'
+          : typeof inner
+      return `${key}: ${kind}`
+    })
+    .join(', ')} }`
+}
+
 /** Stamp the detected language onto a freshly extracted resume. One place, both paths. */
 function withDetectedLocale<T extends { locale: string }>(
   resume: T,
@@ -313,6 +335,37 @@ export async function extractResume(
 
     if (!payload.success) {
       repairs++
+      /**
+       * Logged, because three silent repairs and a rule-engine fallback is the quietest failure this
+       * pipeline has.
+       *
+       * `ingest.extracted` already reports `method: rules`, which says *that* it happened and nothing
+       * about why — and the difference between "the provider is down" and "this model cannot satisfy
+       * the schema" is the difference between waiting and changing something. Found when DeepSeek's
+       * v4-pro degraded every upload with no error anywhere: the calls all succeeded.
+       *
+       * Paths and codes only. An issue's `message` can quote the offending value, and that value is a
+       * line of somebody's CV (docs/07). A path is a field name from our own schema.
+       */
+      errorEvent('extract.invalid_payload', {
+        model,
+        attempt: repairs,
+        stop: response.stop_reason ?? 'none',
+        code: payload.error.issues
+          .slice(0, 6)
+          .map((issue) => `${issue.path.join('.') || '(root)'}:${issue.code}`)
+          .join(' '),
+        /*
+          The shape it sent, as key names and types — never values.
+
+          "resume: invalid_type" says the contract was missed and nothing about how, and the how is the
+          whole diagnosis: a gateway wrapping the input in one more object looks identical in the error
+          to a model sending a string where an object belongs. `tool-input.ts` exists because that has
+          already happened once (Ollama's extra `object` key); this is what would have found it in a
+          minute instead of a session.
+        */
+        shape: describeShape(unwrapToolInput(toolUse.input)),
+      })
       messages.push(
         { role: 'assistant', content: blocks },
         {

@@ -115,7 +115,19 @@ function deepseek(): Provider | undefined {
       authToken: key,
       baseURL: value('DEEPSEEK_BASE_URL') ?? DEEPSEEK_ANTHROPIC_BASE,
     }),
-    model: value('DEEPSEEK_MODEL') ?? 'deepseek-chat',
+    /**
+     * An explicit name, because the wrong ones do not fail.
+     *
+     * Asked for `deepseek-chat` or `deepseek-reasoner`, this endpoint answers 200 and serves
+     * `deepseek-v4-flash` regardless — so the previous default here was quietly running a model nobody
+     * chose. Only `deepseek-v4-pro` and `deepseek-v4-flash` are real names.
+     *
+     * **Flash and not pro, and that is a measured decision rather than a preference.** Edd asked for
+     * pro; against our real tool schema pro returns an *empty* tool input, every time, and every upload
+     * degrades to the rule engine. See `deepseek-schema.test.ts`, which reproduces it in one command.
+     * Set `DEEPSEEK_MODEL=deepseek-v4-pro` the day that changes; nothing else here needs touching.
+     */
+    model: value('DEEPSEEK_MODEL') ?? 'deepseek-v4-flash',
     label: value('DEEPSEEK_BASE_URL') ?? DEEPSEEK_ANTHROPIC_BASE,
     locality: 'third-party',
     forcesThinking: true,

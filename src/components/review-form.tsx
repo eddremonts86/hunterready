@@ -405,6 +405,33 @@ function AddMenu({
   )
 }
 
+/**
+ * One section's header, and the row it opens.
+ *
+ * ## What was wrong with the last one
+ *
+ * Three control clusters at three different x positions. The chevron floated in the middle of the row,
+ * then the move pair, then a bin that only some rows have — so a row that can be deleted pushed its
+ * arrows left and a row that cannot did not, and **the arrows never lined up down the list**. Edd's
+ * screenshot shows it plainly: Experience, Education and Skills have their pair at one x, REFERENCER
+ * and ELINE PRIVAT at another. A column of controls that is not a column reads as a rendering fault.
+ *
+ * ## Three decisions
+ *
+ * **The chevron moved to the left, in front of the title.** It discloses the title, so it belongs with
+ * it — and it frees the right side to be one rail instead of two clusters with a gap between them.
+ * It also fixes "You", which had no controls at all and therefore looked like a different kind of
+ * object; it now opens the same way as everything else and simply has an empty rail.
+ *
+ * **The rail is a fixed width, and empty slots stay empty.** A row that cannot be deleted reserves the
+ * bin's space rather than closing it up. That is the whole alignment fix: same slots, same x, every
+ * row, whatever it can do.
+ *
+ * **The header is a row of siblings, not a button with things after it.** A button cannot contain
+ * buttons — browsers resolve it by firing both, so "remove this section" also toggled it open on the
+ * way out. The disclosure is its own control at the left; the rail is its own at the right; the title
+ * between them is part of the disclosure, because that is the part people aim at.
+ */
 function Section({
   title,
   count,
@@ -414,67 +441,76 @@ function Section({
   actions,
 }: {
   title: string
-  count?: number
   /**
    * How many fields in this section we were unsure about.
    *
-   * A number rather than the "needs a look" pill it replaces. The pill said *that* something in the
-   * section wanted checking and never *how much*, so a section hiding one soft flag looked exactly
-   * like one hiding nine — and the only way to find out was to open all of them in turn, which is the
-   * work the collapsed list exists to save. Edd asked for the count in the header, and the header is
-   * where the decision about whether to open it gets made.
+   * A number rather than the "needs a look" pill it replaces. The pill said *that* something wanted
+   * checking and never *how much*, so a section hiding one soft flag looked exactly like one hiding
+   * nine — and the only way to find out was to open all of them in turn, which is the work the
+   * collapsed list exists to save.
    */
   flagged: number
+  count?: number
   children: React.ReactNode
   defaultOpen: boolean
   /**
-   * Controls that act on the section itself, drawn beside the toggle rather than inside it.
-   *
-   * Beside, because a button inside a button is invalid HTML and browsers resolve it by guessing —
-   * usually by firing both, so "remove this section" would also toggle it open on the way out.
+   * The move and remove controls. Drawn beside the disclosure rather than inside it, because a button
+   * inside a button is invalid HTML and browsers resolve it by guessing.
    */
   actions?: React.ReactNode
 }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
     <div className="card overflow-hidden">
-      <div className="flex items-center gap-1 pr-2 transition-colors hover:bg-band">
+      <div className="flex items-stretch transition-colors hover:bg-band">
         <button
           type="button"
           onClick={() => setOpen(!open)}
           aria-expanded={open}
-          className="flex min-w-0 flex-1 items-center justify-between gap-3 px-4 py-3 text-left"
+          className="flex min-w-0 flex-1 items-center gap-2.5 py-3 pl-3.5 pr-2 text-left"
         >
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-[15px] font-semibold text-ink">
-              {title}
-            </span>
-            {count !== undefined && (
-              <span className="tally shrink-0 rounded-full bg-band px-1.5 py-0.5 text-[12px] font-semibold text-ink-soft">
-                {count}
-              </span>
-            )}
-            {flagged > 0 && (
-              <span className="shrink-0 rounded-full bg-caution-wash px-2 py-0.5 text-[11px] font-semibold text-caution">
-                {/* "1 to check", not "1 needs a look": it is the same word the panel's tally uses. */}
-                {flagged} to check
-              </span>
-            )}
-          </span>
+          {/*
+            The disclosure, at the left and next to the title it discloses. It used to sit at the far
+            right, a hand's width from the words it belongs to and directly beside three controls that
+            do something else entirely.
+          */}
           <svg
             aria-hidden
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="1.8"
+            strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className={`h-4 w-4 shrink-0 text-ink-faint transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+            className={`h-4 w-4 shrink-0 text-ink-faint transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
           >
-            <path d="m6 9 6 6 6-6" />
+            <path d="m9 6 6 6-6 6" />
           </svg>
+          <span className="truncate text-[15px] font-semibold text-ink">
+            {title}
+          </span>
+          {count !== undefined && (
+            <span className="tally shrink-0 text-[12px] font-semibold text-ink-faint">
+              {count}
+            </span>
+          )}
+          {flagged > 0 && (
+            <span className="shrink-0 rounded-full bg-caution-wash px-2 py-0.5 text-[11px] font-semibold text-caution">
+              {/* "1 to check", not "1 needs a look": the same word the panel's tally uses. */}
+              {flagged} to check
+            </span>
+          )}
         </button>
-        {actions}
+        {/*
+          One rail, one width, whatever the row can do.
+
+          `w-[104px]` is the pair plus the bin plus their gaps. A row with no bin leaves that slot empty
+          instead of sliding the pair right, which is what makes every arrow in the list share an x —
+          the thing the previous header could not do and the reason it looked broken.
+        */}
+        <div className="flex w-[104px] shrink-0 items-center justify-end gap-1 pr-2.5">
+          {actions}
+        </div>
       </div>
       {open && (
         <div className="flex flex-col gap-4 border-t border-hairline px-4 pb-4 pt-4">
@@ -794,13 +830,23 @@ export function ReviewForm({
             <HeaderIcon shape="down" />
           </HeaderButton>
         </ButtonGroup>
-        {slotIsCustom(at) && (
+        {/*
+          The bin, or the space where a bin would be.
+
+          A section that came from the CV's own structure cannot be deleted here — Experience is a
+          field of the schema, not a block somebody added — so its rail holds an empty slot rather than
+          closing up. That is what keeps every arrow in the list on the same x; the alternative moves
+          the pair right on eight rows out of eleven and reads as a layout bug.
+        */}
+        {slotIsCustom(at) ? (
           <HeaderButton
             label={`Remove ${what} from the CV`}
             onClick={() => removeSlot(at)}
           >
             <HeaderIcon shape="bin" />
           </HeaderButton>
+        ) : (
+          <span aria-hidden className="h-7 w-7 shrink-0" />
         )}
       </>
     )
