@@ -115,7 +115,26 @@ export function Block({
      * blank half-page whenever a line above it reflows.
      */
     case 'pageBreak':
-      return <View style={{ breakBefore: 'page' }} />
+      return (
+        <View
+          style={{ breakBefore: 'page' }}
+          /*
+            The same instruction twice, for two renderers that cannot read each other's.
+
+            `breakBefore` is what takumi obeys, and the PDF has always been right: measured, two pages
+            with this block and one without. The *preview* is a second renderer — the same components
+            laid out by the browser and paginated by `paper-preview.tsx`, which walks the measured
+            boxes and had no way to see an instruction that occupies no height. So the PDF broke the
+            page and the preview did not, and the preview is where somebody decides the document is
+            finished.
+
+            A data attribute rather than reading `style.breakBefore` off the DOM node: the primitives
+            pass styles through to takumi's own vocabulary and there is no promise that this one
+            survives as CSS a browser reports back.
+          */
+          data-page-break=""
+        />
+      )
 
     /** A heading with nothing under it — the thing above it names what follows. */
     case 'heading':

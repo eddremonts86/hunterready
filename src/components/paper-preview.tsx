@@ -71,6 +71,75 @@ const SHEET_HEIGHT = 1123
 /** Beyond this, something has gone wrong with measurement and a browser should not be asked to draw it. */
 const MAX_PAGES = 12
 
+/** One measured child of the document. Everything `paginate` is allowed to know. */
+export interface MeasuredBlock {
+  top: number
+  height: number
+  /** An explicit page break — an instruction with no height, which measurement alone cannot find. */
+  pageBreak: boolean
+}
+
+/**
+ * Where the sheets begin, given the laid-out blocks.
+ *
+ * Pulled out of the effect and made pure so it can be tested, because this is the function that has
+ * been wrong twice and both times in a way nobody could see from the code:
+ *
+ *   • It used to move the page start to an over-tall block and carry on, so a two-page paragraph was
+ *     drawn from its beginning on one sheet, clipped, and **its middle appeared on no sheet at all**.
+ *   • It paginated by height alone, so an explicit page break — zero height, all instruction — was
+ *     stepped straight over. The PDF broke the page and the preview did not, which is the one
+ *     disagreement this product cannot afford: the preview is where somebody decides the document is
+ *     finished.
+ *
+ * The DOM measurement above it still has no test — jsdom reports every box as zero — but the decisions
+ * do, which is where both bugs lived.
+ */
+export function paginate(
+  blocks: ReadonlyArray<MeasuredBlock>,
+  usable: number,
+): Array<number> {
+  if (blocks.length === 0) return [0]
+
+  const next: Array<number> = [0]
+  let pageTop = 0
+
+  for (const [index, block] of blocks.entries()) {
+    const bottom = block.top + block.height
+
+    /*
+      Two conditions, and both are takumi's behaviour rather than caution. A break at the very top of a
+      page produces nothing, because the page it would start has already started. A break with nothing
+      after it produces nothing either — there is no blank sheet, which is why the round-trip test that
+      expected one was the thing that was wrong.
+    */
+    if (block.pageBreak) {
+      const follows = blocks.slice(index + 1).some((b) => b.height > 0)
+      if (follows && block.top > pageTop && next.length < MAX_PAGES) {
+        pageTop = block.top
+        next.push(block.top)
+      }
+      continue
+    }
+
+    // A block that would not fit on the current page starts the next one.
+    if (bottom - pageTop > usable && block.top > pageTop) {
+      pageTop = block.top
+      next.push(block.top)
+      if (next.length >= MAX_PAGES) break
+    }
+
+    // A block taller than a whole page is cut through, a page at a time. Ugly, and what takumi does.
+    while (bottom - pageTop > usable && next.length < MAX_PAGES) {
+      pageTop += usable
+      next.push(pageTop)
+    }
+    if (next.length >= MAX_PAGES) break
+  }
+
+  return next
+}
+
 export function PaperPreview({
   resume,
   theme,
@@ -225,46 +294,16 @@ export function PaperPreview({
       container = only
     }
 
-    const blocks = [...container.children] as Array<HTMLElement>
-    if (blocks.length === 0) {
-      setBreaks([0])
-      return
-    }
-
-    const next: Array<number> = [0]
-    let pageTop = 0
-
-    for (const block of blocks) {
-      const top = block.offsetTop
-      const bottom = top + block.offsetHeight
-
-      // A block that would not fit on the current page starts the next one.
-      if (bottom - pageTop > usable && top > pageTop) {
-        pageTop = top
-        next.push(top)
-        if (next.length >= MAX_PAGES) break
+    const blocks = [...container.children].map((child) => {
+      const el = child as HTMLElement
+      return {
+        top: el.offsetTop,
+        height: el.offsetHeight,
+        pageBreak: el.dataset.pageBreak !== undefined,
       }
+    })
 
-      /**
-       * A block taller than a whole page has to be cut through, and this is the part the first version got
-       * wrong — badly enough to lose content.
-       *
-       * It used to move the page start to such a block and then go on to the next block, so a summary two
-       * pages tall was shown from its beginning on one sheet, clipped, and its **middle was never drawn on
-       * any sheet at all**. Found by pushing a 26-sentence paragraph through the preview and reading the
-       * sheets: page two started at the paragraph, page three at the section after it, and the thousand
-       * pixels in between existed nowhere.
-       *
-       * So a page-sized step is added through the overflow. Cutting a paragraph mid-line is not pretty and
-       * it is what takumi does too, having no other option; losing a page of somebody's CV silently is not
-       * a trade at all.
-       */
-      while (bottom - pageTop > usable && next.length < MAX_PAGES) {
-        pageTop += usable
-        next.push(pageTop)
-      }
-      if (next.length >= MAX_PAGES) break
-    }
+    const next = paginate(blocks, usable)
 
     setBreaks(next)
     onPagesMeasured?.(next.length)
