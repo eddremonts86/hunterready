@@ -19,7 +19,7 @@ import {
 } from '@/schema/provenance'
 import type { StructuralEdit } from '@/optimize/rewrite-shift'
 import type { FieldProvenance } from '@/schema/provenance'
-import { DEFAULT_SPACE, kindOf } from '@/schema/resume'
+import { kindOf } from '@/schema/resume'
 import type { BlockKind, Resume } from '@/schema/resume'
 import {
   Tooltip,
@@ -29,10 +29,13 @@ import {
 } from '@/components/ui/tooltip'
 import { formatRange } from '@/render/format'
 import { ExtraSections } from '@/components/extra-sections'
+import { BlockEditor } from '@/components/block-editor'
+import { BLOCK_SPECS, specFor } from '@/render/blocks'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ButtonGroup, ButtonGroupSeparator } from '@/components/ui/button-group'
@@ -51,9 +54,6 @@ const SECTION_TITLES: Record<SectionName, string> = {
   publications: 'Publications',
   volunteer: 'Volunteering',
 }
-
-/** Matches the schema's ceiling. A gap taller than this is a blank page nobody meant to send. */
-const MAX_SPACE = 240
 
 /** Provenance is keyed by dot path; look up the closest entry covering a field. */
 function useProvenanceIndex(provenance: Array<FieldProvenance>) {
@@ -373,325 +373,6 @@ function HeaderButton({
   )
 }
 
-/**
- * A block whose only property is how much room it takes: a spacer, or a rule.
- *
- * Drawn as the thing it produces rather than described in words. A row reading "Divider — 12px" is a
- * label for an effect nobody can see from the form; a rule with room around it is a picture of it, at
- * roughly the proportion the document will have.
- */
-function MeasureRow({
-  label,
-  dashed,
-  space,
-  onChange,
-  actions,
-}: {
-  label: string
-  /** A spacer's gap is invisible, so it is drawn dashed. A rule is solid, because it is one. */
-  dashed: boolean
-  space: number
-  onChange: (space: number) => void
-  actions: React.ReactNode
-}) {
-  return (
-    <div className="card flex items-center gap-3 px-4 py-3">
-      <span className="flex min-w-0 flex-1 items-center gap-3">
-        <span className="text-[15px] font-semibold text-ink">{label}</span>
-        <span
-          aria-hidden
-          className={`h-px min-w-6 flex-1 border-t border-hairline-strong ${
-            dashed ? 'border-dashed' : 'border-solid'
-          }`}
-        />
-      </span>
-      <label className="flex shrink-0 items-center gap-1.5">
-        <span className="sr-only">Room above and below, in pixels</span>
-        <input
-          type="number"
-          min={0}
-          max={MAX_SPACE}
-          step={5}
-          value={space}
-          onChange={(event) => {
-            const next = Number(event.target.value)
-            // A cleared field reads as NaN. Writing that into the document would fail the schema on
-            // the next render and lose the block.
-            onChange(
-              Number.isFinite(next)
-                ? Math.min(MAX_SPACE, Math.max(0, Math.round(next)))
-                : 0,
-            )
-          }}
-          className="field w-[4.5rem] py-1 text-center text-[13px]"
-        />
-        <span className="text-[13px] text-ink-soft">px</span>
-      </label>
-      {actions}
-    </div>
-  )
-}
-
-/** A block with nothing to edit at all. It exists, it can move, it can go. */
-function PlainRow({
-  label,
-  hint,
-  actions,
-}: {
-  label: string
-  hint: string
-  actions: React.ReactNode
-}) {
-  return (
-    <div className="card flex items-center gap-3 px-4 py-3">
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="text-[15px] font-semibold text-ink">{label}</span>
-        <span className="text-meta text-ink-soft">{hint}</span>
-      </span>
-      {actions}
-    </div>
-  )
-}
-
-/**
- * A heading with nothing under it. One field, because it has one property.
- *
- * Not the section editor with its lines hidden: that editor offers "Add a line", and a control that
- * adds something the page will not draw is worse than no control.
- */
-function HeadingRow({
-  title,
-  onChange,
-  actions,
-}: {
-  title: string
-  onChange: (title: string) => void
-  actions: React.ReactNode
-}) {
-  return (
-    <div className="card flex items-center gap-3 px-4 py-3">
-      <label className="flex min-w-0 flex-1 items-center gap-3">
-        <span className="shrink-0 text-[15px] font-semibold text-ink">
-          Heading
-        </span>
-        <input
-          type="text"
-          value={title}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder="What the sections below it are"
-          className="field py-1 text-[14px]"
-        />
-      </label>
-      {actions}
-    </div>
-  )
-}
-
-/**
- * Paragraphs belonging to no heading.
- *
- * The same `items` array a section uses, drawn as prose rather than as bullets — because that is what
- * the renderer draws, and a form that shows a bullet where the page shows a sentence is a form telling
- * a small lie about the document.
- */
-function TextRow({
-  items,
-  onChange,
-  actions,
-  fieldClass,
-}: {
-  items: Array<string>
-  onChange: (items: Array<string>) => void
-  actions: React.ReactNode
-  fieldClass: string
-}) {
-  return (
-    <div className="card overflow-hidden">
-      <div className="flex items-center gap-1 px-4 py-3 pr-2">
-        <span className="flex-1 text-[15px] font-semibold text-ink">
-          Paragraph
-        </span>
-        {actions}
-      </div>
-      <div className="flex flex-col gap-3 border-t border-hairline p-4">
-        {items.map((item, i) => (
-          <LineBubble
-            key={i}
-            removeLabel={`Remove paragraph ${i + 1}`}
-            onRemove={() => onChange(items.filter((_, k) => k !== i))}
-          >
-            <AutoTextarea
-              value={item}
-              minRows={3}
-              ariaLabel={`Paragraph ${i + 1}`}
-              onChange={(next) =>
-                onChange(items.map((old, k) => (k === i ? next : old)))
-              }
-              className={fieldClass}
-            />
-          </LineBubble>
-        ))}
-        <AddRow
-          label="Add a paragraph"
-          onClick={() => onChange([...items, ''])}
-        />
-      </div>
-    </div>
-  )
-}
-
-/**
- * A definition list: driving licence, notice period, right to work.
- *
- * Two fields per row and not one with a colon in it, for the same reason the schema keeps `pairs`
- * rather than encoding them into strings — CVs are full of colons, and one inside a value would
- * otherwise become a formatting instruction.
- */
-function PairsRow({
-  title,
-  pairs,
-  onTitle,
-  onPairs,
-  actions,
-}: {
-  title: string
-  pairs: Array<{ label: string; value: string }>
-  onTitle: (title: string) => void
-  onPairs: (pairs: Array<{ label: string; value: string }>) => void
-  actions: React.ReactNode
-}) {
-  const patch = (at: number, part: Partial<{ label: string; value: string }>) =>
-    onPairs(pairs.map((pair, i) => (i === at ? { ...pair, ...part } : pair)))
-
-  return (
-    <div className="card overflow-hidden">
-      <div className="flex items-center gap-1 px-4 py-3 pr-2">
-        <span className="flex-1 text-[15px] font-semibold text-ink">
-          {title === '' ? 'Label and value' : title}
-        </span>
-        {actions}
-      </div>
-      <div className="flex flex-col gap-3 border-t border-hairline p-4">
-        <Field label="Heading (optional)" value={title} onChange={onTitle} />
-        {pairs.map((pair, i) => (
-          <LineBubble
-            key={i}
-            removeLabel={`Remove ${pair.label === '' ? `pair ${i + 1}` : pair.label}`}
-            onRemove={() => onPairs(pairs.filter((_, k) => k !== i))}
-          >
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-              <label className="flex flex-col gap-1.5">
-                <span className="text-[13px] font-semibold text-ink">
-                  Label
-                </span>
-                <input
-                  type="text"
-                  value={pair.label}
-                  onChange={(event) => patch(i, { label: event.target.value })}
-                  placeholder="Driving licence"
-                  className="field"
-                />
-              </label>
-              <label className="flex flex-col gap-1.5">
-                <span className="text-[13px] font-semibold text-ink">
-                  Value
-                </span>
-                <input
-                  type="text"
-                  value={pair.value}
-                  onChange={(event) => patch(i, { value: event.target.value })}
-                  placeholder="B, clean"
-                  className="field"
-                />
-              </label>
-            </div>
-          </LineBubble>
-        ))}
-        <AddRow
-          label="Add a pair"
-          onClick={() => onPairs([...pairs, { label: '', value: '' }])}
-        />
-      </div>
-    </div>
-  )
-}
-
-/**
- * What a person can add to their CV, and the one place the list lives.
- *
- * ## Why a table and not two buttons
- *
- * Because it is about to be longer than two. `custom` started as "a section this CV has that our
- * schema does not name", then gained a spacer, and a spacer is not a section — it is a *block*. pdfcn
- * publishes twenty-four components and roughly half of them are things a CV could legitimately hold:
- * a rule between sections, a page break before the references, a paragraph that belongs to no heading,
- * a label/value pair. Each of those is another entry here and another arm of `renderBlock`, and
- * nothing else has to move.
- *
- * ## What will never be in this list
- *
- * Tables, page headers and footers, watermarks, QR codes and charts. Not an oversight and not a
- * roadmap item — every one of them breaks the single promise this product makes. docs/05: a table is
- * the commonest way a CV loses its employment history in a screener; header and footer regions are
- * discarded by many parsers, so anything only there is gone; a chart and a QR code extract as nothing
- * at all, which makes them a claim the reader can see and the software cannot. The round-trip test
- * would fail every one of them, and it would be right to.
- */
-const BLOCKS = [
-  {
-    key: 'section',
-    label: 'A section',
-    hint: 'A heading and its lines — courses, volunteering, awards, references.',
-    make: () => ({ title: '', items: [''] }),
-  },
-  {
-    key: 'heading',
-    label: 'A heading on its own',
-    hint: 'Names the sections under it. No lines of its own.',
-    make: () => ({ kind: 'heading' as const, title: '', items: [] }),
-  },
-  {
-    key: 'text',
-    label: 'A paragraph',
-    hint: 'Prose belonging to no heading — a note, a statement, a closing line.',
-    make: () => ({ kind: 'text' as const, title: '', items: [''] }),
-  },
-  {
-    key: 'keyValue',
-    label: 'Label and value',
-    hint: 'A short list of pairs: driving licence, notice period, right to work.',
-    make: () => ({
-      kind: 'keyValue' as const,
-      title: '',
-      items: [],
-      pairs: [{ label: '', value: '' }],
-    }),
-  },
-  {
-    key: 'space',
-    label: 'Space',
-    hint: 'Room between two sections. 25px above and below, adjustable.',
-    make: () => ({
-      kind: 'space' as const,
-      title: '',
-      items: [],
-      space: DEFAULT_SPACE,
-    }),
-  },
-  {
-    key: 'divider',
-    label: 'A line',
-    hint: 'A rule across the page, to separate one part from the next.',
-    make: () => ({ kind: 'divider' as const, title: '', items: [], space: 12 }),
-  },
-  {
-    key: 'pageBreak',
-    label: 'A new page',
-    hint: 'Everything after it starts on the next sheet.',
-    make: () => ({ kind: 'pageBreak' as const, title: '', items: [] }),
-  },
-] as const
-
 function AddMenu({
   onAdd,
 }: {
@@ -716,20 +397,47 @@ function AddMenu({
         </svg>
         Add
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-[17rem]">
-        {BLOCKS.map((block) => (
-          <DropdownMenuItem
-            key={block.key}
-            onSelect={() => onAdd(block.make())}
-            className="flex-col items-start gap-0.5"
-          >
-            <span className="text-[14px] font-semibold text-ink">
-              {block.label}
-            </span>
-            <span className="text-[12px] leading-snug text-ink-soft">
-              {block.hint}
-            </span>
-          </DropdownMenuItem>
+      <DropdownMenuContent
+        align="end"
+        className="max-h-[70vh] w-[19rem] overflow-y-auto"
+      >
+        {(
+          [
+            ['content', 'Content'],
+            ['layout', 'Page'],
+            ['risky', 'Costs the parse check'],
+          ] as const
+        ).map(([group, heading]) => (
+          <div key={group}>
+            {/*
+              The third group is named for what it costs rather than for what it holds. Somebody
+              scanning a menu should not have to open an item to discover it will take "Parse verified"
+              off their document.
+            */}
+            <DropdownMenuLabel
+              className={`text-[11px] font-semibold uppercase tracking-[0.06em] ${
+                group === 'risky' ? 'text-caution' : 'text-ink-faint'
+              }`}
+            >
+              {heading}
+            </DropdownMenuLabel>
+            {BLOCK_SPECS.filter((spec) => spec.group === group).map((spec) => (
+              <DropdownMenuItem
+                key={spec.kind}
+                onSelect={() =>
+                  onAdd({ kind: spec.kind, ...spec.make() } as never)
+                }
+                className="flex-col items-start gap-0.5"
+              >
+                <span className="text-[14px] font-semibold text-ink">
+                  {spec.label}
+                </span>
+                <span className="text-[12px] leading-snug text-ink-soft">
+                  {spec.hint}
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </div>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
@@ -980,25 +688,6 @@ export function ReviewForm({
     )
     onChange({ ...resume, custom })
   }
-  const setCustomItem = (at: number, item: number, value: string) => {
-    const section = resume.custom[at]
-    if (section === undefined) return
-    setCustomSection(at, {
-      items: section.items.map((line, j) => (j === item ? value : line)),
-    })
-  }
-  const addCustomItem = (at: number) => {
-    const section = resume.custom[at]
-    if (section === undefined) return
-    setCustomSection(at, { items: [...section.items, ''] })
-  }
-  const removeCustomItem = (at: number, item: number) => {
-    const section = resume.custom[at]
-    if (section === undefined) return
-    setCustomSection(at, {
-      items: section.items.filter((_, j) => j !== item),
-    })
-  }
   /** Everything the Add menu offers lands the same way: on the end, then moved into place. */
   const addBlock = (block: Resume['custom'][number]) =>
     onChange({ ...resume, custom: [...resume.custom, block] })
@@ -1021,6 +710,15 @@ export function ReviewForm({
    * The document follows immediately: every template renders `resume.custom` in array order, so this
    * is the order on the page rather than a preference about the form.
    */
+  /** What to call a block in a tooltip: its own title, or what kind of thing it is. */
+  const blockName = (block: Resume['custom'][number]) =>
+    block.title !== ''
+      ? block.title
+      : (specFor(kindOf(block))?.label ?? 'this block').toLowerCase()
+
+  /** The chrome the generic block editor draws with. Declared once, passed down. */
+  const blockUi = { Section, Field, AddRow, LineBubble, AutoTextarea }
+
   /**
    * The document's own order, which is also the order this panel lists them in.
    *
@@ -1887,141 +1585,20 @@ export function ReviewForm({
               ? (() => {
                   const section = resume.custom[slot.index]
                   const i = slot.index
-                  const kind = kindOf(section)
                   /*
-                    The blocks that draw no words get a row, not a section: there is no heading to
-                    write and no lines to check, so a collapsible with an empty body would be a
-                    disclosure that discloses nothing. What they have instead is the one thing they
-                    own — a gap, or nothing at all — and the same three header controls.
+                    One editor for every kind, built from the spec in `render/blocks.ts`. Twenty-three
+                    hand-written branches is how three of the first seven shipped with a renderer and
+                    no way to fill them in.
                   */
-                  if (kind === 'space' || kind === 'divider') {
-                    return (
-                      <MeasureRow
-                        key={i}
-                        label={kind === 'space' ? 'Space' : 'Line'}
-                        dashed={kind === 'space'}
-                        space={section.space ?? DEFAULT_SPACE}
-                        onChange={(space) => setCustomSection(i, { space })}
-                        actions={sectionActions(
-                          at,
-                          kind === 'space' ? 'this space' : 'this line',
-                        )}
-                      />
-                    )
-                  }
-                  if (kind === 'heading') {
-                    return (
-                      <HeadingRow
-                        key={i}
-                        title={section.title}
-                        onChange={(title) => setCustomSection(i, { title })}
-                        actions={sectionActions(
-                          at,
-                          section.title === '' ? 'this heading' : section.title,
-                        )}
-                      />
-                    )
-                  }
-                  if (kind === 'text') {
-                    return (
-                      <TextRow
-                        key={i}
-                        items={section.items}
-                        onChange={(items) => setCustomSection(i, { items })}
-                        fieldClass={fieldClass(`custom.${i}.items.0`)}
-                        actions={sectionActions(at, 'this paragraph')}
-                      />
-                    )
-                  }
-                  if (kind === 'keyValue') {
-                    return (
-                      <PairsRow
-                        key={i}
-                        title={section.title}
-                        pairs={section.pairs ?? []}
-                        onTitle={(title) => setCustomSection(i, { title })}
-                        onPairs={(pairs) => setCustomSection(i, { pairs })}
-                        actions={sectionActions(
-                          at,
-                          section.title === '' ? 'these pairs' : section.title,
-                        )}
-                      />
-                    )
-                  }
-                  if (kind === 'pageBreak') {
-                    return (
-                      <PlainRow
-                        key={i}
-                        label="New page"
-                        hint="Everything below starts on the next sheet"
-                        actions={sectionActions(at, 'this page break')}
-                      />
-                    )
-                  }
                   return (
-                    <Section
+                    <BlockEditor
                       key={i}
-                      title={
-                        section.title === ''
-                          ? 'Untitled section'
-                          : section.title
-                      }
-                      count={section.items.length}
+                      block={section}
                       flagged={sectionFlagged(`custom.${i}`)}
-                      defaultOpen={false}
-                      /*
-                                Reorder and remove, reachable without opening the section — Edd's ask, and the reason is
-                                the same one behind the count beside the title: a decision about a section should not cost
-                                an expand, a scroll to the bottom, and a collapse. The removal here does exactly what the
-                                "Remove the … section" row inside does; it is the same action at the place you are already
-                                looking when you decide to take it.
-                              */
-                      actions={sectionActions(
-                        at,
-                        section.title || 'this section',
-                      )}
-                    >
-                      <Field
-                        label="Section heading"
-                        value={section.title}
-                        onChange={(title) => setCustomSection(i, { title })}
-                        provenance={index.get(`custom.${i}.title`)}
-                      />
-                      {/*
-                                The remove control here was a bare "✕" character where every other one in the form is the
-                                same drawn bin — two icon families for one action, and the odd one out was the one sitting
-                                closest to the text. Same bubble, same button, same place: learned once, true everywhere.
-                              */}
-                      {section.items.map((item, j) => (
-                        <LineBubble
-                          key={j}
-                          removeLabel={`Remove line ${j + 1} of ${section.title || 'this section'}`}
-                          onRemove={() => removeCustomItem(i, j)}
-                        >
-                          <label className="flex flex-col gap-1.5">
-                            <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
-                              Line {j + 1}
-                              <Flag
-                                entry={index.get(`custom.${i}.items.${j}`)}
-                              />
-                            </span>
-                            <AutoTextarea
-                              value={item}
-                              onChange={(next) => setCustomItem(i, j, next)}
-                              className={fieldClass(`custom.${i}.items.${j}`)}
-                            />
-                          </label>
-                        </LineBubble>
-                      ))}
-                      <AddRow
-                        label="Add a line"
-                        onClick={() => addCustomItem(i)}
-                      />
-                      <RemoveRow
-                        label={`Remove the ${section.title || 'untitled'} section`}
-                        onClick={() => removeCustomSection(i)}
-                      />
-                    </Section>
+                      onPatch={(patch) => setCustomSection(i, patch)}
+                      actions={sectionActions(at, blockName(section))}
+                      ui={blockUi}
+                    />
                   )
                 })()
               : blocks[slot.name]?.(at)}

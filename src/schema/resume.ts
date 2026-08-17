@@ -187,13 +187,32 @@ export const LanguageItem = z.object({
  * see and the software cannot.
  */
 export const BLOCK_KINDS = [
+  // Text and structure
   'section',
-  'space',
-  'divider',
-  'pageBreak',
-  'text',
   'heading',
+  'text',
+  'list',
   'keyValue',
+  'card',
+  'alert',
+  'callout',
+  'quote',
+  'signature',
+  'link',
+  'badge',
+  'table',
+  'graph',
+  'form',
+  'image',
+  'qrCode',
+  // Page furniture
+  'divider',
+  'space',
+  'pageBreak',
+  'keepTogether',
+  'pageHeader',
+  'pageFooter',
+  'watermark',
 ] as const
 
 export type BlockKind = (typeof BLOCK_KINDS)[number]
@@ -230,6 +249,20 @@ export const CustomSection = z.object({
     .array(z.object({ label: z.string(), value: z.string() }))
     .max(40)
     .optional(),
+  /**
+   * One value, for the blocks that are one value: a badge's word, a link's address, a watermark.
+   *
+   * Deliberately not `items[0]`. A block whose content is a single string and a block whose content is
+   * a list are different things to edit, and collapsing them would make every single-value editor
+   * reach into an array to find its own field.
+   */
+  value: z.string().max(2000).optional(),
+  /** A second value where one is a label and the other a target — a link's text beside its address. */
+  label: z.string().max(300).optional(),
+  /** Rows of cells, for a table or a chart's data. First row is the header. */
+  rows: z.array(z.array(z.string()).max(8)).max(60).optional(),
+  /** Which of a block's looks: an alert's tone, a divider's stroke, a chart's shape. */
+  variant: z.string().max(30).optional(),
 })
 
 /** What a block is, resolving the absent-means-section default in one place. */

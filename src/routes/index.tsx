@@ -61,7 +61,8 @@ import type { BulletRewrite } from '@/optimize/rewrite'
 import { shiftTarget } from '@/optimize/rewrite-shift'
 import { diffResumes } from '@/optimize/variant-diff'
 import { DESIGNS, tierOf } from '@/render/designs'
-import { Resume } from '@/schema/resume'
+import { kindOf, Resume } from '@/schema/resume'
+import { unsafeBlocks } from '@/render/blocks'
 import type { FieldProvenance } from '@/schema/provenance'
 import { needsReview } from '@/schema/provenance'
 import { estimateFit } from '@/render/fit'
@@ -2856,6 +2857,15 @@ function HunterReady() {
     tierOf(templateId, themeId) === 'paid' && consent.paidDesigns !== true
 
   /**
+   * Blocks on this document that the parse check cannot survive.
+   *
+   * Computed here rather than in the panel because the badge beside the sheet is what most people
+   * read, and it is the claim that has to stop being made. The panel already carries the reason on
+   * each block; this is the same fact where the decision to send the file gets taken.
+   */
+  const risky = unsafeBlocks(loaded.resume.custom, kindOf)
+
+  /**
    * One place that knows how to ask for a file, so the button and every item in its menu agree.
    *
    * The two controls used to build their argument lists separately, and they had already drifted: the
@@ -3730,7 +3740,23 @@ function HunterReady() {
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-hairline px-4 py-2.5">
                 <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
                   Your PDF
-                  {template.atsRating === 'verified' ? (
+                  {/*
+                    The badge is a claim about **this document**, not about the template.
+                    
+                    It was a fact about the template while a template was all a person could choose.
+                    They can now put a table on the page, and a document carrying a table is one the
+                    round-trip test would not pass — so the badge has to come off, or it is the
+                    product's central claim quietly going untrue while the interface still asserts it.
+                    That honesty is the entire basis on which the risky blocks were built at all.
+                  */}
+                  {risky.length > 0 ? (
+                    <span
+                      title={`${risky.map((spec) => spec.label).join(', ')} — see the note on each in Check`}
+                      className="inline-flex items-center rounded-full bg-caution-wash px-2 py-0.5 text-[11px] font-semibold text-caution"
+                    >
+                      Not parse-checked
+                    </span>
+                  ) : template.atsRating === 'verified' ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-affirm-wash px-2 py-0.5 text-[11px] font-semibold text-affirm">
                       <Icon name="verified" className="h-3.5 w-3.5" />
                       Parse verified
