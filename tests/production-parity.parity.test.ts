@@ -172,13 +172,67 @@ describe('the built server can render a PDF', () => {
    * mocked `entitlementFor` would pass while a build that dropped the check shipped, and this suite
    * exists precisely for the bugs that only appear once Nitro has the code (ADR-005).
    */
-  it('refuses custom typefaces and colours to a caller with no plan', async () => {
+  it('hands the axes to a caller with no plan, because beta is on', async () => {
+    /*
+      The server above runs with no `HR_BETA_PAID_FREE`, which is what Coolify runs, so this is the
+      deployed behaviour: beta defaults on and the axes are included. Asserted rather than assumed,
+      because "everything is free during beta" is a promise made on the landing page and the only
+      place it is true or false is a built server.
+    */
     const plain = await fetch(`${baseUrl}/api/render?fixture=nurse-senior`)
     expect(plain.status, 'a free design untouched must still render').toBe(200)
 
     for (const axis of ['accent=%23aa0000', 'bodyFont=Merriweather']) {
       const res = await fetch(
         `${baseUrl}/api/render?fixture=nurse-senior&${axis}`,
+      )
+      expect(res.status, `expected 200 for ?${axis} during beta`).toBe(200)
+      expect(res.headers.get('content-type')).toContain('application/pdf')
+    }
+  })
+
+  it('logs no unhandled server errors', () => {
+    expect(serverLog).not.toMatch(/ENOENT|unhandled|HTTPError/i)
+  })
+})
+
+/**
+ * The paywall the beta suspends, proved against a build rather than a mock.
+ *
+ * A second server, which is worth what it costs. The suite's whole reason for existing is that a
+ * mocked `entitlementFor` passes while a build that dropped the check ships (ADR-005), and beta
+ * turning the gate off would otherwise have deleted the only place that claim was ever tested
+ * against Nitro. The day pricing opens, this is the test that says the gate still exists.
+ *
+ * No rebuild: `.output` is whatever `beforeAll` above produced. Only the environment differs, which
+ * is exactly the difference being tested.
+ */
+describe('with beta off, the paywall is still there', () => {
+  let gated: ChildProcess | undefined
+  let gatedUrl = ''
+
+  beforeAll(async () => {
+    const port = await freePort()
+    gatedUrl = `http://127.0.0.1:${port}`
+    gated = spawn('node', [SERVER_ENTRY], {
+      cwd: ROOT,
+      env: { ...PROD_ENV, PORT: String(port), HR_BETA_PAID_FREE: 'false' },
+      stdio: 'pipe',
+    })
+    await waitForServer(`${gatedUrl}/`)
+  })
+
+  afterAll(() => {
+    gated?.kill()
+  })
+
+  it('refuses custom typefaces and colours to a caller with no plan', async () => {
+    const plain = await fetch(`${gatedUrl}/api/render?fixture=nurse-senior`)
+    expect(plain.status, 'a free design untouched must still render').toBe(200)
+
+    for (const axis of ['accent=%23aa0000', 'bodyFont=Merriweather']) {
+      const res = await fetch(
+        `${gatedUrl}/api/render?fixture=nurse-senior&${axis}`,
       )
       expect(res.status, `expected 402 for ?${axis}`).toBe(402)
       const body = (await res.json()) as { error?: string; message?: string }
@@ -188,7 +242,12 @@ describe('the built server can render a PDF', () => {
     }
   })
 
-  it('logs no unhandled server errors', () => {
-    expect(serverLog).not.toMatch(/ENOENT|unhandled|HTTPError/i)
+  it('refuses a paid design, which is the other half of the same gate', async () => {
+    const res = await fetch(
+      `${gatedUrl}/api/render?fixture=nurse-senior&template=sidebar&theme=onyx`,
+    )
+    expect(res.status).toBe(402)
+    const body = (await res.json()) as { error?: string }
+    expect(body.error).toBe('design_locked')
   })
 })
