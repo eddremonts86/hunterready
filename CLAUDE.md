@@ -152,10 +152,21 @@ Iterate on `:3007`. Believe `:3100`.
 
 ```bash
 pnpm dev:ui   # :3007, hot reload, real backend through the proxy — for iterating
-
-# The real thing. `--build` is the whole command; without it you restart the old image.
-docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build app
+pnpm app      # rebuild and restart the container, stamped with the current commit
+pnpm stale    # is :3100 serving this code, or an older image?
 ```
+
+**`pnpm stale` before wondering about caches.** The image stamps its commit in and `/api/health`
+reports it, because three times in one session "why don't I see the change" turned out to be an
+image built before the change — and each time it cost a round of guessing at the browser first.
+
+```
+✖ http://localhost:3100 is behind. Serving 89837f0, HEAD is 54e8e8e.
+```
+
+`pnpm app` is `docker compose … up -d --build app` with `HR_COMMIT` set. Running the raw command
+still works; it just stamps `unknown`, which `pnpm stale` reports as a question rather than as
+agreement.
 
 ⚠️ **`docker build -t hunterready:local .` does not feed this container, and used to be the documented
 step here.** The `app` service declares `build:` with no `image:`, so Compose builds and runs an image

@@ -48,10 +48,12 @@ if (built === 'unknown') {
 }
 
 if (built === head) {
-  const dirty = git('status --porcelain -- src') !== ''
+  // The Dockerfile and the compose file shape the image too, so a change to either is a stale one.
+    const dirty =
+      git('status --porcelain -- src Dockerfile docker-compose.yml') !== ''
   console.log(
     dirty
-      ? `~ ${URL_BASE} matches HEAD (${shortHead}), but src/ has uncommitted changes it cannot know about.`
+      ? `~ ${URL_BASE} matches HEAD (${shortHead}), but the working tree has uncommitted changes it cannot know about.`
       : `✔ ${URL_BASE} is serving HEAD (${shortHead}).`,
   )
   process.exit(dirty ? 1 : 0)
