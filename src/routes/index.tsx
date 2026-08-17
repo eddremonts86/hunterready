@@ -634,6 +634,106 @@ function SessionControls({
   )
 }
 
+/**
+ * Download, and the other two formats behind a chevron.
+ *
+ * ## Why it lives on the document
+ *
+ * It was pinned to the bottom of the editing panel for this whole build, which is where the *editing*
+ * ends — but the thing being downloaded is the sheet on the right, and the button sat as far from it
+ * as the layout allows. Edd moved it: it belongs in the document's own header, beside the page count
+ * and the parse badge, which are the other two facts about the same artefact.
+ *
+ * The panel gets its full height back, which is the second half of the win: that footer was the only
+ * thing standing between a long list of sections and the bottom of the screen.
+ *
+ * ## The split is the shape of the decision
+ *
+ * PDF is what almost everyone sends and the one whose look they just chose; Word is for the portals
+ * that demand it and HTML is for a link. One click for the common case, two for the others.
+ */
+function DownloadControl({
+  busy,
+  disabled,
+  onDownload,
+}: {
+  busy: DownloadFormat | undefined
+  /** A paid design this visitor cannot render. `/api/render` is the gate; this is the courtesy. */
+  disabled: boolean
+  onDownload: (format: DownloadFormat) => void
+}) {
+  return (
+    <span className="flex items-stretch gap-px">
+      <button
+        type="button"
+        disabled={busy !== undefined || disabled}
+        aria-busy={busy === 'pdf'}
+        onClick={() => onDownload('pdf')}
+        className="btn btn-primary h-8 rounded-r-none px-3.5 text-[13px]"
+      >
+        {busy === 'pdf' ? (
+          <Spinner className="h-4 w-4" />
+        ) : (
+          <Icon name="download" className="h-4 w-4" />
+        )}
+        {busy === 'pdf' ? 'Building…' : 'Download'}
+      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          disabled={busy !== undefined || disabled}
+          aria-label="Choose another format"
+          className="btn btn-primary h-8 rounded-l-none px-2 disabled:pointer-events-none disabled:opacity-50"
+        >
+          <Icon name="chevron-down" className="h-4 w-4" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-[17rem]">
+          <DropdownMenuItem
+            onSelect={() => onDownload('pdf')}
+            className="flex-col items-start gap-0.5"
+          >
+            <span className="text-[14px] font-semibold text-ink">PDF</span>
+            <span className="text-[12px] leading-snug text-ink-soft">
+              The design you chose, checked by the parse test.
+            </span>
+          </DropdownMenuItem>
+          {/*
+            Word says what it is *for* rather than what it is. Nobody prefers .docx; they are told to
+            upload one, and that is the moment this menu has to answer.
+          */}
+          <DropdownMenuItem
+            onSelect={() => onDownload('docx')}
+            className="flex-col items-start gap-0.5"
+          >
+            <span className="text-[14px] font-semibold text-ink">
+              Word (.docx)
+            </span>
+            <span className="text-[12px] leading-snug text-ink-soft">
+              For portals that ask for a Word file. One fixed layout, not the
+              design.
+            </span>
+          </DropdownMenuItem>
+          {/*
+            HTML says what it is *not*, because that is the surprising half: it carries the design
+            faithfully and it has no pages.
+          */}
+          <DropdownMenuItem
+            onSelect={() => onDownload('html')}
+            className="flex-col items-start gap-0.5"
+          >
+            <span className="text-[14px] font-semibold text-ink">
+              Web page (.html)
+            </span>
+            <span className="text-[12px] leading-snug text-ink-soft">
+              The same design, one continuous page, fonts included. Opens
+              anywhere, offline.
+            </span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </span>
+  )
+}
+
 function StepBar({
   onBack,
   backLabel = 'Start over',
@@ -3657,128 +3757,6 @@ function HunterReady() {
                   The background is opaque and the shadow is DESIGN.md's elevation, saying the true
                   thing — this surface is above the one scrolling past beneath it.
                 */}
-                <div className="lift sticky bottom-0 z-10 -mx-1 flex shrink-0 flex-col gap-2 border-t border-hairline bg-band px-1 pb-1 pt-3">
-                  {/*
-                One button, and a menu beside it — Edd's ask, and the split is the point.
-
-                Two full-width buttons stacked said the choice was even. It is not: the PDF is what
-                almost everyone sends, and it is the one whose look they have just spent time choosing.
-                Word is for the portals that demand it. A split control puts the common case one click
-                away and the other one two, which is the true shape of the decision, and it gives back
-                the vertical space a second pill was taking from the panel above.
-
-                Disabled on a locked design rather than left to fail at the endpoint. `/api/render` is
-                the real gate — a client cannot be trusted with one — but letting somebody press a
-                button whose only possible outcome is a refusal is not respect for the gate, just a
-                worse way to say no.
-              */}
-                  <div className="flex w-full items-stretch gap-px">
-                    <button
-                      type="button"
-                      disabled={
-                        downloads.busyFormat !== undefined || lockedDesign
-                      }
-                      aria-busy={downloads.busyFormat === 'pdf'}
-                      onClick={() => void download('pdf')}
-                      className="btn btn-primary flex-1 rounded-r-none px-6 py-3 text-[15px]"
-                    >
-                      {downloads.busyFormat === 'pdf' ? (
-                        <Spinner className="h-[18px] w-[18px]" />
-                      ) : (
-                        <Icon name="download" className="h-[18px] w-[18px]" />
-                      )}
-                      {downloads.busyFormat === 'pdf'
-                        ? 'Building your PDF…'
-                        : 'Download the PDF'}
-                    </button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        disabled={
-                          downloads.busyFormat !== undefined || lockedDesign
-                        }
-                        aria-label="Choose another format"
-                        className="btn btn-primary rounded-l-none px-3 py-3 disabled:pointer-events-none disabled:opacity-50"
-                      >
-                        <Icon
-                          name="chevron-down"
-                          className="h-[18px] w-[18px]"
-                        />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-[17rem]">
-                        <DropdownMenuItem
-                          onSelect={() => void download('pdf')}
-                          className="flex-col items-start gap-0.5"
-                        >
-                          <span className="text-[14px] font-semibold text-ink">
-                            PDF
-                          </span>
-                          <span className="text-[12px] leading-snug text-ink-soft">
-                            The design you chose, checked by the parse test.
-                          </span>
-                        </DropdownMenuItem>
-                        {/*
-                          Word says what it is *for* rather than what it is. Nobody prefers .docx; they
-                          are told to upload one, and that is the moment this menu has to answer.
-                        */}
-                        <DropdownMenuItem
-                          onSelect={() => void download('docx')}
-                          className="flex-col items-start gap-0.5"
-                        >
-                          <span className="text-[14px] font-semibold text-ink">
-                            Word (.docx)
-                          </span>
-                          <span className="text-[12px] leading-snug text-ink-soft">
-                            For portals that ask for a Word file. One fixed
-                            layout, not the design.
-                          </span>
-                        </DropdownMenuItem>
-                        {/*
-                          HTML says what it is *not*, because that is the surprising half. It carries
-                          the design faithfully — same template, same theme, fonts embedded — and it has
-                          no pages, which is the one thing somebody expecting "the PDF as a web page"
-                          would otherwise discover after sending it.
-                        */}
-                        <DropdownMenuItem
-                          onSelect={() => void download('html')}
-                          className="flex-col items-start gap-0.5"
-                        >
-                          <span className="text-[14px] font-semibold text-ink">
-                            Web page (.html)
-                          </span>
-                          <span className="text-[12px] leading-snug text-ink-soft">
-                            The same design, one continuous page, fonts
-                            included. Opens anywhere, offline.
-                          </span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  {lockedDesign && (
-                    <p className="text-meta leading-relaxed text-ink-soft">
-                      Pick a design marked Included to download, or keep this
-                      one to compare.
-                    </p>
-                  )}
-                  {/*
-                    The last thing under the button that produces the file.
-
-                    Somebody about to send this to an employer should know the tool that made it is
-                    still moving. Not a warning — the file is real and the parse check is real — but a
-                    beta that never says so is a beta hoping nobody notices.
-                  */}
-                  <p className="text-meta leading-relaxed text-ink-faint">
-                    Beta: designs and wording can change between visits. The
-                    file you download does not.
-                  </p>
-                  {downloads.failure !== undefined && (
-                    <p
-                      role="status"
-                      className="rounded-field border border-alert/25 bg-alert-wash px-3 py-2 text-[13px] leading-relaxed text-ink"
-                    >
-                      {downloads.failure}
-                    </p>
-                  )}
-                </div>
               </aside>
             </>
           }
@@ -3860,6 +3838,32 @@ function HunterReady() {
                     {readFields > 0 &&
                       ` · ${readFields - toCheck}/${readFields} read cleanly`}
                   </span>
+                  {/*
+                    Beta, beside the button that hands over the file.
+
+                    It followed the download across from the panel footer, because this is the moment
+                    it is for: somebody about to send this to an employer should know the tool that
+                    made it is still moving. Hidden below `lg`, where the header is already three
+                    facts and a split button on one line — the chip beside the wordmark carries it
+                    there, and the landing page says it in full before anyone uploads anything.
+                  */}
+                  <span className="tally hidden text-meta text-ink-faint lg:inline">
+                    Beta · the file does not change after you download it
+                  </span>
+                  {/*
+                    The download, on the document rather than under the editor.
+
+                    It spent this whole build pinned to the bottom of the left panel, which is where
+                    the *editing* ends — but the thing being downloaded is the sheet on the right, and
+                    the button was as far from it as the layout allows. Here it sits with the page
+                    count and the parse badge, which are the other two facts about the same artefact,
+                    and the panel gets its full height back for the work it is actually for.
+                  */}
+                  <DownloadControl
+                    busy={downloads.busyFormat}
+                    disabled={lockedDesign}
+                    onDownload={download}
+                  />
                 </span>
               </div>
               {/*
@@ -3872,6 +3876,21 @@ function HunterReady() {
                   This design is part of the paid plan. You can see it here, and
                   download any design marked <strong>Included</strong>, which
                   produce the same document, checked by the same parse test.
+                </p>
+              )}
+              {/*
+                A failed build, beside the button that failed.
+
+                It followed the download out of the panel, which is the point of moving either: a
+                message about a file belongs where the file is, and it used to sit two columns away
+                from the control that produced it.
+              */}
+              {downloads.failure !== undefined && (
+                <p
+                  role="status"
+                  className="border-b border-alert/25 bg-alert-wash px-4 py-2 text-[13px] leading-relaxed text-ink"
+                >
+                  {downloads.failure}
                 </p>
               )}
               {/*
