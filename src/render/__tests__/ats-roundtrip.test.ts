@@ -504,3 +504,89 @@ describe('the document decides the order of its sections', () => {
     },
   )
 })
+
+/**
+ * The blocks a person can place themselves, against the only rule that binds all of them.
+ *
+ * pdfcn publishes twenty-four components; these are the seven a CV can carry. What makes them safe is
+ * not that they look right — it is that the extracted text is the words the person wrote and nothing
+ * else. Three of them draw no words at all and must contribute none; the rest must contribute exactly
+ * theirs, in the place they were put.
+ *
+ * Every template, because a stray glyph is invisible from the code and obvious to a recruiter's parser.
+ */
+describe('the blocks a person can add', () => {
+  const wordless = [
+    { kind: 'divider' as const, title: '', items: [], space: 12 },
+    { kind: 'pageBreak' as const, title: '', items: [] },
+    { kind: 'space' as const, title: '', items: [], space: 40 },
+  ]
+
+  it.each(TEMPLATE_IDS)(
+    '%s draws divider, page break and space silently',
+    async (templateId) => {
+      const plain = { ...fixtures[0].resume, custom: [] }
+      const marked = { ...plain, custom: wordless }
+      const before = await extractPdfText(
+        (await renderResume(plain, { templateId })).bytes,
+      )
+      const after = await extractPdfText(
+        (await renderResume(marked, { templateId })).bytes,
+      )
+      expect(withoutCounters(after.text)).toBe(withoutCounters(before.text))
+    },
+  )
+
+  it.each(TEMPLATE_IDS)(
+    '%s prints a heading, a paragraph and a pair',
+    async (templateId) => {
+      const resume = {
+        ...fixtures[0].resume,
+        custom: [
+          { kind: 'heading' as const, title: 'HEADINGMARKER', items: [] },
+          { kind: 'text' as const, title: '', items: ['PARAGRAPHMARKER'] },
+          {
+            kind: 'keyValue' as const,
+            title: '',
+            items: [],
+            pairs: [{ label: 'LABELMARKER', value: 'VALUEMARKER' }],
+          },
+        ],
+      }
+      const { text } = await extractPdfText(
+        (await renderResume(resume, { templateId })).bytes,
+      )
+      for (const marker of [
+        'HEADINGMARKER',
+        'PARAGRAPHMARKER',
+        'LABELMARKER',
+        'VALUEMARKER',
+      ]) {
+        expect(text, `${templateId} dropped ${marker}`).toContain(marker)
+      }
+    },
+  )
+
+  /**
+   * A page break is a page break, not a tall gap that a reflow above it can eat.
+   *
+   * With something after it. The first version of this put the break last and expected a second sheet,
+   * which was the test being wrong rather than the block: a break with nothing following it should
+   * produce no page, and takumi is right not to emit a blank one.
+   */
+  it('starts a new sheet where it is placed', async () => {
+    const tail = {
+      kind: 'section' as const,
+      title: 'References',
+      items: ['On request'],
+    }
+    const one = { ...fixtures[0].resume, custom: [tail] }
+    const two = {
+      ...one,
+      custom: [{ kind: 'pageBreak' as const, title: '', items: [] }, tail],
+    }
+    const before = await extractPdfText((await renderResume(one)).bytes)
+    const after = await extractPdfText((await renderResume(two)).bytes)
+    expect(after.pages).toBe(before.pages + 1)
+  })
+})

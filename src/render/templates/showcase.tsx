@@ -25,10 +25,9 @@ import { Fragment } from 'react'
 import { Document, Page } from '@/lib/pdf-primitives'
 import { PdfcnThemeProvider } from '@/components/pdf/theme-provider'
 import type { PdfcnTheme } from '@/components/pdf/theme-types'
-import { Spacer } from './spacer'
+import { Block } from './block'
 import { groupsOf, Ordered, Slot, volunteerGroup } from '../sections'
 import type { Group } from '../sections'
-import { isSpacer } from '@/schema/resume'
 import type { Resume } from '@/schema/resume'
 import {
   formatLocation,
@@ -250,16 +249,29 @@ function Body({ resume, theme }: { resume: Resume; theme: PdfcnTheme }) {
       <Ordered
         resume={resume}
         fallback={'experience'}
-        custom={(section, index) =>
-          /* A spacer draws room and no words at all — see templates/spacer.tsx. */
-          isSpacer(section) ? (
-            <Spacer key={index} space={section.space} />
-          ) : (
-            <Section key={index} title={section.title} theme={theme}>
-              <Bullets items={section.items} theme={theme} />
-            </Section>
-          )
-        }
+        custom={(section, index) => (
+          <Block
+            key={index}
+            block={section}
+            theme={theme}
+            chrome={{
+              // Never called: `group` below handles every kind that has a heading.
+              heading: (title) => (
+                <Section title={title} theme={theme}>
+                  {null}
+                </Section>
+              ),
+              line: (text, k) => (
+                <Bullets key={k} items={[text]} theme={theme} />
+              ),
+              group: (title, children) => (
+                <Section title={title} theme={theme}>
+                  {children}
+                </Section>
+              ),
+            }}
+          />
+        )}
       >
         <Slot name="work">
           {resume.work.length === 0 ? null : (

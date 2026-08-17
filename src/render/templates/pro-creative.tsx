@@ -12,10 +12,9 @@ import { Fragment } from 'react'
 import { Document, Image, Page } from '@/lib/pdf-primitives'
 import { PdfcnThemeProvider } from '@/components/pdf/theme-provider'
 import type { PdfcnTheme } from '@/components/pdf/theme-types'
-import { Spacer } from './spacer'
+import { Block } from './block'
 import { groupsOf, Ordered, Slot, volunteerGroup } from '../sections'
 import type { Group } from '../sections'
-import { isSpacer } from '@/schema/resume'
 import type { Resume, WorkItem } from '@/schema/resume'
 import {
   formatLocation,
@@ -576,20 +575,18 @@ function ProCreativeBody({
         resume={resume}
         /* This design has no order axis of its own; Experience first is what it always drew. */
         fallback="experience"
-        custom={(section, i) =>
-          /* A spacer draws room and no words at all — see templates/spacer.tsx. */
-          isSpacer(section) ? (
-            <Spacer key={i} space={section.space} />
-          ) : (
-            <Fragment key={i}>
-              <ProHeading
-                title={section.title}
-                theme={theme}
-                variant={variant}
-              />
-              {section.items.map((item, j) => (
+        custom={(section, i) => (
+          <Block
+            key={i}
+            block={section}
+            theme={theme}
+            chrome={{
+              heading: (title) => (
+                <ProHeading title={title} theme={theme} variant={variant} />
+              ),
+              line: (text, k) => (
                 <div
-                  key={j}
+                  key={k}
                   style={{
                     display: 'flex',
                     flexDirection: 'row',
@@ -606,12 +603,12 @@ function ProCreativeBody({
                   >
                     •
                   </div>
-                  <div style={{ flexGrow: 1 }}>{item}</div>
+                  <div style={{ flexGrow: 1 }}>{text}</div>
                 </div>
-              ))}
-            </Fragment>
-          )
-        }
+              ),
+            }}
+          />
+        )}
       >
         <Slot name="work">
           {resume.work.length === 0 ? null : (

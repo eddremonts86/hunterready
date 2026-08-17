@@ -19,8 +19,8 @@ import {
 } from '@/schema/provenance'
 import type { StructuralEdit } from '@/optimize/rewrite-shift'
 import type { FieldProvenance } from '@/schema/provenance'
-import { DEFAULT_SPACE, isSpacer } from '@/schema/resume'
-import type { Resume } from '@/schema/resume'
+import { DEFAULT_SPACE, kindOf } from '@/schema/resume'
+import type { BlockKind, Resume } from '@/schema/resume'
 import {
   Tooltip,
   TooltipContent,
@@ -374,22 +374,22 @@ function HeaderButton({
 }
 
 /**
- * A spacer, as it appears in the panel: a rule with a number on it.
+ * A block whose only property is how much room it takes: a spacer, or a rule.
  *
- * Drawn as the thing it produces rather than described in words. A row reading "Spacer — 25px" would
- * be a label for an effect nobody can see from the form; a dashed rule with room around it is a
- * picture of the gap, at roughly the proportion the document will have. The number is editable in
- * place because that is the only property it has.
- *
- * The input is a `number` field and not a slider: people arriving here have a specific gap in mind —
- * they are matching the space above another section — and a slider makes an exact value the hardest
- * thing to reach.
+ * Drawn as the thing it produces rather than described in words. A row reading "Divider — 12px" is a
+ * label for an effect nobody can see from the form; a rule with room around it is a picture of it, at
+ * roughly the proportion the document will have.
  */
-function SpacerRow({
+function MeasureRow({
+  label,
+  dashed,
   space,
   onChange,
   actions,
 }: {
+  label: string
+  /** A spacer's gap is invisible, so it is drawn dashed. A rule is solid, because it is one. */
+  dashed: boolean
   space: number
   onChange: (space: number) => void
   actions: React.ReactNode
@@ -397,14 +397,16 @@ function SpacerRow({
   return (
     <div className="card flex items-center gap-3 px-4 py-3">
       <span className="flex min-w-0 flex-1 items-center gap-3">
-        <span className="text-[15px] font-semibold text-ink">Space</span>
+        <span className="text-[15px] font-semibold text-ink">{label}</span>
         <span
           aria-hidden
-          className="h-px min-w-6 flex-1 border-t border-dashed border-hairline-strong"
+          className={`h-px min-w-6 flex-1 border-t border-hairline-strong ${
+            dashed ? 'border-dashed' : 'border-solid'
+          }`}
         />
       </span>
       <label className="flex shrink-0 items-center gap-1.5">
-        <span className="sr-only">Space above and below, in pixels</span>
+        <span className="sr-only">Room above and below, in pixels</span>
         <input
           type="number"
           min={0}
@@ -413,8 +415,8 @@ function SpacerRow({
           value={space}
           onChange={(event) => {
             const next = Number(event.target.value)
-            // A cleared field reads as NaN. Treat it as 0 rather than writing NaN into the document,
-            // which would fail the schema on the next render and lose the section.
+            // A cleared field reads as NaN. Writing that into the document would fail the schema on
+            // the next render and lose the block.
             onChange(
               Number.isFinite(next)
                 ? Math.min(MAX_SPACE, Math.max(0, Math.round(next)))
@@ -425,6 +427,27 @@ function SpacerRow({
         />
         <span className="text-[13px] text-ink-soft">px</span>
       </label>
+      {actions}
+    </div>
+  )
+}
+
+/** A block with nothing to edit at all. It exists, it can move, it can go. */
+function PlainRow({
+  label,
+  hint,
+  actions,
+}: {
+  label: string
+  hint: string
+  actions: React.ReactNode
+}) {
+  return (
+    <div className="card flex items-center gap-3 px-4 py-3">
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="text-[15px] font-semibold text-ink">{label}</span>
+        <span className="text-meta text-ink-soft">{hint}</span>
+      </span>
       {actions}
     </div>
   )
@@ -459,10 +482,50 @@ const BLOCKS = [
     make: () => ({ title: '', items: [''] }),
   },
   {
+    key: 'heading',
+    label: 'A heading on its own',
+    hint: 'Names the sections under it. No lines of its own.',
+    make: () => ({ kind: 'heading' as const, title: '', items: [] }),
+  },
+  {
+    key: 'text',
+    label: 'A paragraph',
+    hint: 'Prose belonging to no heading — a note, a statement, a closing line.',
+    make: () => ({ kind: 'text' as const, title: '', items: [''] }),
+  },
+  {
+    key: 'keyValue',
+    label: 'Label and value',
+    hint: 'A short list of pairs: driving licence, notice period, right to work.',
+    make: () => ({
+      kind: 'keyValue' as const,
+      title: '',
+      items: [],
+      pairs: [{ label: '', value: '' }],
+    }),
+  },
+  {
     key: 'space',
     label: 'Space',
     hint: 'Room between two sections. 25px above and below, adjustable.',
-    make: () => ({ title: '', items: [], space: DEFAULT_SPACE }),
+    make: () => ({
+      kind: 'space' as const,
+      title: '',
+      items: [],
+      space: DEFAULT_SPACE,
+    }),
+  },
+  {
+    key: 'divider',
+    label: 'A line',
+    hint: 'A rule across the page, to separate one part from the next.',
+    make: () => ({ kind: 'divider' as const, title: '', items: [], space: 12 }),
+  },
+  {
+    key: 'pageBreak',
+    label: 'A new page',
+    hint: 'Everything after it starts on the next sheet.',
+    make: () => ({ kind: 'pageBreak' as const, title: '', items: [] }),
   },
 ] as const
 
@@ -857,7 +920,14 @@ export function ReviewForm({
       if (slot === undefined) return undefined
       if (slot.kind === 'named') return SECTION_TITLES[slot.name]
       const section = resume.custom[slot.index]
-      if (isSpacer(section)) return 'the space'
+      /* A block with no words needs naming by what it is, since it has no title to borrow. */
+      const nameless: Partial<Record<BlockKind, string>> = {
+        space: 'the space',
+        divider: 'the line',
+        pageBreak: 'the page break',
+      }
+      const byKind = nameless[kindOf(section)]
+      if (byKind !== undefined) return byKind
       return section.title === '' ? 'the untitled section' : section.title
     }
     const above = nameOf(at - 1)
@@ -1654,14 +1724,39 @@ export function ReviewForm({
               ? (() => {
                   const section = resume.custom[slot.index]
                   const i = slot.index
-                  return isSpacer(section) ? (
-                    <SpacerRow
-                      key={i}
-                      space={section.space}
-                      onChange={(space) => setCustomSection(i, { space })}
-                      actions={sectionActions(at, 'this space')}
-                    />
-                  ) : (
+                  const kind = kindOf(section)
+                  /*
+                    The blocks that draw no words get a row, not a section: there is no heading to
+                    write and no lines to check, so a collapsible with an empty body would be a
+                    disclosure that discloses nothing. What they have instead is the one thing they
+                    own — a gap, or nothing at all — and the same three header controls.
+                  */
+                  if (kind === 'space' || kind === 'divider') {
+                    return (
+                      <MeasureRow
+                        key={i}
+                        label={kind === 'space' ? 'Space' : 'Line'}
+                        dashed={kind === 'space'}
+                        space={section.space ?? DEFAULT_SPACE}
+                        onChange={(space) => setCustomSection(i, { space })}
+                        actions={sectionActions(
+                          at,
+                          kind === 'space' ? 'this space' : 'this line',
+                        )}
+                      />
+                    )
+                  }
+                  if (kind === 'pageBreak') {
+                    return (
+                      <PlainRow
+                        key={i}
+                        label="New page"
+                        hint="Everything below starts on the next sheet"
+                        actions={sectionActions(at, 'this page break')}
+                      />
+                    )
+                  }
+                  return (
                     <Section
                       key={i}
                       title={

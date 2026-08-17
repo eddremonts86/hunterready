@@ -172,7 +172,35 @@ export const LanguageItem = z.object({
  * A spacer that the renderer knows about draws nothing, extracts as nothing, and cannot be mistaken for
  * a section that failed to parse.
  */
+/**
+ * What a block *is*, when it is not a section.
+ *
+ * `custom` began as "a section this CV has that our schema does not name". Then it gained a spacer,
+ * and a spacer is not a section — so this is the discriminator that was implied from that moment. It
+ * is optional and absent means `section`, which is what every document written before now holds.
+ *
+ * The list is short on purpose and will stay short. pdfcn publishes twenty-four components; these are
+ * the ones a CV can carry without breaking the parse. **Tables, page headers and footers, watermarks,
+ * QR codes, charts and form fields are deliberately absent** — docs/05: a table is the commonest way a
+ * CV loses its employment history in a screener, header and footer regions are discarded by many
+ * parsers, and a chart or a QR code extracts as nothing at all, which makes it a claim the reader can
+ * see and the software cannot.
+ */
+export const BLOCK_KINDS = [
+  'section',
+  'space',
+  'divider',
+  'pageBreak',
+  'text',
+  'heading',
+  'keyValue',
+] as const
+
+export type BlockKind = (typeof BLOCK_KINDS)[number]
+
 export const CustomSection = z.object({
+  /** Which kind of block this is. Absent means `section`, which is what it always was. */
+  kind: z.enum(BLOCK_KINDS).optional(),
   /**
    * A stable handle, so `sectionOrder` can name this section rather than its position.
    *
@@ -191,13 +219,35 @@ export const CustomSection = z.object({
    * says. Capped because a 900px gap is a blank page nobody meant to send.
    */
   space: z.number().int().min(0).max(240).optional(),
+  /**
+   * Label/value pairs, for a `keyValue` block.
+   *
+   * A definition list is the one shape `items` cannot carry: encoding "Label: value" into a string and
+   * splitting it back would make a colon in somebody's value into a formatting instruction, and CVs
+   * are full of colons.
+   */
+  pairs: z
+    .array(z.object({ label: z.string(), value: z.string() }))
+    .max(40)
+    .optional(),
 })
+
+/** What a block is, resolving the absent-means-section default in one place. */
+export function kindOf(section: {
+  kind?: BlockKind
+  space?: number
+}): BlockKind {
+  if (section.kind !== undefined) return section.kind
+  // Written before `kind` existed: a spacer was "the one with a `space`".
+  return section.space === undefined ? 'section' : 'space'
+}
 
 /** Spacers draw room, never words. One predicate, so nine templates cannot each decide differently. */
 export function isSpacer(section: {
+  kind?: BlockKind
   space?: number
-}): section is { space: number } {
-  return typeof section.space === 'number'
+}): boolean {
+  return kindOf(section) === 'space'
 }
 
 /** What a new spacer starts at — 25px above and below (Edd's number). */

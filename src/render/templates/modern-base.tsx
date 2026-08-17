@@ -18,9 +18,8 @@ import { Fragment } from 'react'
 import { Document, Image, Page } from '@/lib/pdf-primitives'
 import { PdfcnThemeProvider } from '@/components/pdf/theme-provider'
 import type { PdfcnTheme } from '@/components/pdf/theme-types'
-import { Spacer } from './spacer'
+import { Block } from './block'
 import { Ordered, Slot } from '../sections'
-import { isSpacer } from '@/schema/resume'
 import type { Resume, WorkItem } from '@/schema/resume'
 import {
   formatLocation,
@@ -693,19 +692,21 @@ function Body({ resume, theme, convention, order }: BodyProps) {
           <Ordered
             resume={resume}
             fallback={order}
-            custom={(section, i) =>
-              /* A spacer draws room and no words at all — see templates/spacer.tsx. */
-              isSpacer(section) ? (
-                <Spacer key={i} space={section.space} />
-              ) : (
-                <Fragment key={i}>
-                  <SectionHeading title={section.title} theme={theme} />
-                  {section.items.map((item, j) => (
-                    <Bullet key={j} text={item} theme={theme} />
-                  ))}
-                </Fragment>
-              )
-            }
+            custom={(section, i) => (
+              <Block
+                key={i}
+                block={section}
+                theme={theme}
+                chrome={{
+                  heading: (title) => (
+                    <SectionHeading title={title} theme={theme} />
+                  ),
+                  line: (text, k) => (
+                    <Bullet key={k} text={text} theme={theme} />
+                  ),
+                }}
+              />
+            )}
           >
             <Slot name="work">{work}</Slot>
             <Slot name="education">{education}</Slot>
