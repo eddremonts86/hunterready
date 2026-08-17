@@ -12,6 +12,8 @@ import { Document, Image, Page } from '@/lib/pdf-primitives'
 import { PdfcnThemeProvider } from '@/components/pdf/theme-provider'
 import type { PdfcnTheme } from '@/components/pdf/theme-types'
 import { Spacer } from './spacer'
+import { groupsOf, Ordered, Slot, volunteerGroup } from '../sections'
+import type { Group } from '../sections'
 import { isSpacer } from '@/schema/resume'
 import type { Resume, WorkItem } from '@/schema/resume'
 import {
@@ -217,6 +219,36 @@ function TechChipsBody({
   const showPersonalDetails =
     convention === 'eu' && basics.personalDetails.length > 0
 
+  /* One renderer for a titled block of lines: custom sections, awards, publications, volunteering. */
+  const group = (section: Group, i: number) => (
+    <Fragment key={i}>
+      <TechHeading title={section.title} theme={theme} />
+      {section.items.map((item, j) => (
+        <div
+          key={j}
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            gap: 6,
+            marginTop: 2,
+          }}
+        >
+          <div
+            style={{
+              color: style.bulletsInAccent
+                ? accent
+                : theme.colors.mutedForeground,
+            }}
+          >
+            •
+          </div>
+          <div style={{ flexGrow: 1 }}>{item}</div>
+        </div>
+      ))}
+    </Fragment>
+  )
+  const volunteering = volunteerGroup(resume, locale)
+
   return (
     <div
       style={{
@@ -332,67 +364,17 @@ function TechChipsBody({
       ) : null}
 
       {/* ── Work ── */}
-      {resume.work.length === 0 ? null : (
-        <>
-          <TechHeading title={local.headings.work} theme={theme} kind="work" />
-          {resume.work.map((w, i) => (
-            <TechJob key={i} item={w} theme={theme} locale={locale} />
-          ))}
-        </>
-      )}
-
-      {/* ── Education ── */}
-      {resume.education.length === 0 ? null : (
-        <>
-          <TechHeading
-            title={local.headings.education}
-            theme={theme}
-            kind="education"
-          />
-          {resume.education.map((e, i) => (
-            <div
-              key={i}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 1,
-                marginTop: theme.spacing.componentGap,
-                breakInside: 'avoid',
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <span style={{ fontWeight: 700 }}>
-                  {joinParts([e.degree, e.field], ' ')}
-                  {e.degree === undefined && e.field === undefined
-                    ? e.institution
-                    : ` — ${e.institution}`}
-                </span>
-                <span
-                  style={{
-                    fontSize: theme.typography.body.fontSize - 1.5,
-                    color: theme.colors.mutedForeground,
-                  }}
-                >
-                  {formatRange(e.startDate, e.endDate, locale)}
-                </span>
-              </div>
-              {e.location || e.grade ? (
-                <div
-                  style={{
-                    fontSize: theme.typography.body.fontSize - 1.5,
-                    color: theme.colors.mutedForeground,
-                  }}
-                >
-                  {joinParts([e.location, e.grade])}
-                </div>
-              ) : null}
-              {e.highlights.map((h, j) => (
+      <Ordered
+        resume={resume}
+        fallback={'experience'}
+        custom={(section, i) =>
+          /* A spacer draws room and no words at all — see templates/spacer.tsx. */
+          isSpacer(section) ? (
+            <Spacer key={i} space={section.space} />
+          ) : (
+            <Fragment key={i}>
+              <TechHeading title={section.title} theme={theme} />
+              {section.items.map((item, j) => (
                 <div
                   key={j}
                   style={{
@@ -411,77 +393,192 @@ function TechChipsBody({
                   >
                     •
                   </div>
-                  <div style={{ flexGrow: 1 }}>{h}</div>
+                  <div style={{ flexGrow: 1 }}>{item}</div>
                 </div>
               ))}
-            </div>
-          ))}
-        </>
-      )}
-
-      {/* ── Projects ── */}
-      {resume.projects.length === 0 ? null : (
-        <>
-          <TechHeading
-            title={local.headings.projects}
-            theme={theme}
-            kind="projects"
-          />
-          {resume.projects.map((p, i) => (
-            <div
-              key={i}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 1,
-                marginTop: theme.spacing.componentGap,
-                breakInside: 'avoid',
-              }}
-            >
-              <div style={{ fontWeight: 700 }}>
-                {joinParts([p.name, p.role], ' — ')}
-                {p.url ? (
-                  <span
-                    style={{
-                      fontWeight: 400,
-                      fontSize: theme.typography.body.fontSize - 1.5,
-                      color: accent,
-                      marginLeft: 6,
-                    }}
-                  >
-                    {p.url}
-                  </span>
-                ) : null}
-              </div>
-              {p.description ? <div>{p.description}</div> : null}
-              {p.highlights.map((h, j) => (
+            </Fragment>
+          )
+        }
+      >
+        <Slot name="work">
+          {resume.work.length === 0 ? null : (
+            <>
+              <TechHeading
+                title={local.headings.work}
+                theme={theme}
+                kind="work"
+              />
+              {resume.work.map((w, i) => (
+                <TechJob key={i} item={w} theme={theme} locale={locale} />
+              ))}
+            </>
+          )}
+        </Slot>
+        <Slot name="education">
+          {resume.education.length === 0 ? null : (
+            <>
+              <TechHeading
+                title={local.headings.education}
+                theme={theme}
+                kind="education"
+              />
+              {resume.education.map((e, i) => (
                 <div
-                  key={j}
+                  key={i}
                   style={{
                     display: 'flex',
-                    flexDirection: 'row',
-                    gap: 6,
-                    marginTop: 2,
+                    flexDirection: 'column',
+                    gap: 1,
+                    marginTop: theme.spacing.componentGap,
+                    breakInside: 'avoid',
                   }}
                 >
                   <div
                     style={{
-                      color: style.bulletsInAccent
-                        ? accent
-                        : theme.colors.mutedForeground,
+                      display: 'flex',
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
                     }}
                   >
-                    •
+                    <span style={{ fontWeight: 700 }}>
+                      {joinParts([e.degree, e.field], ' ')}
+                      {e.degree === undefined && e.field === undefined
+                        ? e.institution
+                        : ` — ${e.institution}`}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: theme.typography.body.fontSize - 1.5,
+                        color: theme.colors.mutedForeground,
+                      }}
+                    >
+                      {formatRange(e.startDate, e.endDate, locale)}
+                    </span>
                   </div>
-                  <div style={{ flexGrow: 1 }}>{h}</div>
+                  {e.location || e.grade ? (
+                    <div
+                      style={{
+                        fontSize: theme.typography.body.fontSize - 1.5,
+                        color: theme.colors.mutedForeground,
+                      }}
+                    >
+                      {joinParts([e.location, e.grade])}
+                    </div>
+                  ) : null}
+                  {e.highlights.map((h, j) => (
+                    <div
+                      key={j}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'row',
+                        gap: 6,
+                        marginTop: 2,
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: style.bulletsInAccent
+                            ? accent
+                            : theme.colors.mutedForeground,
+                        }}
+                      >
+                        •
+                      </div>
+                      <div style={{ flexGrow: 1 }}>{h}</div>
+                    </div>
+                  ))}
                 </div>
               ))}
-            </div>
-          ))}
-        </>
-      )}
+            </>
+          )}
+        </Slot>
+        <Slot name="projects">
+          {resume.projects.length === 0 ? null : (
+            <>
+              <TechHeading
+                title={local.headings.projects}
+                theme={theme}
+                kind="projects"
+              />
+              {resume.projects.map((p, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 1,
+                    marginTop: theme.spacing.componentGap,
+                    breakInside: 'avoid',
+                  }}
+                >
+                  <div style={{ fontWeight: 700 }}>
+                    {joinParts([p.name, p.role], ' — ')}
+                    {p.url ? (
+                      <span
+                        style={{
+                          fontWeight: 400,
+                          fontSize: theme.typography.body.fontSize - 1.5,
+                          color: accent,
+                          marginLeft: 6,
+                        }}
+                      >
+                        {p.url}
+                      </span>
+                    ) : null}
+                  </div>
+                  {p.description ? <div>{p.description}</div> : null}
+                  {p.highlights.map((h, j) => (
+                    <div
+                      key={j}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'row',
+                        gap: 6,
+                        marginTop: 2,
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: style.bulletsInAccent
+                            ? accent
+                            : theme.colors.mutedForeground,
+                        }}
+                      >
+                        •
+                      </div>
+                      <div style={{ flexGrow: 1 }}>{h}</div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </>
+          )}
+        </Slot>
+        {/*
+          Three sections that were in the schema, filled by extraction and printed by the `.docx`
+          export — and rendered by no PDF template at all. Drawn through the same renderer this
+          design uses for a custom section, which is the shape all three already have.
+        */}
+        <Slot name="awards">
+          {groupsOf(resume.awards).map((g, i) => group(g, i))}
+        </Slot>
+        <Slot name="publications">
+          {groupsOf(resume.publications).map((g, i) => group(g, i))}
+        </Slot>
+        <Slot name="volunteer">
+          {volunteering === undefined ? null : group(volunteering, 0)}
+        </Slot>
+      </Ordered>
 
-      {/* ── Bottom Section: standard or split-grid ── */}
+      {/*
+        The skills / languages / certifications band, below the ordered flow rather than inside it.
+
+        It is a two-column arrangement of three sections, and a single sequence cannot place a thing
+        that is two things side by side. It used to sit between Projects and the custom sections, which
+        put half the document above it and half below with no way to move anything across — so the band
+        anchors the bottom of the flow now and everything above it is the person's to arrange. The band's
+        own contents keep the order the design gives them.
+      */}
       {isSplitGrid ? (
         <div
           style={{
@@ -681,39 +778,6 @@ function TechChipsBody({
             </>
           )}
         </>
-      )}
-
-      {resume.custom.map((section, i) =>
-        /* A spacer draws room and no words at all — see templates/spacer.tsx. */
-        isSpacer(section) ? (
-          <Spacer key={i} space={section.space} />
-        ) : (
-          <Fragment key={i}>
-            <TechHeading title={section.title} theme={theme} />
-            {section.items.map((item, j) => (
-              <div
-                key={j}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'row',
-                  gap: 6,
-                  marginTop: 2,
-                }}
-              >
-                <div
-                  style={{
-                    color: style.bulletsInAccent
-                      ? accent
-                      : theme.colors.mutedForeground,
-                  }}
-                >
-                  •
-                </div>
-                <div style={{ flexGrow: 1 }}>{item}</div>
-              </div>
-            ))}
-          </Fragment>
-        ),
       )}
     </div>
   )

@@ -417,3 +417,90 @@ function withoutCounters(text: string): string {
 
 /** The schema's ceiling, which is also enough to overflow a page that was previously just fitting. */
 const MAX_MEANINGFUL_SPACE = 240
+
+/**
+ * The document's own section order, honoured by every design.
+ *
+ * This exists to make a half-migration impossible to ship. Nine template files place their blocks, two
+ * of them in two columns, and an order that works on twenty-two designs and is silently ignored on six
+ * is exactly the failure this project keeps having — a feature that passes review because the design
+ * somebody happened to test was one of the twenty-two.
+ *
+ * Asserted through the extracted text rather than the markup: what is being promised is that a reader
+ * meets the sections in the order asked for, and the parse-back is the only place that claim is real.
+ */
+describe('the document decides the order of its sections', () => {
+  /*
+    Education against Experience, and not Languages against Experience, which is what this asserted
+    first and was wrong to. Two of these designs put skills and languages in a coloured rail, and their
+    main column comes first in the DOM on purpose — that is the ATS honesty trick the sidebar file
+    argues for at length. A cross-column assertion would therefore demand they break their own reading
+    order to pass. Education and Experience are in the main column of all twenty-eight, so the claim
+    being tested is the one that is true everywhere: within a column, the document decides.
+  */
+  it.each(TEMPLATE_IDS)(
+    '%s puts education before experience',
+    async (templateId) => {
+      const fixture = fixtures[0]
+      const resume = { ...fixture.resume, sectionOrder: ['education', 'work'] }
+      const { bytes } = await renderResume(resume, { templateId })
+      const { text } = await extractPdfText(bytes)
+
+      /*
+      Case-insensitive, because a heading's case is the design's business. Most of these templates set
+      `textTransform: uppercase`, so the extractor returns LANGUAGES where the locale table says
+      "Languages" — and asserting on the table's case would test the typography rather than the order.
+    */
+      const locale = resolveLocale(resume.locale)
+      const flat = text.toLowerCase()
+      const first = flat.indexOf(
+        strings(locale).headings.education.toLowerCase(),
+      )
+      const experience = flat.indexOf(
+        strings(locale).headings.work.toLowerCase(),
+      )
+      expect(first, 'no education heading found').toBeGreaterThan(-1)
+      expect(experience, 'no experience heading found').toBeGreaterThan(-1)
+      expect(
+        first,
+        `${templateId} ignored sectionOrder: education at ${first}, experience at ${experience}`,
+      ).toBeLessThan(experience)
+    },
+  )
+
+  /**
+   * And the three that reached the `.docx` and no PDF.
+   *
+   * `awards`, `publications` and `volunteer` were in the schema, filled by extraction and printed by
+   * the Word export while every PDF template dropped them without a word. Silent content loss on the
+   * primary output.
+   */
+  it.each(TEMPLATE_IDS)(
+    '%s prints awards, publications and volunteering',
+    async (templateId) => {
+      const resume = {
+        ...fixtures[0].resume,
+        awards: [{ title: 'Prizes', items: ['AWARDMARKER'] }],
+        publications: [{ title: 'Papers', items: ['PUBLICATIONMARKER'] }],
+        volunteer: [
+          {
+            company: 'VOLUNTEERMARKER',
+            role: 'Helper',
+            endDate: null,
+            highlights: [],
+            tech: [],
+          },
+        ],
+      }
+      const { bytes } = await renderResume(resume, { templateId })
+      const { text } = await extractPdfText(bytes)
+      for (const marker of [
+        'AWARDMARKER',
+        'PUBLICATIONMARKER',
+        'VOLUNTEERMARKER',
+      ]) {
+        expect(text, `${templateId} dropped ${marker}`).toContain(marker)
+      }
+    },
+  )
+})

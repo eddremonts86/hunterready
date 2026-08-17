@@ -19,6 +19,7 @@ import { Document, Image, Page } from '@/lib/pdf-primitives'
 import { PdfcnThemeProvider } from '@/components/pdf/theme-provider'
 import type { PdfcnTheme } from '@/components/pdf/theme-types'
 import { Spacer } from './spacer'
+import { Ordered, Slot } from '../sections'
 import { isSpacer } from '@/schema/resume'
 import type { Resume, WorkItem } from '@/schema/resume'
 import {
@@ -579,11 +580,12 @@ function Body({ resume, theme, convention, order }: BodyProps) {
       )}
 
       {/*
-        The three reorderable sections, emitted in the order the template asked for.
+        Every section below the header, in the order the *document* asks for.
 
         Held as variables and then placed, rather than duplicated per order: three copies of the work
         section is three places for a future date-format fix to be forgotten, and this is the block the
-        round-trip test is most particular about.
+        round-trip test is most particular about. `Ordered` reads the tags and emits them in sequence;
+        the blocks themselves are untouched by it (src/render/sections.tsx).
       */}
       {(() => {
         const work = (
@@ -669,85 +671,147 @@ function Body({ resume, theme, convention, order }: BodyProps) {
             )}
           </>
         )
-        const sequence =
-          order === 'skills'
-            ? [skills, work, education]
-            : order === 'education'
-              ? [education, work, skills]
-              : [work, education, skills]
-        return sequence.map((section, i) => (
-          <Fragment key={i}>{section}</Fragment>
-        ))
-      })()}
-
-      {resume.projects.length === 0 ? null : (
-        <>
-          <SectionHeading title={local.headings.projects} theme={theme} />
-          {resume.projects.map((p, i) => (
-            <div
-              key={i}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 1,
-                marginTop: theme.spacing.componentGap,
-                breakInside: 'avoid',
-              }}
-            >
-              <div style={{ fontWeight: 700 }}>
-                {joinParts([p.name, p.role], ' — ')}
-              </div>
-              {p.description === undefined ? null : <div>{p.description}</div>}
-              {p.highlights.map((h, j) => (
-                <Bullet key={j} text={h} theme={theme} />
+        /* Awards and publications are `{ title, items }`, exactly like a custom section. */
+        const grouped = (title: string, sections: Resume['awards']) =>
+          sections.length === 0 ? null : (
+            <>
+              {sections.map((section, i) => (
+                <Fragment key={i}>
+                  <SectionHeading
+                    title={section.title || title}
+                    theme={theme}
+                  />
+                  {section.items.map((item, j) => (
+                    <Bullet key={j} text={item} theme={theme} />
+                  ))}
+                </Fragment>
               ))}
-            </div>
-          ))}
-        </>
-      )}
+            </>
+          )
 
-      {resume.certifications.length === 0 ? null : (
-        <>
-          <SectionHeading title={local.headings.certifications} theme={theme} />
-          {resume.certifications.map((c, i) => (
-            <div key={i} style={{ marginTop: 3, breakInside: 'avoid' }}>
-              {joinParts([c.name, c.issuer], ' — ')}
-              <span style={{ color: theme.colors.mutedForeground }}>
-                {c.date === undefined ? '' : `  ${formatYearMonth(c.date)}`}
-                {c.identifier === undefined ? '' : `  (${c.identifier})`}
-              </span>
-            </div>
-          ))}
-        </>
-      )}
-
-      {resume.languages.length === 0 ? null : (
-        <>
-          <SectionHeading title={local.headings.languages} theme={theme} />
-          <div style={{ marginTop: 4 }}>
-            {joinParts(
-              resume.languages.map((l) => {
-                const level = l.level ?? l.raw
-                return level === undefined ? l.name : `${l.name} (${level})`
-              }),
-            )}
-          </div>
-        </>
-      )}
-
-      {resume.custom.map((section, i) =>
-        /* A spacer draws room and no words at all — see templates/spacer.tsx. */
-        isSpacer(section) ? (
-          <Spacer key={i} space={section.space} />
-        ) : (
-          <Fragment key={i}>
-            <SectionHeading title={section.title} theme={theme} />
-            {section.items.map((item, j) => (
-              <Bullet key={j} text={item} theme={theme} />
-            ))}
-          </Fragment>
-        ),
-      )}
+        return (
+          <Ordered
+            resume={resume}
+            fallback={order}
+            custom={(section, i) =>
+              /* A spacer draws room and no words at all — see templates/spacer.tsx. */
+              isSpacer(section) ? (
+                <Spacer key={i} space={section.space} />
+              ) : (
+                <Fragment key={i}>
+                  <SectionHeading title={section.title} theme={theme} />
+                  {section.items.map((item, j) => (
+                    <Bullet key={j} text={item} theme={theme} />
+                  ))}
+                </Fragment>
+              )
+            }
+          >
+            <Slot name="work">{work}</Slot>
+            <Slot name="education">{education}</Slot>
+            <Slot name="skills">{skills}</Slot>
+            <Slot name="projects">
+              {resume.projects.length === 0 ? null : (
+                <>
+                  <SectionHeading
+                    title={local.headings.projects}
+                    theme={theme}
+                  />
+                  {resume.projects.map((p, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 1,
+                        marginTop: theme.spacing.componentGap,
+                        breakInside: 'avoid',
+                      }}
+                    >
+                      <div style={{ fontWeight: 700 }}>
+                        {joinParts([p.name, p.role], ' — ')}
+                      </div>
+                      {p.description === undefined ? null : (
+                        <div>{p.description}</div>
+                      )}
+                      {p.highlights.map((h, j) => (
+                        <Bullet key={j} text={h} theme={theme} />
+                      ))}
+                    </div>
+                  ))}
+                </>
+              )}
+            </Slot>
+            <Slot name="certifications">
+              {resume.certifications.length === 0 ? null : (
+                <>
+                  <SectionHeading
+                    title={local.headings.certifications}
+                    theme={theme}
+                  />
+                  {resume.certifications.map((c, i) => (
+                    <div key={i} style={{ marginTop: 3, breakInside: 'avoid' }}>
+                      {joinParts([c.name, c.issuer], ' — ')}
+                      <span style={{ color: theme.colors.mutedForeground }}>
+                        {c.date === undefined
+                          ? ''
+                          : `  ${formatYearMonth(c.date)}`}
+                        {c.identifier === undefined
+                          ? ''
+                          : `  (${c.identifier})`}
+                      </span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </Slot>
+            <Slot name="languages">
+              {resume.languages.length === 0 ? null : (
+                <>
+                  <SectionHeading
+                    title={local.headings.languages}
+                    theme={theme}
+                  />
+                  <div style={{ marginTop: 4 }}>
+                    {joinParts(
+                      resume.languages.map((l) => {
+                        const level = l.level ?? l.raw
+                        return level === undefined
+                          ? l.name
+                          : `${l.name} (${level})`
+                      }),
+                    )}
+                  </div>
+                </>
+              )}
+            </Slot>
+            {/*
+              Three sections that until now were in the schema, filled by extraction, printed by the
+              `.docx` export — and rendered by no PDF template at all. A candidate's awards reached
+              their Word file and silently did not reach their PDF.
+            */}
+            <Slot name="awards">
+              {grouped(local.headings.awards, resume.awards)}
+            </Slot>
+            <Slot name="publications">
+              {grouped(local.headings.publications, resume.publications)}
+            </Slot>
+            <Slot name="volunteer">
+              {resume.volunteer.length === 0 ? null : (
+                <>
+                  <SectionHeading
+                    title={local.headings.volunteer}
+                    theme={theme}
+                  />
+                  {resume.volunteer.map((v, i) => (
+                    <Job key={i} item={v} theme={theme} locale={locale} />
+                  ))}
+                </>
+              )}
+            </Slot>
+          </Ordered>
+        )
+      })()}
     </div>
   )
 }

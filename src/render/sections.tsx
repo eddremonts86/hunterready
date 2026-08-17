@@ -41,6 +41,54 @@
 import { Children, Fragment, isValidElement } from 'react'
 import type { ReactElement, ReactNode } from 'react'
 import type { Resume } from '@/schema/resume'
+import { formatRange, joinParts } from './format'
+import type { OutputLocale } from './locale'
+import { strings } from './locale'
+
+/** A heading and its lines — the shape every template already draws for a custom section. */
+export interface Group {
+  title: string
+  items: Array<string>
+}
+
+/**
+ * Volunteering, as one titled block rather than a second Experience.
+ *
+ * It was rendered by no PDF template at all until now, while `docx.ts` printed it — so the choice here
+ * is between the compact form and nothing. Compact is also the right form: voluntary work on a CV is
+ * a line and some dates, the full job treatment is what Experience is for, and duplicating that markup
+ * into nine templates would be nine more copies of the block the round-trip test is most particular
+ * about.
+ */
+export function volunteerGroup(
+  resume: Resume,
+  locale: OutputLocale,
+): Group | undefined {
+  if (resume.volunteer.length === 0) return undefined
+  return {
+    title: strings(locale).headings.volunteer,
+    items: resume.volunteer.flatMap((entry) => [
+      joinParts([
+        joinParts([entry.role, entry.company], ' — '),
+        formatRange(entry.startDate, entry.endDate, locale),
+      ]),
+      ...entry.highlights,
+    ]),
+  }
+}
+
+/**
+ * Awards and publications are `CustomSection`s already — same shape, same markup.
+ *
+ * Returned as `Group`s so a template can feed them through the one renderer it uses for its custom
+ * sections, rather than growing three near-identical blocks it would then have to keep in step.
+ */
+export function groupsOf(sections: Resume['awards']): Array<Group> {
+  return sections.map((section) => ({
+    title: section.title,
+    items: section.items,
+  }))
+}
 
 /** The blocks a template can be asked to place. `basics` is not among them, and will not be. */
 export const SECTION_NAMES = [
