@@ -44,6 +44,9 @@ services:
       # ADR-030, temporary: the third-party model for everyone while the box cannot serve the local
       # one fast enough. Consent is untouched — this grants entitlement, not permission.
       HR_THIRD_PARTY_FOR_ALL: ${HR_THIRD_PARTY_FOR_ALL:-}
+      # Beta: every Pro capability included, and every one of them still labelled Pro on screen.
+      # Defaults ON in code, so unset here means beta. Set to `false` the day pricing opens.
+      HR_BETA_PAID_FREE: ${HR_BETA_PAID_FREE:-}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       # The local model. This is what a user gets when they decline the third-party provider — see
       # `src/structure/provider.ts` for why that is a model on our own hardware and not a regex.

@@ -35,6 +35,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Resume } from '@/schema/resume'
 import { DesignPreviewDialog } from './design-preview-dialog'
 import { Section } from './design-axes'
+import { PRO_IN_BETA, ProTag } from '@/components/pro-tag'
 import {
   Tooltip,
   TooltipContent,
@@ -316,7 +317,14 @@ export function DesignGallery({
 
   const Card = ({ design }: { design: Design }) => {
     const chosen = design.structure === templateId && design.theme === themeId
-    const locked = design.tier === 'paid' && !entitled
+    /*
+      Two facts, and they used to be one. `pro` is which tier this design belongs to and never
+      changes; `locked` is whether this visitor may have it today and moves with the plan and with
+      beta. The chip used to render on `locked`, so the label disappeared the moment the gate lifted
+      and a beta user had no way to know which half of the catalogue they were in.
+    */
+    const pro = design.tier === 'paid'
+    const locked = pro && !entitled
     const meta = templates[design.structure]
 
     return (
@@ -384,10 +392,12 @@ export function DesignGallery({
                 Design-first
               </span>
             )}
+            {/* The tier, always. The padlock only when it is actually shut. */}
+            {pro && <ProTag />}
             {locked && (
               <span className="inline-flex items-center gap-1 rounded-full bg-band px-1.5 py-0.5 text-[10px] font-semibold text-ink-soft">
                 <Lock />
-                Paid plan
+                Locked
               </span>
             )}
           </span>
@@ -471,23 +481,27 @@ export function DesignGallery({
           </div>
         </Section>
 
-        <Section
-          title={entitled ? 'Also yours' : 'Paid plan'}
-          count={paid.length}
-        >
+        {/*
+          "Pro", in both states. It used to read "Also yours" once entitled, which named the plan
+          only to the people who could not have it — the reader who *can* use these had no way to
+          tell they were using the paid half, which is the whole thing beta has to keep visible.
+        */}
+        <Section title="Pro" count={paid.length}>
           <div className="flex flex-col gap-2">
-            {!entitled && (
-              /*
-            Said once, at the top of the locked set, rather than as a sales line on each of eighteen cards.
-            And it says what the free ones *are* rather than what they lack: the ATS guarantee is not the
-            thing being sold, and implying it is would be the kind of pressure this product does not use.
-          */
-              <p className="text-meta leading-relaxed text-ink-soft">
-                Every design above renders the same document, checked by the
-                same parse test. These add different typefaces and a different
-                order of sections.
-              </p>
-            )}
+            {/*
+              Said once, at the top of the set, rather than as a sales line on each of ninety-one
+              cards. And it says what the included ones *are* rather than what they lack: the parse
+              guarantee is not the thing being sold, and implying it is would be the kind of pressure
+              this product does not use.
+            */}
+            <p className="text-meta leading-relaxed text-ink-soft">
+              Every design above renders the same document, checked by the same
+              parse test. These add different typefaces and a different order of
+              sections.{' '}
+              {entitled ? (
+                <span className="font-medium text-ink">{PRO_IN_BETA}</span>
+              ) : null}
+            </p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {paid.map((design) => (
                 <Card key={design.id} design={design} />

@@ -27,6 +27,7 @@
  */
 import { useEffect, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
+import { PRO_IN_BETA, ProTag } from '@/components/pro-tag'
 import {
   Collapsible,
   CollapsibleContent,
@@ -79,11 +80,14 @@ export function Section({
   title,
   count,
   defaultOpen = false,
+  pro = false,
   children,
 }: {
   title: string
   count?: number
   defaultOpen?: boolean
+  /** Mark this section as a paid capability. Independent of whether it is usable right now. */
+  pro?: boolean
   children: React.ReactNode
 }) {
   return (
@@ -94,6 +98,7 @@ export function Section({
       <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 px-4 py-3 text-left">
         <span className="flex items-baseline gap-2">
           <span className="text-[13px] font-semibold text-ink">{title}</span>
+          {pro && <ProTag subtle />}
           {count !== undefined && (
             <span className="tally text-[11px] text-ink-soft">{count}</span>
           )}
@@ -315,15 +320,21 @@ export function DesignAxes({
   */
   if (!entitled) {
     return (
-      <Section title="Make it yours">
+      <Section title="Make it yours" pro>
         <Locked />
       </Section>
     )
   }
 
   return (
-    <Section title="Make it yours">
+    <Section title="Make it yours" pro>
       <div className="flex flex-col gap-4">
+        {/*
+          Said where the capability is used, not only where it is refused. `Locked` above carries the
+          "not open yet" sentence for the state this switch turns off; this is the state somebody is
+          actually in during beta, and it was the one with nothing to read.
+        */}
+        <p className="text-meta leading-relaxed text-ink-soft">{PRO_IN_BETA}</p>
         {touched && (
           <button
             type="button"

@@ -24,6 +24,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { SignIn } from '@/components/sign-in'
 import { signOut } from '@/lib/auth-client'
+import { PRO_IN_BETA, ProTag } from '@/components/pro-tag'
 import { LOCAL } from '@/components/consent-gate'
 import type { ConsentChoice } from '@/components/consent-gate'
 
@@ -274,8 +275,9 @@ export function ModelMenu({
 function UpgradeNote() {
   return (
     <div className="flex flex-col gap-2 rounded-choice bg-band p-3.5">
-      <span className="text-[13px] font-semibold text-ink">
+      <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
         What the larger model changes
+        <ProTag />
       </span>
       <ul className="flex flex-col gap-1.5 text-[12px] leading-relaxed text-ink-soft">
         <li>
@@ -289,8 +291,9 @@ function UpgradeNote() {
           is seconds.
         </li>
         <li>
+          {/* 60 was the catalogue two releases ago. It is 103, and the landing page counts them. */}
           <span className="font-semibold text-ink">
-            All 60 designs, not 12.
+            All 103 designs, not 12.
           </span>{' '}
           And your CVs saved between visits.
         </li>
@@ -300,13 +303,14 @@ function UpgradeNote() {
         between employers.
       </p>
       {/*
-        TODO(payments): no gateway yet — Edd's call, and deliberately not urgent. Until one exists this
-        says so plainly rather than opening a checkout that cannot take money. `auth_users.plan` is
+        TODO(payments): no gateway yet — Edd's call, and deliberately not urgent. `auth_users.plan` is
         already the switch; a provider only has to write to it. See docs/08-roadmap.md.
+
+        This used to read "Paid plans are not open yet", which was the whole story when the gate was
+        shut. During beta the gate is open (`betaPaidFree`), so that sentence would leave somebody
+        already using the larger model reading that they cannot have it.
       */}
-      <p className="text-[12px] font-medium text-ink">
-        Paid plans are not open yet. This is the last piece before v1.0.
-      </p>
+      <p className="text-[12px] font-medium text-ink">{PRO_IN_BETA}</p>
     </div>
   )
 }

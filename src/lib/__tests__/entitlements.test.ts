@@ -27,6 +27,18 @@ async function withWorld(world: {
   env?: Record<string, string>
 }) {
   vi.resetModules()
+  /*
+    Beta off unless a test asks for it.
+
+    `betaPaidFree` defaults ON in production because the product is in beta, and switching it on
+    here would have quietly rewritten what every test below is for: these describe the plan logic,
+    which is what the product returns to when pricing opens. Seven of them went red when beta
+    landed, and the fix is this line rather than new expectations — a test that was changed to match
+    the code stops being able to disagree with it.
+
+    The beta behaviour gets its own block at the bottom, where it can be read as the exception it is.
+  */
+  vi.stubEnv('HR_BETA_PAID_FREE', 'false')
   for (const [key, value] of Object.entries(world.env ?? {})) {
     vi.stubEnv(key, value)
   }
@@ -174,6 +186,66 @@ describe('what the interface is told', () => {
     // The distinction is real: one has an account on the free tier, the other has no account at all,
     // and the copy shown to each is different.
     const { entitlementFor } = await withWorld({ userId: undefined })
+    expect(await entitlementFor(REQUEST)).toEqual({
+      thirdParty: false,
+      paidDesigns: false,
+      plan: 'anonymous',
+    })
+  })
+})
+
+/**
+ * Beta, which is the state the product actually ships in today.
+ *
+ * Every test above runs with the switch forced off, because they describe the plan logic beta
+ * suspends. These describe the suspension, and the last one is the one that matters most: **the exit
+ * has to work.** A beta switch nobody has ever turned off is a permanent giveaway with a temporary
+ * name on it, and the day pricing opens is a bad day to find that out.
+ */
+describe('beta includes every paid capability, and can be switched back', () => {
+  it('gives an anonymous visitor the catalogue and the model', async () => {
+    const { entitlementFor } = await withWorld({
+      userId: undefined,
+      env: { HR_BETA_PAID_FREE: 'true' },
+    })
+    expect(await entitlementFor(REQUEST)).toEqual({
+      thirdParty: true,
+      /*
+        `paidDesigns: true` for `plan: "anonymous"` is the exact pair ADR-030 caught in production as
+        a bug. Here it is the stated intention, which is the whole reason the switch is named after
+        what it does rather than after the capability it was aimed at.
+      */
+      paidDesigns: true,
+      plan: 'anonymous',
+    })
+  })
+
+  it('is on by default, because the product is in beta', async () => {
+    // No env at all: the deployed site behaves the way the beta chip says it does.
+    vi.resetModules()
+    vi.doMock('@/db/client', () => ({ isPersistenceEnabled: () => false }))
+    vi.doMock('@/lib/session', () => ({ currentUserId: async () => undefined }))
+    vi.doMock('@/db/repository', () => ({ getPlan: async () => 'free' }))
+    const { betaPaidFree, entitlementFor } = await import('../entitlements')
+    expect(betaPaidFree()).toBe(true)
+    expect((await entitlementFor(REQUEST)).paidDesigns).toBe(true)
+  })
+
+  it('still requires consent, which beta does not touch', async () => {
+    // Entitlement is one half of the `&&`. Giving the capability away is not permission to send a CV.
+    const { mayUseThirdParty } = await withWorld({
+      userId: undefined,
+      env: { HR_BETA_PAID_FREE: 'true' },
+    })
+    expect(await mayUseThirdParty(REQUEST, false)).toBe(false)
+    expect(await mayUseThirdParty(REQUEST, true)).toBe(true)
+  })
+
+  it('hands the catalogue back when the switch goes off', async () => {
+    const { entitlementFor } = await withWorld({
+      userId: undefined,
+      env: { HR_BETA_PAID_FREE: 'false' },
+    })
     expect(await entitlementFor(REQUEST)).toEqual({
       thirdParty: false,
       paidDesigns: false,

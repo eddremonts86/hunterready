@@ -28,6 +28,7 @@ import {
 import type { ConsentState } from '@/components/consent-gate'
 import { AccountMenu, ModelMenu } from '@/components/topbar-controls'
 import { Specimen } from '@/components/block-gallery'
+import { ProTag } from '@/components/pro-tag'
 import { useFilePicker } from '@/components/dropzone'
 import { Library } from '@/components/library'
 import { PaperPreview } from '@/components/paper-preview'
@@ -429,9 +430,10 @@ const FAQ = [
   },
   {
     q: 'Do I have to pay?',
-    // "All sixty designs" was true of a catalogue that has since grown to 103, and the page now has
-    // a section that counts them out loud. Two numbers for one fact is the page arguing with itself.
-    a: 'No. Upload, correct, and download without an account and without paying. A paid plan adds the larger model, all 103 designs, and CVs remembered between visits. It is not open yet.',
+    // Rewritten twice. "All sixty designs" was a catalogue that has since grown to 103, and "it is
+    // not open yet" described a gate that beta has since opened. An answer about money is the one a
+    // page cannot afford to have stale.
+    a: 'No, and during beta there is nothing to pay for. Everything marked Pro is included: the larger model, all 103 designs, your own typefaces and colours, and CVs remembered between visits. Those become a paid plan later and we will say so before that happens. Twelve designs and the model on our own hardware stay free afterwards.',
   },
   {
     q: 'What does "a CV that screening software can read" mean?',
@@ -2549,15 +2551,12 @@ function HunterReady() {
                           {design.label.split(' · ')[1] ?? design.label}
                         </span>
                         {/*
-                          Signal, not Affirm. Affirm is a fixed meaning in this system, "verified",
-                          and DESIGN.md forbids spending a semantic colour on decoration. A price is
-                          not a verification. Signal is the accent and may carry interface emphasis.
+                          Marked on the paid ones, not the free ones. The first version chipped the
+                          four included voices "Free", which reads as a distinction only while the
+                          other thirteen are unreachable. Beta hands all of them over, so the useful
+                          fact flipped: everything here works today, and this is which ones are Pro.
                         */}
-                        {design.tier === 'free' ? (
-                          <span className="rounded-full bg-signal-wash px-1.5 py-px text-[11px] font-semibold text-signal">
-                            Free
-                          </span>
-                        ) : null}
+                        {design.tier === 'paid' ? <ProTag /> : null}
                       </span>
                     </li>
                   ))}
@@ -2565,18 +2564,21 @@ function HunterReady() {
               </Reveal>
 
               {/*
-                The honest half again, and it has to say two separate things: which voices are free
-                today, and that the plan the rest sit behind cannot be bought yet. The FAQ already
-                says the second one, and a catalogue section that implies otherwise would be the page
-                contradicting its own answers four sections later.
+                Rewritten with beta. The previous version said four voices were free and the rest
+                sat behind a plan that could not be bought, which was true of the gate and is now
+                true of nothing: `betaPaidFree` hands the whole catalogue over. What has to survive
+                is the second half of that honesty, which is that this ends.
               */}
               <Reveal delay={140}>
                 <p className="mt-7 max-w-[68ch] border-t border-hairline pt-6 text-[14px] leading-relaxed text-ink-soft">
-                  {FREE_VOICES} of the voices are free today, across three
-                  structures. The rest belong to a paid plan that is not open
-                  yet, so nothing here is behind a payment you can make. Every
-                  free design renders the same document as every paid one, and
-                  the same test checks all of them.
+                  <span className="font-medium text-ink">
+                    All 103 are yours while we are in beta,
+                  </span>{' '}
+                  including the {VOICES.length - FREE_VOICES} voices marked Pro.
+                  Those become part of a paid plan later and we will say so
+                  before that happens. {FREE_VOICES} of them stay free
+                  afterwards, and every design renders the same document as
+                  every other, checked by the same test.
                 </p>
               </Reveal>
             </div>
