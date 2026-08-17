@@ -27,18 +27,25 @@
  */
 import { useEffect, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
+import { PRO_IN_BETA, ProTag } from '@/components/pro-tag'
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { REGISTERED_FAMILIES } from '@/render/fonts/families'
 import { ACCENT_FLOOR, judgeAccent, normalizeHex } from '@/render/themes/custom'
 
@@ -47,25 +54,40 @@ export interface Axes {
   colours: { accent?: string; paper?: string }
 }
 
-/** The field styling DESIGN.md specifies, applied to a vendored trigger rather than edited into it. */
+/**
+ * The field styling DESIGN.md specifies, applied to a vendored trigger rather than edited into it.
+ *
+ * No `ring` on focus any more — `styles.css` zeroes those globally now, so leaving the class here would
+ * be a line that reads as styling and does nothing. The border going Signal is the focus state on a
+ * mouse, and the outline in `styles.css` is the one for a keyboard.
+ */
 const TRIGGER =
-  'w-full rounded-field border border-hairline-strong bg-ground px-3 py-2 text-[15px] text-ink focus:border-signal focus:ring-[3px] focus:ring-signal-wash'
+  'w-full rounded-field border border-hairline-strong bg-ground px-3 py-2 text-[15px] text-ink focus:border-signal'
 
 /**
- * A section that can be folded away.
+ * A section that can be folded away, and starts folded.
  *
- * Three of them, because this panel had grown to a picker, twelve included designs and ninety-one
- * paid ones in one column: whichever you came for, you scrolled past the other two.
+ * Four of them, because this panel had grown to a picker, twelve included designs and ninety-one paid
+ * ones in one column: whichever you came for, you scrolled past the other three.
+ *
+ * Closed is the default rather than open, which is the opposite of the usual advice and right here.
+ * The alternative was one section expanded and the rest not, and that is a guess about which of four
+ * things somebody opened the panel for — wrong three times out of four, and wrong in the expensive
+ * direction, because the guess costs a scroll past ninety-one cards. Closed, the panel is an index of
+ * what is available in four lines, and one click is cheaper than any amount of scrolling.
  */
 export function Section({
   title,
   count,
-  defaultOpen = true,
+  defaultOpen = false,
+  pro = false,
   children,
 }: {
   title: string
   count?: number
   defaultOpen?: boolean
+  /** Mark this section as a paid capability. Independent of whether it is usable right now. */
+  pro?: boolean
   children: React.ReactNode
 }) {
   return (
@@ -76,6 +98,7 @@ export function Section({
       <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 px-4 py-3 text-left">
         <span className="flex items-baseline gap-2">
           <span className="text-[13px] font-semibold text-ink">{title}</span>
+          {pro && <ProTag subtle />}
           {count !== undefined && (
             <span className="tally text-[11px] text-ink-soft">{count}</span>
           )}
@@ -89,6 +112,16 @@ export function Section({
   )
 }
 
+/**
+ * Sixty families, searchable.
+ *
+ * A plain `Select` was the first version and it does not scale to sixty: finding Merriweather meant
+ * scrolling a list whose order nobody knows, and a reader who half-remembers "something like Bodoni"
+ * had no way to ask. A combobox turns that into typing three letters.
+ *
+ * Each name is still set in its own face, which is the part that matters: a font list rendered in one
+ * typeface is a list of words, and the choice is being made by eye.
+ */
 function FontPicker({
   label,
   value,
@@ -100,48 +133,64 @@ function FontPicker({
   fallback: string
   onChange: (family?: string) => void
 }) {
+  const [open, setOpen] = useState(false)
+  const shown = value ?? `${fallback} (design)`
+
   return (
-    <label className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1.5">
       <span className="text-[13px] font-semibold text-ink">{label}</span>
-      <Select
-        value={value ?? '__design'}
-        onValueChange={(next) =>
-          onChange(next === '__design' ? undefined : next)
-        }
-      >
-        <SelectTrigger className={TRIGGER}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent className="max-h-72">
-          <SelectItem value="__design">{fallback} (design)</SelectItem>
-          {REGISTERED_FAMILIES.map((family) => (
-            // Each name set in its own face, so the list is a specimen rather than a list of words.
-            <SelectItem
-              key={family}
-              value={family}
-              style={{ fontFamily: `"${family}"` }}
-            >
-              {family}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger
+          className={`${TRIGGER} flex items-center justify-between gap-2 text-left`}
+          aria-label={`${label} typeface`}
+        >
+          <span
+            className="truncate"
+            style={
+              value === undefined ? undefined : { fontFamily: `"${value}"` }
+            }
+          >
+            {shown}
+          </span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-ink-soft" />
+        </PopoverTrigger>
+        <PopoverContent className="w-[min(22rem,90vw)] p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Search sixty typefaces…" />
+            <CommandList>
+              <CommandEmpty>No typeface by that name.</CommandEmpty>
+              <CommandGroup>
+                <CommandItem
+                  value={`${fallback} design default`}
+                  onSelect={() => {
+                    onChange(undefined)
+                    setOpen(false)
+                  }}
+                >
+                  {fallback} (design)
+                </CommandItem>
+                {REGISTERED_FAMILIES.map((family) => (
+                  <CommandItem
+                    key={family}
+                    value={family}
+                    onSelect={() => {
+                      onChange(family)
+                      setOpen(false)
+                    }}
+                    style={{ fontFamily: `"${family}"` }}
+                  >
+                    {family}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
   )
 }
 
-/**
- * A colour, typed or picked, without the field fighting the hand that types it.
- *
- * The first version was fully controlled and normalised on every keystroke, which cannot work: on the
- * way to typing `#ffffff` you pass through `#fff`, which is a valid three-digit hex. It normalised,
- * rewrote the field to `#ffffff`, and the remaining `fff` landed on the end of that. What came out was
- * a colour nobody chose, usually below the contrast floor, so the document quietly kept the design's
- * own colours and the whole feature looked broken.
- *
- * So the text field keeps a draft of exactly what was typed and commits only when the draft is a
- * whole colour. The swatch is unaffected: a native picker emits complete values.
- */
 function ColourPicker({
   label,
   value,
@@ -191,14 +240,59 @@ function ColourPicker({
   )
 }
 
+/**
+ * What the locked half says, and why it says anything at all.
+ *
+ * The alternative was to hide the section from anyone without a plan, and that is the mistake the
+ * topbar's model picker already corrected: somebody who cannot see what they would get has no reason
+ * to buy it. So the section stays in the list, keeps its name, and explains itself — with the same
+ * restraint the rest of this product uses about the paid tier. No disabled controls to tease with, no
+ * pressure, and the free path described accurately rather than diminished.
+ */
+function Locked() {
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-[13px] leading-relaxed text-ink-soft">
+        Sixty typefaces and any two colours you like, mixed across designs —
+        your own accent on somebody else&rsquo;s layout, your own paper under
+        it. The legibility floor is still checked for you, so a pairing a
+        recruiter could not read is refused rather than exported.
+      </p>
+      <p className="text-[13px] leading-relaxed text-ink-soft">
+        The twelve included designs already render the same document, checked by
+        the same parse test. This changes how it looks, never whether it can be
+        read.
+      </p>
+      {/*
+        Same sentence as the model upsell in `topbar-controls.tsx`, deliberately. There is no gateway
+        yet, and a section that opened a checkout which cannot take money would be worse than one that
+        says so. See docs/08-roadmap.md — it is the last piece before v1.0.
+      */}
+      <p className="text-[12px] font-medium text-ink">
+        Paid plans are not open yet. This is the last piece before v1.0.
+      </p>
+    </div>
+  )
+}
+
 export function DesignAxes({
   axes,
   defaults,
+  entitled,
   onChange,
 }: {
   axes: Axes
   /** What the chosen design uses, so the fallback option is an honest label rather than a blank. */
   defaults: { body: string; heading: string; accent: string; paper: string }
+  /**
+   * Whether this visitor's plan includes mixing the axes.
+   *
+   * The padlock here is drawing, not enforcement — `/api/render` refuses custom fonts and colours from
+   * a caller without the entitlement, which is the actual gate, for the same reason it is the actual
+   * gate on a paid design: this endpoint is public by design (ADR-004) and anybody can read a query
+   * string. Hiding the controls would only mean the interface agrees with the server.
+   */
+  entitled: boolean
   onChange: (next: Axes) => void
 }) {
   const accent = axes.colours.accent ?? defaults.accent
@@ -216,9 +310,31 @@ export function DesignAxes({
     onChange({ ...axes, colours: { ...axes.colours, [key]: hex } })
   }
 
+  /*
+    Not rendered and then hidden. A `hidden` attribute over a working colour picker is a control that
+    somebody's dev tools can hand back to them, and while the render endpoint would still refuse the
+    result, an interface that has to be rescued by the server is one that lied first.
+
+    Safe as an early return because this component holds no state of its own — the pickers below do,
+    and they are children rather than hooks here.
+  */
+  if (!entitled) {
+    return (
+      <Section title="Make it yours" pro>
+        <Locked />
+      </Section>
+    )
+  }
+
   return (
-    <Section title="Make it yours">
+    <Section title="Make it yours" pro>
       <div className="flex flex-col gap-4">
+        {/*
+          Said where the capability is used, not only where it is refused. `Locked` above carries the
+          "not open yet" sentence for the state this switch turns off; this is the state somebody is
+          actually in during beta, and it was the one with nothing to read.
+        */}
+        <p className="text-meta leading-relaxed text-ink-soft">{PRO_IN_BETA}</p>
         {touched && (
           <button
             type="button"

@@ -376,7 +376,18 @@ body {
     color: var(--color-signal);
   }
 
-  /** Inputs. A 3px wash ring instead of a heavy border on focus: visible, and it does not shift layout. */
+  /**
+   * Inputs. The border does the work on focus; the ring is gone.
+   *
+   * It used to add `0 0 0 3px` of Signal wash, which was the right answer while `:focus-visible` was
+   * the only other indicator on the page and they rarely met. They meet on every field in the review
+   * form: a focused input wore a 2px outline, a 3px halo at a different offset in a different colour,
+   * and a recoloured border — three things saying one thing, on a screen that is nothing but fields.
+   *
+   * So the border going Signal is the whole focus state here, and the outline in the block near the
+   * end of this file is the keyboard one. Nothing about focus became invisible; it stopped being said
+   * three times. (Edd: "baja el ring de todos los inputs a 0, globalmente".)
+   */
   .field {
     width: 100%;
     background: var(--color-ground);
@@ -400,7 +411,6 @@ body {
 
   .field:focus {
     border-color: var(--color-signal);
-    box-shadow: 0 0 0 3px var(--color-signal-wash);
   }
 
   /** A field the extraction was unsure about. Caution, never alert: we are asking, not accusing. */
@@ -409,9 +419,9 @@ body {
     background: var(--color-caution-wash);
   }
 
+  /* The flagged border stays Caution while focused — the question it is asking outranks the focus. */
   .field-flagged:focus {
     border-color: var(--color-caution);
-    box-shadow: 0 0 0 3px rgb(154 91 18 / 12%);
   }
 
   .chip {
@@ -444,6 +454,18 @@ body {
    */
   .rise {
     animation: rise 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /**
+   * `.rise`, shortened, for something arriving *inside* an object rather than as one.
+   *
+   * The narration rows under a running stage appear one at a time while the model writes, and 16px of
+   * travel over 720ms is a page-level entrance — inside a card it reads as the list lurching. Same
+   * curve, a third of the distance, half the time: enough to see that a row is new, not enough to
+   * pull the eye off the row above it.
+   */
+  .slip {
+    animation: slip 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
   /** Scroll reveal. Starts hidden; `data-in` is set by the observer in `components/reveal.tsx`. */
@@ -677,12 +699,80 @@ body {
     position: relative;
     z-index: 1;
   }
+
+  /**
+   * Two grounds that give the page a rhythm without giving it a second hue.
+   *
+   * The page had four grounds and used two of them for four of its sections, so the middle of the
+   * scroll was white, grey, white, grey — a beat with no accent in it. **One Accent still holds**:
+   * everything below is Signal or a neutral, and no new brand colour enters. Where actual colour
+   * belongs is the design catalogue, and that colour is the documents' own ink.
+   *
+   * `.band-fade` is the flat Band section with somewhere to go: it starts on Band and resolves to
+   * Ground, so a section hands off to the next one instead of butting against it.
+   */
+  .band-fade {
+    background: linear-gradient(
+      180deg,
+      var(--color-band) 0%,
+      var(--color-band) 62%,
+      var(--color-ground) 100%
+    );
+  }
+
+  /**
+   * `.band-tint` is the stage for the catalogue, and the only ground besides the hero and the dark
+   * band that carries atmosphere. One blob rather than the hero's two, and weaker: the section it
+   * sits behind is a wall of seventeen coloured specimens, and a background competing with those
+   * would be the page arguing with its own product.
+   */
+  .band-tint {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(
+      165deg,
+      var(--color-signal-wash) 0%,
+      var(--color-band) 55%,
+      var(--color-ground) 100%
+    );
+  }
+
+  .band-tint::before {
+    content: '';
+    position: absolute;
+    top: -18rem;
+    left: -6rem;
+    width: 40rem;
+    height: 40rem;
+    border-radius: 999px;
+    background: rgb(27 59 216 / 7%);
+    filter: blur(90px);
+    pointer-events: none;
+    z-index: 0;
+    animation: drift 28s ease-in-out infinite alternate;
+  }
+
+  .band-tint > * {
+    position: relative;
+    z-index: 1;
+  }
 }
 
 @keyframes rise {
   from {
     opacity: 0;
     transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes slip {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
   }
   to {
     opacity: 1;
@@ -730,6 +820,72 @@ body {
   outline: 2px solid var(--color-signal);
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+/**
+ * No rings, anywhere. The focus *outline* above stays, and that distinction is the whole rule.
+ *
+ * Two things were drawing focus at once. The outline above is ours and applies to everything; the
+ * shadcn components arrive with `focus-visible:ring-[3px] ring-ring/50` of their own, and a field that
+ * is focused wore both — a 2px outline with a 3px halo bleeding out of it, at two different offsets and
+ * in two different colours. On a form of stacked fields that reads as a rendering fault rather than as
+ * a focused input, which is Edd's "baja el ring de todos los inputs a 0, globalmente".
+ *
+ * It is done here rather than in the components because `src/components/ui/` is vendored and hand
+ * edits there destroy the ability to diff against upstream (CLAUDE.md). Zeroing the two variables the
+ * `ring-*` utilities compile into switches every one of them off — including the ones a future
+ * `shadcn add` brings with it — without touching a line of their source.
+ *
+ * `--tw-shadow` is deliberately untouched: that is DESIGN.md's two-layer elevation, which is a
+ * different thing wearing a similar name.
+ *
+ * ⚠️ This removes the only focus indicator on the handful of vendored components that also set
+ * `outline-hidden` — button, select, tabs, command, popover, dialog, resizable. Focus has to remain
+ * visible (WCAG 2.4.7), so the outline is given back to them below rather than lost with the ring.
+ */
+*,
+*::before,
+*::after {
+  --tw-ring-shadow: 0 0 #0000 !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+}
+
+/**
+ * A field's focus is its border. Nothing else draws a second shape around it.
+ *
+ * This is the third pass at Edd's "quita los rings" and the first one that finds the real culprit. The
+ * ring went; the *outline* stayed, at `outline-offset: 2px`, so a focused input still wore two blue
+ * rounded rectangles — the border at the edge of the box and the outline floating two pixels outside
+ * it. On a screen that is nothing but stacked fields that reads as a rendering fault.
+ *
+ * Suppressed only for things you type into. Buttons, links, tabs and the segmented controls keep the
+ * outline, because they have no border to recolour and would otherwise have no focus indicator at all.
+ * A field does: `.field:focus` takes the border from Hairline Strong to Signal, which is a 7.8:1 change
+ * on white and satisfies WCAG 2.4.7 on its own.
+ */
+:is(input, textarea, select, [contenteditable='true']):focus-visible {
+  outline: none;
+}
+
+/**
+ * Tailwind 4 changed the default border colour to `currentColor`, and this stylesheet never noticed.
+ *
+ * shadcn's own template ships `@layer base { * { @apply border-border } }` and this project's did not,
+ * because the tokens were adapted by hand (see the alias block in `@theme`). So every vendored
+ * component with a bare `border` — the button group around the page and zoom controls, the popovers,
+ * the command palette — drew its border in **the current text colour**: Ink Soft at 5.96:1 where a
+ * 1.4:1 hairline was meant. That is the heavy grey box Edd kept seeing inside the rounded pills and
+ * calling a ring. It was never a ring; it was a hairline four times too dark.
+ *
+ * In `@layer base` so any explicit `border-<colour>` utility still wins, which is how the alert's
+ * caution border and the tab strip's Signal Edge survive this untouched.
+ */
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
+  }
 }
 
 /**

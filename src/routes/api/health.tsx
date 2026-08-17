@@ -57,6 +57,19 @@ export const Route = createFileRoute('/api/health')({
               fonts,
               families: REGISTERED_FAMILIES.length,
             },
+            /**
+             * Which commit this bundle was built from.
+             *
+             * Three times in one session the answer to "why don't I see the change" was that the
+             * container was serving an image built before the change, and each time it cost a round of
+             * guessing at browser caches. Nothing in the interface says which build it is serving —
+             * CLAUDE.md already warns about that in another context — so it says it here, and
+             * `pnpm stale` turns it into one line.
+             *
+             * `unknown` when the build arg was not passed, which is honest: a missing stamp must not
+             * read as "up to date".
+             */
+            build: process.env.HR_COMMIT ?? 'unknown',
           },
           { status: ok ? 200 : 503, headers: { 'cache-control': 'no-store' } },
         )

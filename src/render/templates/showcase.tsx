@@ -25,6 +25,9 @@ import { Fragment } from 'react'
 import { Document, Page } from '@/lib/pdf-primitives'
 import { PdfcnThemeProvider } from '@/components/pdf/theme-provider'
 import type { PdfcnTheme } from '@/components/pdf/theme-types'
+import { Block } from './block'
+import { groupsOf, Ordered, Slot, volunteerGroup } from '../sections'
+import type { Group } from '../sections'
 import type { Resume } from '@/schema/resume'
 import {
   formatLocation,
@@ -168,6 +171,14 @@ function Body({ resume, theme }: { resume: Resume; theme: PdfcnTheme }) {
     ...basics.links.map((link) => link.url),
   ])
 
+  /* One renderer for a titled block of lines: custom sections, awards, publications, volunteering. */
+  const group = (section: Group, index: number) => (
+    <Section key={index} title={section.title} theme={theme}>
+      <Bullets items={section.items} theme={theme} />
+    </Section>
+  )
+  const volunteering = volunteerGroup(resume, locale)
+
   return (
     <div
       style={{
@@ -235,126 +246,173 @@ function Body({ resume, theme }: { resume: Resume; theme: PdfcnTheme }) {
         </Section>
       )}
 
-      {resume.work.length === 0 ? null : (
-        <Section title={local.headings.work} theme={theme}>
-          {resume.work.map((job, index) => (
-            <div
-              key={index}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 3,
-                // A job must never split across a page boundary — the layout bug users notice most.
-                breakInside: 'avoid',
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: theme.typography.heading.fontWeight,
-                }}
-              >
-                {joinParts([job.role, job.company], ' — ')}
-              </div>
-              <div
-                style={{
-                  fontSize: theme.typography.body.fontSize - 1,
-                  color: theme.colors.mutedForeground,
-                }}
-              >
-                {joinParts([
-                  formatRange(job.startDate, job.endDate, locale),
-                  job.location,
-                ])}
-              </div>
-              {job.summary === undefined ? null : (
-                <div style={{ display: 'flex', marginTop: 2 }}>
-                  {job.summary}
+      <Ordered
+        resume={resume}
+        fallback={'experience'}
+        custom={(section, index) => (
+          <Block
+            key={index}
+            block={section}
+            theme={theme}
+            chrome={{
+              // Never called: `group` below handles every kind that has a heading.
+              heading: (title) => (
+                <Section title={title} theme={theme}>
+                  {null}
+                </Section>
+              ),
+              line: (text, k) => (
+                <Bullets key={k} items={[text]} theme={theme} />
+              ),
+              group: (title, children) => (
+                <Section title={title} theme={theme}>
+                  {children}
+                </Section>
+              ),
+            }}
+          />
+        )}
+      >
+        <Slot name="work">
+          {resume.work.length === 0 ? null : (
+            <Section title={local.headings.work} theme={theme}>
+              {resume.work.map((job, index) => (
+                <div
+                  key={index}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 3,
+                    // A job must never split across a page boundary — the layout bug users notice most.
+                    breakInside: 'avoid',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontWeight: theme.typography.heading.fontWeight,
+                    }}
+                  >
+                    {joinParts([job.role, job.company], ' — ')}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: theme.typography.body.fontSize - 1,
+                      color: theme.colors.mutedForeground,
+                    }}
+                  >
+                    {joinParts([
+                      formatRange(job.startDate, job.endDate, locale),
+                      job.location,
+                    ])}
+                  </div>
+                  {job.summary === undefined ? null : (
+                    <div style={{ display: 'flex', marginTop: 2 }}>
+                      {job.summary}
+                    </div>
+                  )}
+                  <Bullets items={job.highlights} theme={theme} />
                 </div>
-              )}
-              <Bullets items={job.highlights} theme={theme} />
-            </div>
-          ))}
-        </Section>
-      )}
-
-      {resume.education.length === 0 ? null : (
-        <Section title={local.headings.education} theme={theme}>
-          {resume.education.map((entry, index) => (
-            <div
-              key={index}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 2,
-                breakInside: 'avoid',
-              }}
-            >
-              <div style={{ fontWeight: theme.typography.heading.fontWeight }}>
-                {joinParts(
-                  [
-                    joinParts([entry.degree, entry.field], ' '),
-                    entry.institution,
-                  ],
-                  ' — ',
-                )}
+              ))}
+            </Section>
+          )}
+        </Slot>
+        <Slot name="education">
+          {resume.education.length === 0 ? null : (
+            <Section title={local.headings.education} theme={theme}>
+              {resume.education.map((entry, index) => (
+                <div
+                  key={index}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 2,
+                    breakInside: 'avoid',
+                  }}
+                >
+                  <div
+                    style={{ fontWeight: theme.typography.heading.fontWeight }}
+                  >
+                    {joinParts(
+                      [
+                        joinParts([entry.degree, entry.field], ' '),
+                        entry.institution,
+                      ],
+                      ' — ',
+                    )}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: theme.typography.body.fontSize - 1,
+                      color: theme.colors.mutedForeground,
+                    }}
+                  >
+                    {formatRange(entry.startDate, entry.endDate, locale)}
+                  </div>
+                  <Bullets items={entry.highlights} theme={theme} />
+                </div>
+              ))}
+            </Section>
+          )}
+        </Slot>
+        <Slot name="skills">
+          {resume.skills.length === 0 ? null : (
+            <Section title={local.headings.skills} theme={theme}>
+              {resume.skills.map((group, index) => (
+                <div key={index} style={{ display: 'flex' }}>
+                  {/* No rating bars or dots: they extract as noise and say nothing (rule 8). */}
+                  {`${group.category}: ${group.items.join(', ')}`}
+                </div>
+              ))}
+            </Section>
+          )}
+        </Slot>
+        <Slot name="certifications">
+          {resume.certifications.length === 0 ? null : (
+            <Section title={local.headings.certifications} theme={theme}>
+              {resume.certifications.map((cert, index) => (
+                <div key={index} style={{ display: 'flex' }}>
+                  {joinParts([
+                    cert.name,
+                    cert.issuer,
+                    formatYearMonth(cert.date),
+                    cert.identifier,
+                  ])}
+                </div>
+              ))}
+            </Section>
+          )}
+        </Slot>
+        <Slot name="languages">
+          {resume.languages.length === 0 ? null : (
+            <Section title={local.headings.languages} theme={theme}>
+              <div style={{ display: 'flex' }}>
+                {resume.languages
+                  .map((language) =>
+                    joinParts(
+                      [language.name, language.raw ?? language.level],
+                      ' ',
+                    ),
+                  )
+                  .join(' · ')}
               </div>
-              <div
-                style={{
-                  fontSize: theme.typography.body.fontSize - 1,
-                  color: theme.colors.mutedForeground,
-                }}
-              >
-                {formatRange(entry.startDate, entry.endDate, locale)}
-              </div>
-              <Bullets items={entry.highlights} theme={theme} />
-            </div>
-          ))}
-        </Section>
-      )}
-
-      {resume.skills.length === 0 ? null : (
-        <Section title={local.headings.skills} theme={theme}>
-          {resume.skills.map((group, index) => (
-            <div key={index} style={{ display: 'flex' }}>
-              {/* No rating bars or dots: they extract as noise and say nothing (rule 8). */}
-              {`${group.category}: ${group.items.join(', ')}`}
-            </div>
-          ))}
-        </Section>
-      )}
-
-      {resume.certifications.length === 0 ? null : (
-        <Section title={local.headings.certifications} theme={theme}>
-          {resume.certifications.map((cert, index) => (
-            <div key={index} style={{ display: 'flex' }}>
-              {joinParts([
-                cert.name,
-                cert.issuer,
-                formatYearMonth(cert.date),
-                cert.identifier,
-              ])}
-            </div>
-          ))}
-        </Section>
-      )}
-
-      {resume.languages.length === 0 ? null : (
-        <Section title={local.headings.languages} theme={theme}>
-          <div style={{ display: 'flex' }}>
-            {resume.languages
-              .map((language) =>
-                joinParts([language.name, language.raw ?? language.level], ' '),
-              )
-              .join(' · ')}
-          </div>
-        </Section>
-      )}
-
-      {resume.custom.map((section, index) => (
-        <Section key={index} title={section.title} theme={theme}>
-          <Bullets items={section.items} theme={theme} />
-        </Section>
-      ))}
+            </Section>
+          )}
+        </Slot>
+        {/*
+          Three sections that were in the schema, filled by extraction and printed by the `.docx`
+          export — and rendered by no PDF template at all. Drawn through the same renderer this
+          design uses for a custom section, which is the shape all three already have.
+        */}
+        <Slot name="awards">
+          {groupsOf(resume.awards).map((g, i) => group(g, i))}
+        </Slot>
+        <Slot name="publications">
+          {groupsOf(resume.publications).map((g, i) => group(g, i))}
+        </Slot>
+        <Slot name="volunteer">
+          {volunteering === undefined ? null : group(volunteering, 0)}
+        </Slot>
+      </Ordered>
     </div>
   )
 }

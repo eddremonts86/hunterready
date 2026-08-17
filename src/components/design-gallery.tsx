@@ -35,6 +35,13 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Resume } from '@/schema/resume'
 import { DesignPreviewDialog } from './design-preview-dialog'
 import { Section } from './design-axes'
+import { PRO_IN_BETA, ProTag } from '@/components/pro-tag'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 /** The order a card shows as three words, because it is the structural difference a person can act on. */
 const ORDER_WORDS: Record<string, Array<string>> = {
@@ -57,7 +64,14 @@ const SPECIMEN_LINE: Record<string, string> = {
   Study: 'BSc Nursing, Københavns Professionshøjskole',
 }
 
-function Specimen({ design }: { design: Design }) {
+/**
+ * Exported for the landing page, which shows one of these per theme.
+ *
+ * It draws in the document's own colours, which is the whole reason the marketing page may use it:
+ * a catalogue sold with invented swatches would be selling a design nobody can download. The same
+ * component in both places means the page cannot flatter a theme the PDF will not match.
+ */
+export function Specimen({ design }: { design: Design }) {
   const theme = getTheme(design.theme)
   const style = styleOf(theme)
   const { heading, body } = theme.typography
@@ -303,7 +317,14 @@ export function DesignGallery({
 
   const Card = ({ design }: { design: Design }) => {
     const chosen = design.structure === templateId && design.theme === themeId
-    const locked = design.tier === 'paid' && !entitled
+    /*
+      Two facts, and they used to be one. `pro` is which tier this design belongs to and never
+      changes; `locked` is whether this visitor may have it today and moves with the plan and with
+      beta. The chip used to render on `locked`, so the label disappeared the moment the gate lifted
+      and a beta user had no way to know which half of the catalogue they were in.
+    */
+    const pro = design.tier === 'paid'
+    const locked = pro && !entitled
     const meta = templates[design.structure]
 
     return (
@@ -371,33 +392,42 @@ export function DesignGallery({
                 Design-first
               </span>
             )}
+            {/* The tier, always. The padlock only when it is actually shut. */}
+            {pro && <ProTag />}
             {locked && (
               <span className="inline-flex items-center gap-1 rounded-full bg-band px-1.5 py-0.5 text-[10px] font-semibold text-ink-soft">
                 <Lock />
-                Paid plan
+                Locked
               </span>
             )}
           </span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => toggleStar(design.id)}
-          aria-label={
-            starred.includes(design.id)
-              ? `Remove ${design.label} from your marked designs`
-              : `Mark ${design.label}`
-          }
-          aria-pressed={starred.includes(design.id)}
-          className={[
-            'absolute left-3 top-3 rounded-full border px-1.5 py-1 transition-opacity',
-            starred.includes(design.id)
-              ? 'border-signal-edge bg-signal-wash text-signal opacity-100'
-              : 'border-hairline-strong bg-ground/95 text-ink-soft opacity-0 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100',
-          ].join(' ')}
-        >
-          <Star filled={starred.includes(design.id)} />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => toggleStar(design.id)}
+              aria-label={
+                starred.includes(design.id)
+                  ? `Remove ${design.label} from your marked designs`
+                  : `Mark ${design.label}`
+              }
+              aria-pressed={starred.includes(design.id)}
+              className={[
+                'absolute left-3 top-3 rounded-full border px-1.5 py-1 transition-opacity',
+                starred.includes(design.id)
+                  ? 'border-signal-edge bg-signal-wash text-signal opacity-100'
+                  : 'border-hairline-strong bg-ground/95 text-ink-soft opacity-0 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100',
+              ].join(' ')}
+            >
+              <Star filled={starred.includes(design.id)} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {starred.includes(design.id) ? 'Remove your mark' : 'Mark this one'}
+          </TooltipContent>
+        </Tooltip>
 
         <button
           type="button"
@@ -412,74 +442,74 @@ export function DesignGallery({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <DesignPreviewDialog
-        design={previewing}
-        /* The gallery's own order: everything included first, then the paid half. */
-        designs={ordered}
-        resume={resume}
-        onClose={() => setPreviewing(undefined)}
-        onChoose={onChoose}
-        onNavigate={setPreviewing}
-        current={DESIGNS.find(
-          (d) => d.structure === templateId && d.theme === themeId,
-        )}
-      />
-      {starred.length > 0 && (
-        /*
+    <TooltipProvider delayDuration={400}>
+      <div className="flex flex-col gap-4">
+        <DesignPreviewDialog
+          design={previewing}
+          /* The gallery's own order: everything included first, then the paid half. */
+          designs={ordered}
+          resume={resume}
+          onClose={() => setPreviewing(undefined)}
+          onChoose={onChoose}
+          onNavigate={setPreviewing}
+          current={DESIGNS.find(
+            (d) => d.structure === templateId && d.theme === themeId,
+          )}
+        />
+        {starred.length > 0 && (
+          /*
           First, and only when it has something in it. An empty "Marked" header on every visit is a
           promise of a feature rather than a feature, and it would push the catalogue down the page
           for the many people who never mark anything.
         */
-        <Section title="Marked" count={starred.length}>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {ordered
-              .filter((design) => starred.includes(design.id))
-              .map((design) => (
-                <Card key={design.id} design={design} />
-              ))}
-          </div>
-        </Section>
-      )}
+          <Section title="Marked" count={starred.length}>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {ordered
+                .filter((design) => starred.includes(design.id))
+                .map((design) => (
+                  <Card key={design.id} design={design} />
+                ))}
+            </div>
+          </Section>
+        )}
 
-      <Section title="Included" count={free.length}>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {free.map((design) => (
-            <Card key={design.id} design={design} />
-          ))}
-        </div>
-      </Section>
-
-      {/*
-        Folded shut by default, and that is a judgement rather than a default: ninety-one paid cards
-        under twelve included ones meant the included set was a strip at the top of a very long
-        column. Closed, the two sets are the same size on screen, which is what a comparison needs.
-      */}
-      <Section
-        title={entitled ? 'Also yours' : 'Paid plan'}
-        count={paid.length}
-        defaultOpen={false}
-      >
-        <div className="flex flex-col gap-2">
-          {!entitled && (
-            /*
-            Said once, at the top of the locked set, rather than as a sales line on each of eighteen cards.
-            And it says what the free ones *are* rather than what they lack: the ATS guarantee is not the
-            thing being sold, and implying it is would be the kind of pressure this product does not use.
-          */
-            <p className="text-meta leading-relaxed text-ink-soft">
-              Every design above renders the same document, checked by the same
-              parse test. These add different typefaces and a different order of
-              sections.
-            </p>
-          )}
+        <Section title="Included" count={free.length}>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {paid.map((design) => (
+            {free.map((design) => (
               <Card key={design.id} design={design} />
             ))}
           </div>
-        </div>
-      </Section>
-    </div>
+        </Section>
+
+        {/*
+          "Pro", in both states. It used to read "Also yours" once entitled, which named the plan
+          only to the people who could not have it — the reader who *can* use these had no way to
+          tell they were using the paid half, which is the whole thing beta has to keep visible.
+        */}
+        <Section title="Pro" count={paid.length}>
+          <div className="flex flex-col gap-2">
+            {/*
+              Said once, at the top of the set, rather than as a sales line on each of ninety-one
+              cards. And it says what the included ones *are* rather than what they lack: the parse
+              guarantee is not the thing being sold, and implying it is would be the kind of pressure
+              this product does not use.
+            */}
+            <p className="text-meta leading-relaxed text-ink-soft">
+              Every design above renders the same document, checked by the same
+              parse test. These add different typefaces and a different order of
+              sections.{' '}
+              {entitled ? (
+                <span className="font-medium text-ink">{PRO_IN_BETA}</span>
+              ) : null}
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {paid.map((design) => (
+                <Card key={design.id} design={design} />
+              ))}
+            </div>
+          </div>
+        </Section>
+      </div>
+    </TooltipProvider>
   )
 }

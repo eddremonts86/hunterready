@@ -17,6 +17,7 @@ import { resolveLocalProvider, resolveProvider } from '@/structure/provider'
 import { checkRateLimit, clientKey } from '@/lib/rate-limit'
 import { event, requestId } from '@/lib/log'
 import { mayUseThirdParty } from '@/lib/entitlements'
+import { consentedToTransfer } from '@/lib/chosen-provider'
 
 export const Route = createFileRoute('/api/rewrite')({
   server: {
@@ -74,7 +75,7 @@ export const Route = createFileRoute('/api/rewrite')({
          */
         const mayUseProvider = await mayUseThirdParty(
           request,
-          payload.processing === 'provider',
+          consentedToTransfer(payload.processing),
         )
 
         if (

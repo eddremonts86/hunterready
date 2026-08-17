@@ -111,3 +111,23 @@ describe('shifting rewrite coordinates through structural edits', () => {
     ).toEqual(at(0, 2))
   })
 })
+
+/**
+ * The whole experience section emptied.
+ *
+ * Arrived with the panel learning to remove any section but "You". Every open suggestion is addressed
+ * by `{workIndex, highlightIndex}`, and after a clear there is no work item for any of them to be
+ * about — so they all have to go, not be renumbered. A suggestion that survives an emptied list is
+ * advice that will be written onto whatever occupies that index next.
+ */
+describe('a cleared work section', () => {
+  it('drops every suggestion, whatever its coordinates', () => {
+    for (const entry of [
+      { workIndex: 0, highlightIndex: 0 },
+      { workIndex: 3, highlightIndex: 7 },
+      { workIndex: 99, highlightIndex: 0 },
+    ]) {
+      expect(shiftTarget(entry, { kind: 'work-cleared' })).toBeUndefined()
+    }
+  })
+})

@@ -73,6 +73,15 @@ FROM node:22-bookworm-slim AS runtime
 
 WORKDIR /app
 
+# Which commit this image was built from, reported by `/api/health` and read by `pnpm stale`.
+#
+# It belongs in *this* stage and not in `build`, which is where the first attempt put it. The server
+# is a Nitro bundle reading `process.env` at runtime — nothing inlines it — so an ENV set in the build
+# stage is discarded with that stage and `/api/health` answers `unknown` from an image that was
+# stamped correctly. Declared last so a new commit does not invalidate the layers above it.
+ARG HR_COMMIT=unknown
+ENV HR_COMMIT=$HR_COMMIT
+
 ENV NODE_ENV=production \
     PORT=3000 \
     # LibreOffice writes a profile on first run; give it a writable home it actually owns.

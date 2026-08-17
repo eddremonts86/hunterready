@@ -123,17 +123,73 @@ the image and deliberately not on a laptop (ADR-012), so the `.doc` and OCR suit
 
 ## Commands
 
-**There is one dev environment and it is the container on `:3100`.** `vite dev` used to run alongside
-it on 3007; having both was worse than having one. The dev server reaches **no database and no model**
-— `/api/processing` answers with an empty body, extraction silently falls back to the rule engine, and
-Wording, translation, accounts and encryption-at-rest are all off — so a feature can look finished
-there and be broken in the only environment that runs it. It also cannot prove the render path at all
-(ADR-005). Do not start a second one.
+**Two loops, and the fast one is now safe to use.**
+
+`pnpm dev:ui` runs Vite on `:3007` with **`/api/*` proxied to the container on `:3100`**. Edit a
+component and it is on screen in about three seconds, with no image rebuild.
+
+This reverses the old rule, and the reason matters. The rule was "one dev environment, the container",
+because a bare `vite dev` reached no database and no model — `/api/processing` answered with an empty
+body, extraction fell back to the rule engine, and accounts, Wording, translation and
+encryption-at-rest were all off, so a feature could look finished there and be broken in the only
+environment that runs it. The proxy removes exactly that: every API call goes to the container, so the
+same Postgres, the same MiniMax, the same WASM renderer and the same entitlements answer. Verified —
+`/api/processing` through `:3007` returns `encryptsAtRest: true` and `provider: MiniMax`, and
+`/api/render` returns a real PDF.
+
+What the fast loop owns is the **client bundle**, which is the thing you are editing when you wonder
+why a moved button costs a rebuild.
+
+⚠️ **It does not replace a real build for anything that ships.** ADR-005's failure — a green
+`vite dev`, a green `pnpm build`, and a 500 in production because Rollup never emitted the WASM —
+lived in the _build_, not in the browser.
+
+**But that build does not have to be the container, and usually should not be.** `pnpm host` builds
+and serves on `:3011` against the same Postgres and the same models, and it is the honest answer to
+"why is Docker in this loop at all". Measured on this Mac:
+
+|                          | `pnpm host` | `pnpm app`                                                    |
+| ------------------------ | ----------- | ------------------------------------------------------------- |
+| build                    | seconds     | 2 min warm, **10+ min** when the apt layer falls out of cache |
+| `checks.wasm` / 60 fonts | ✔           | ✔                                                             |
+| `encryptsAtRest: true`   | ✔           | ✔                                                             |
+| DeepSeek + MiniMax       | ✔           | ✔                                                             |
+| `/api/render` PDF        | ✔ 19,742 B  | ✔ 19,742 B (identical)                                        |
+| **LibreOffice (`.doc`)** | ✖           | ✔                                                             |
+| **Tesseract (OCR)**      | ✖           | ✔                                                             |
+| commit stamp             | `unknown`   | real                                                          |
+
+Three container rebuilds in one session each spent ten minutes re-downloading LibreOffice, poppler
+and three Tesseract language packs before compiling a line of the app, and not one of those rebuilds
+was for a reason to do with the code.
+
+**So: `pnpm host` is the default way to believe a build. Reach for `pnpm app` for exactly three
+things** — `.doc` ingestion, OCR of a scan, and the pre-release check that the shipping image itself
+is sound. `pnpm test:docker` covers the first two in CI form.
+
+`pnpm host` needs `db` and `llm` up; they are separate services and cheap:
+`docker compose -f docker-compose.yml -f docker-compose.local.yml up -d db llm`.
+
+Iterate on `:3007`. Believe `:3011`. Ship what `:3100` served.
 
 ```bash
-# After any source change. `--build` is the whole command; without it you restart the old image.
-docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build app
+pnpm dev:ui   # :3007, hot reload, real backend through the proxy — for iterating
+pnpm host     # :3011, real build, real database, real models — for believing
+pnpm app      # :3100, the shipping image — for .doc, OCR, and the last check before a release
+pnpm stale    # is :3100 serving this code, or an older image?
 ```
+
+**`pnpm stale` before wondering about caches.** The image stamps its commit in and `/api/health`
+reports it, because three times in one session "why don't I see the change" turned out to be an
+image built before the change — and each time it cost a round of guessing at the browser first.
+
+```
+✖ http://localhost:3100 is behind. Serving 89837f0, HEAD is 54e8e8e.
+```
+
+`pnpm app` is `docker compose … up -d --build app` with `HR_COMMIT` set. Running the raw command
+still works; it just stamps `unknown`, which `pnpm stale` reports as a question rather than as
+agreement.
 
 ⚠️ **`docker build -t hunterready:local .` does not feed this container, and used to be the documented
 step here.** The `app` service declares `build:` with no `image:`, so Compose builds and runs an image

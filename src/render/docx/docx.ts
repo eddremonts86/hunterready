@@ -37,6 +37,7 @@
  * reading order. Identical discipline to the PDF round trip, which is the mechanism the whole product
  * rests on.
  */
+import { isSpacer } from '@/schema/resume'
 import type { Resume } from '@/schema/resume'
 import {
   formatLocation,
@@ -486,6 +487,16 @@ function buildBody(resume: Resume): string {
    * them (ADR-001). Dropping them here would lose content the candidate deliberately kept.
    */
   for (const custom of resume.custom) {
+    /*
+      A spacer contributes nothing here, deliberately.
+
+      Word has no pixels and this file has one fixed layout by design — `template` and `theme` are
+      ignored for `.docx` because offering a choice of designs in the format uploaded to the crudest
+      portals would be selling a decision that cannot be honoured. Emitting an empty paragraph to
+      approximate the gap would put a stray blank line into exactly the document most likely to be
+      machine-read. Skipping it loses no content: a spacer has none.
+    */
+    if (isSpacer(custom)) continue
     paragraphs.push(...section(custom.title, bullets(custom.items)))
   }
 

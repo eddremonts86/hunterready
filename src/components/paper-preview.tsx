@@ -45,6 +45,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { PdfcnTheme } from '@/components/pdf/theme-types'
 import type { Resume } from '@/schema/resume'
+import { ButtonGroup, ButtonGroupText } from '@/components/ui/button-group'
+import { Kbd } from '@/components/ui/kbd'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 /** A4 at 96 dpi, the unit takumi lays out in. */
 /**
@@ -62,6 +70,75 @@ const SHEET_HEIGHT = 1123
 
 /** Beyond this, something has gone wrong with measurement and a browser should not be asked to draw it. */
 const MAX_PAGES = 12
+
+/** One measured child of the document. Everything `paginate` is allowed to know. */
+export interface MeasuredBlock {
+  top: number
+  height: number
+  /** An explicit page break — an instruction with no height, which measurement alone cannot find. */
+  pageBreak: boolean
+}
+
+/**
+ * Where the sheets begin, given the laid-out blocks.
+ *
+ * Pulled out of the effect and made pure so it can be tested, because this is the function that has
+ * been wrong twice and both times in a way nobody could see from the code:
+ *
+ *   • It used to move the page start to an over-tall block and carry on, so a two-page paragraph was
+ *     drawn from its beginning on one sheet, clipped, and **its middle appeared on no sheet at all**.
+ *   • It paginated by height alone, so an explicit page break — zero height, all instruction — was
+ *     stepped straight over. The PDF broke the page and the preview did not, which is the one
+ *     disagreement this product cannot afford: the preview is where somebody decides the document is
+ *     finished.
+ *
+ * The DOM measurement above it still has no test — jsdom reports every box as zero — but the decisions
+ * do, which is where both bugs lived.
+ */
+export function paginate(
+  blocks: ReadonlyArray<MeasuredBlock>,
+  usable: number,
+): Array<number> {
+  if (blocks.length === 0) return [0]
+
+  const next: Array<number> = [0]
+  let pageTop = 0
+
+  for (const [index, block] of blocks.entries()) {
+    const bottom = block.top + block.height
+
+    /*
+      Two conditions, and both are takumi's behaviour rather than caution. A break at the very top of a
+      page produces nothing, because the page it would start has already started. A break with nothing
+      after it produces nothing either — there is no blank sheet, which is why the round-trip test that
+      expected one was the thing that was wrong.
+    */
+    if (block.pageBreak) {
+      const follows = blocks.slice(index + 1).some((b) => b.height > 0)
+      if (follows && block.top > pageTop && next.length < MAX_PAGES) {
+        pageTop = block.top
+        next.push(block.top)
+      }
+      continue
+    }
+
+    // A block that would not fit on the current page starts the next one.
+    if (bottom - pageTop > usable && block.top > pageTop) {
+      pageTop = block.top
+      next.push(block.top)
+      if (next.length >= MAX_PAGES) break
+    }
+
+    // A block taller than a whole page is cut through, a page at a time. Ugly, and what takumi does.
+    while (bottom - pageTop > usable && next.length < MAX_PAGES) {
+      pageTop += usable
+      next.push(pageTop)
+    }
+    if (next.length >= MAX_PAGES) break
+  }
+
+  return next
+}
 
 export function PaperPreview({
   resume,
@@ -217,46 +294,16 @@ export function PaperPreview({
       container = only
     }
 
-    const blocks = [...container.children] as Array<HTMLElement>
-    if (blocks.length === 0) {
-      setBreaks([0])
-      return
-    }
-
-    const next: Array<number> = [0]
-    let pageTop = 0
-
-    for (const block of blocks) {
-      const top = block.offsetTop
-      const bottom = top + block.offsetHeight
-
-      // A block that would not fit on the current page starts the next one.
-      if (bottom - pageTop > usable && top > pageTop) {
-        pageTop = top
-        next.push(top)
-        if (next.length >= MAX_PAGES) break
+    const blocks = [...container.children].map((child) => {
+      const el = child as HTMLElement
+      return {
+        top: el.offsetTop,
+        height: el.offsetHeight,
+        pageBreak: el.dataset.pageBreak !== undefined,
       }
+    })
 
-      /**
-       * A block taller than a whole page has to be cut through, and this is the part the first version got
-       * wrong — badly enough to lose content.
-       *
-       * It used to move the page start to such a block and then go on to the next block, so a summary two
-       * pages tall was shown from its beginning on one sheet, clipped, and its **middle was never drawn on
-       * any sheet at all**. Found by pushing a 26-sentence paragraph through the preview and reading the
-       * sheets: page two started at the paragraph, page three at the section after it, and the thousand
-       * pixels in between existed nowhere.
-       *
-       * So a page-sized step is added through the overflow. Cutting a paragraph mid-line is not pretty and
-       * it is what takumi does too, having no other option; losing a page of somebody's CV silently is not
-       * a trade at all.
-       */
-      while (bottom - pageTop > usable && next.length < MAX_PAGES) {
-        pageTop += usable
-        next.push(pageTop)
-      }
-      if (next.length >= MAX_PAGES) break
-    }
+    const next = paginate(blocks, usable)
 
     setBreaks(next)
     onPagesMeasured?.(next.length)
@@ -287,90 +334,121 @@ export function PaperPreview({
         document is a button covering the document at exactly the moment somebody zoomed in to see
         what was underneath it.
       */}
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b border-hairline bg-ground px-3 py-1.5">
-        {/*
-          Page navigation on the left, because it is about *where* you are, and the count already
-          existed: `breaks.length` was being used to write "2 pages" and for nothing else. Zoomed to
-          200%, reaching the second page was a long blind scroll.
-        */}
-        <span className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => goToPage(current - 1)}
-            disabled={current <= 0}
-            aria-label="Previous page"
-            className="btn btn-quiet px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            &lsaquo;
-          </button>
-          <span className="tally min-w-[4.5rem] text-center text-meta text-ink-soft">
-            {breaks.length === 1
-              ? '1 page'
-              : `${current + 1} of ${breaks.length}`}
-          </span>
-          <button
-            type="button"
-            onClick={() => goToPage(current + 1)}
-            disabled={current >= breaks.length - 1}
-            aria-label="Next page"
-            className="btn btn-quiet px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            &rsaquo;
-          </button>
-        </span>
+      {/*
+        Two groups rather than six loose buttons.
 
-        <span className="flex items-center gap-1">
-          {/*
-            The two postures, named. "Width" fills the space to read the words; "Page" shows the whole
-            sheet to judge whether it lands on one. Both are pressed states rather than plain buttons,
-            because which one you are in changes what the percentage beside them means.
-          */}
-          <button
-            type="button"
-            onClick={() => setMode('width')}
-            aria-pressed={mode === 'width'}
-            className={`btn px-2.5 py-1 text-[12px] ${mode === 'width' ? 'btn-primary' : 'btn-quiet'}`}
-          >
-            Width
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('page')}
-            aria-pressed={mode === 'page'}
-            className={`btn px-2.5 py-1 text-[12px] ${mode === 'page' ? 'btn-primary' : 'btn-quiet'}`}
-          >
-            Page
-          </button>
+        `ButtonGroup` welds each set into one object with shared edges, which is what says "these
+        belong together and that one does not". Before, page navigation and zoom were the same six
+        pills in a row and the eye had to work out which was which. Every icon-only control carries a
+        tooltip, because a chevron is not a word: the `aria-label` was already telling a screen reader
+        what these do while telling the person looking at them nothing.
+      */}
+      <TooltipProvider delayDuration={400}>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b border-hairline bg-ground px-3 py-1.5">
+          <ButtonGroup>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => goToPage(current - 1)}
+                  disabled={current <= 0}
+                  aria-label="Previous page"
+                  className="btn btn-quiet rounded-r-none px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  &lsaquo;
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Previous page</TooltipContent>
+            </Tooltip>
+            <ButtonGroupText className="tally min-w-[4.5rem] justify-center text-meta text-ink-soft">
+              {breaks.length === 1
+                ? '1 page'
+                : `${current + 1} of ${breaks.length}`}
+            </ButtonGroupText>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => goToPage(current + 1)}
+                  disabled={current >= breaks.length - 1}
+                  aria-label="Next page"
+                  className="btn btn-quiet rounded-l-none px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  &rsaquo;
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Next page</TooltipContent>
+            </Tooltip>
+          </ButtonGroup>
 
-          <span className="mx-1 h-4 w-px bg-hairline" />
+          <div className="flex items-center gap-2">
+            {/*
+              The two postures, named. "Width" fills the space to read the words; "Page" shows the
+              whole sheet to judge whether it lands on one.
+            */}
+            <ButtonGroup>
+              <button
+                type="button"
+                onClick={() => setMode('width')}
+                aria-pressed={mode === 'width'}
+                className={`btn rounded-r-none px-2.5 py-1 text-[12px] ${mode === 'width' ? 'btn-primary' : 'btn-quiet'}`}
+              >
+                Width
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('page')}
+                aria-pressed={mode === 'page'}
+                className={`btn rounded-l-none px-2.5 py-1 text-[12px] ${mode === 'page' ? 'btn-primary' : 'btn-quiet'}`}
+              >
+                Page
+              </button>
+            </ButtonGroup>
 
-          <button
-            type="button"
-            onClick={() => nudge(-1)}
-            disabled={effective <= ZOOM_STEPS[0] + 0.001}
-            aria-label="Zoom out"
-            className="btn btn-quiet px-2 py-1 text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            &minus;
-          </button>
-          {/*
-            The size against a real page, not a percentage of the fit. "100%" then means life-size,
-            which is the number somebody wants when they ask how big this is.
-          */}
-          <span className="tally min-w-[3.5rem] text-center text-meta text-ink-soft">
-            {Math.round(effective * 100)}%
-          </span>
-          <button
-            type="button"
-            onClick={() => nudge(1)}
-            disabled={effective >= ZOOM_STEPS[ZOOM_STEPS.length - 1] - 0.001}
-            aria-label="Zoom in"
-            className="btn btn-quiet px-2 py-1 text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            +
-          </button>
-        </span>
-      </div>
+            <ButtonGroup>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => nudge(-1)}
+                    disabled={effective <= ZOOM_STEPS[0] + 0.001}
+                    aria-label="Zoom out"
+                    className="btn btn-quiet rounded-r-none px-2 py-1 text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    &minus;
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Zoom out</TooltipContent>
+              </Tooltip>
+              {/*
+                The size against a real page, not a percentage of the fit. "100%" then means life-size,
+                which is the number somebody wants when they ask how big this is.
+              */}
+              <ButtonGroupText className="tally min-w-[3.5rem] justify-center text-meta text-ink-soft">
+                {Math.round(effective * 100)}%
+              </ButtonGroupText>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => nudge(1)}
+                    disabled={
+                      effective >= ZOOM_STEPS[ZOOM_STEPS.length - 1] - 0.001
+                    }
+                    aria-label="Zoom in"
+                    className="btn btn-quiet rounded-l-none px-2 py-1 text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    +
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Zoom in <Kbd>Ctrl</Kbd> + scroll
+                </TooltipContent>
+              </Tooltip>
+            </ButtonGroup>
+          </div>
+        </div>
+      </TooltipProvider>
 
       <div
         ref={containerRef}

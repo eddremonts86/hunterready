@@ -66,7 +66,7 @@ export function asciiName(fullName: string): string {
  */
 export function documentFilename(
   fullName: string,
-  extension: 'pdf' | 'docx',
+  extension: 'pdf' | 'docx' | 'html',
 ): string {
   const base = asciiName(fullName)
   return `${base === '' ? 'CV' : `${base}-CV`}.${extension}`

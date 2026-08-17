@@ -15,6 +15,10 @@ services:
       context: .
       # Never the `test` stage: that one carries node_modules and dev dependencies.
       target: runtime
+      args:
+        # Stamped into the bundle and reported by `/api/health`, so `pnpm stale` can tell you the
+        # container is behind instead of you working it out from a change that will not appear.
+        HR_COMMIT: ${HR_COMMIT:-unknown}
     container_name: hunterready-app
     restart: unless-stopped
     depends_on:
@@ -40,6 +44,9 @@ services:
       # ADR-030, temporary: the third-party model for everyone while the box cannot serve the local
       # one fast enough. Consent is untouched — this grants entitlement, not permission.
       HR_THIRD_PARTY_FOR_ALL: ${HR_THIRD_PARTY_FOR_ALL:-}
+      # Beta: every Pro capability included, and every one of them still labelled Pro on screen.
+      # Defaults ON in code, so unset here means beta. Set to `false` the day pricing opens.
+      HR_BETA_PAID_FREE: ${HR_BETA_PAID_FREE:-}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       # The local model. This is what a user gets when they decline the third-party provider — see
       # `src/structure/provider.ts` for why that is a model on our own hardware and not a regex.
@@ -49,6 +56,14 @@ services:
       MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
       MINIMAX_BASE_URL: ${MINIMAX_BASE_URL:-}
       MINIMAX_MODEL: ${MINIMAX_MODEL:-}
+      # DeepSeek, alongside MiniMax so the two can be measured on the same CVs rather than by
+      # swapping a credential in and out — see `HR_PROVIDER` in src/structure/provider.ts.
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
+      # Which one answers when several are configured. Unset, the resolution order in provider.ts
+      # applies and nothing changes for an existing deployment.
+      HR_PROVIDER: ${HR_PROVIDER:-}
       # Coolify's convention for a compose stack: `SERVICE_FQDN_<SERVICE>_<PORT>` tells its proxy which
       # container and port back this domain. It has to be declared **on the service**, not only as a
       # stack-level variable — with it missing, the deploy reports `running:healthy` (it is) while

@@ -339,3 +339,254 @@ describe('every registered template is covered by this suite', () => {
     expect(Object.keys(templates).length).toBe(TEMPLATE_IDS.length)
   })
 })
+
+/**
+ * A spacer draws room and contributes nothing a parser can see.
+ *
+ * This is the clause that makes a layout value acceptable in a semantic schema at all. People already
+ * space a CV out with an empty custom section, and that lands in the extracted text as a heading with
+ * no body — a section a screener reads as having failed to parse. The whole justification for teaching
+ * the renderer about gaps is that a gap it knows about is *invisible* to the parse, so the assertion
+ * has to be that the extracted text is byte-identical with the spacers in and out.
+ *
+ * Every template, because there are nine that draw `custom` and one of them getting this wrong would
+ * put a stray glyph in somebody's document with nothing on screen to show it.
+ */
+describe('a spacer changes the layout and not the text', () => {
+  it.each(TEMPLATE_IDS)('%s extracts identically', async (templateId) => {
+    const fixture = fixtures[0]
+    const plain = {
+      ...fixture.resume,
+      custom: [{ title: 'References', items: ['On request'] }],
+    }
+    const spaced = {
+      ...plain,
+      custom: [
+        { title: '', items: [], space: 40 },
+        ...plain.custom,
+        { title: '', items: [], space: 40 },
+      ],
+    }
+
+    const before = await renderResume(plain, { templateId })
+    const after = await renderResume(spaced, { templateId })
+
+    const a = await extractPdfText(before.bytes)
+    const b = await extractPdfText(after.bytes)
+    expect(withoutCounters(b.text)).toBe(withoutCounters(a.text))
+  })
+
+  /**
+   * And it is not a no-op.
+   *
+   * The obvious companion assertion — that the bytes differ — is not one: takumi's content stream is
+   * compressed, and a 40px shift that reflows nothing can come out the same length. Measured, it does
+   * so on seventeen of the twenty-eight templates, which would have made the guard look like a bug in
+   * the spacer rather than a bug in the test. Page count is the observable that cannot be coincidence:
+   * enough blank space has to push the document onto a second sheet.
+   */
+  it('takes up real room', async () => {
+    const fixture = fixtures[0]
+    const one = { ...fixture.resume, custom: [] }
+    const two = {
+      ...one,
+      custom: [{ title: '', items: [], space: MAX_MEANINGFUL_SPACE }],
+    }
+    const before = await extractPdfText((await renderResume(one)).bytes)
+    const after = await extractPdfText((await renderResume(two)).bytes)
+    expect(after.pages).toBeGreaterThan(before.pages)
+    expect(withoutCounters(after.text)).toBe(withoutCounters(before.text))
+  })
+})
+
+/**
+ * Drop the page counters the renderer stamps on each sheet.
+ *
+ * Not a loophole — the opposite. A spacer that pushes a document onto a second page changes `1/1` into
+ * `1/2 … 2/2`, and that difference is the *pagination working*, not the spacer contributing text. Left
+ * in, the assertion would forbid a spacer from ever adding a page, which is most of what a spacer is
+ * for. What it must not add is a word, and everything else is still compared exactly.
+ *
+ * The pattern is anchored to the counter's shape and nothing else in these fixtures matches it. A CV
+ * that genuinely contains "3/4" would lose those characters from this comparison and from no other
+ * assertion in the suite.
+ */
+function withoutCounters(text: string): string {
+  return text.replace(/\s*\b\d{1,3}\/\d{1,3}\b/g, '').trim()
+}
+
+/** The schema's ceiling, which is also enough to overflow a page that was previously just fitting. */
+const MAX_MEANINGFUL_SPACE = 240
+
+/**
+ * The document's own section order, honoured by every design.
+ *
+ * This exists to make a half-migration impossible to ship. Nine template files place their blocks, two
+ * of them in two columns, and an order that works on twenty-two designs and is silently ignored on six
+ * is exactly the failure this project keeps having — a feature that passes review because the design
+ * somebody happened to test was one of the twenty-two.
+ *
+ * Asserted through the extracted text rather than the markup: what is being promised is that a reader
+ * meets the sections in the order asked for, and the parse-back is the only place that claim is real.
+ */
+describe('the document decides the order of its sections', () => {
+  /*
+    Education against Experience, and not Languages against Experience, which is what this asserted
+    first and was wrong to. Two of these designs put skills and languages in a coloured rail, and their
+    main column comes first in the DOM on purpose — that is the ATS honesty trick the sidebar file
+    argues for at length. A cross-column assertion would therefore demand they break their own reading
+    order to pass. Education and Experience are in the main column of all twenty-eight, so the claim
+    being tested is the one that is true everywhere: within a column, the document decides.
+  */
+  it.each(TEMPLATE_IDS)(
+    '%s puts education before experience',
+    async (templateId) => {
+      const fixture = fixtures[0]
+      const resume = { ...fixture.resume, sectionOrder: ['education', 'work'] }
+      const { bytes } = await renderResume(resume, { templateId })
+      const { text } = await extractPdfText(bytes)
+
+      /*
+      Case-insensitive, because a heading's case is the design's business. Most of these templates set
+      `textTransform: uppercase`, so the extractor returns LANGUAGES where the locale table says
+      "Languages" — and asserting on the table's case would test the typography rather than the order.
+    */
+      const locale = resolveLocale(resume.locale)
+      const flat = text.toLowerCase()
+      const first = flat.indexOf(
+        strings(locale).headings.education.toLowerCase(),
+      )
+      const experience = flat.indexOf(
+        strings(locale).headings.work.toLowerCase(),
+      )
+      expect(first, 'no education heading found').toBeGreaterThan(-1)
+      expect(experience, 'no experience heading found').toBeGreaterThan(-1)
+      expect(
+        first,
+        `${templateId} ignored sectionOrder: education at ${first}, experience at ${experience}`,
+      ).toBeLessThan(experience)
+    },
+  )
+
+  /**
+   * And the three that reached the `.docx` and no PDF.
+   *
+   * `awards`, `publications` and `volunteer` were in the schema, filled by extraction and printed by
+   * the Word export while every PDF template dropped them without a word. Silent content loss on the
+   * primary output.
+   */
+  it.each(TEMPLATE_IDS)(
+    '%s prints awards, publications and volunteering',
+    async (templateId) => {
+      const resume = {
+        ...fixtures[0].resume,
+        awards: [{ title: 'Prizes', items: ['AWARDMARKER'] }],
+        publications: [{ title: 'Papers', items: ['PUBLICATIONMARKER'] }],
+        volunteer: [
+          {
+            company: 'VOLUNTEERMARKER',
+            role: 'Helper',
+            endDate: null,
+            highlights: [],
+            tech: [],
+          },
+        ],
+      }
+      const { bytes } = await renderResume(resume, { templateId })
+      const { text } = await extractPdfText(bytes)
+      for (const marker of [
+        'AWARDMARKER',
+        'PUBLICATIONMARKER',
+        'VOLUNTEERMARKER',
+      ]) {
+        expect(text, `${templateId} dropped ${marker}`).toContain(marker)
+      }
+    },
+  )
+})
+
+/**
+ * The blocks a person can place themselves, against the only rule that binds all of them.
+ *
+ * pdfcn publishes twenty-four components; these are the seven a CV can carry. What makes them safe is
+ * not that they look right — it is that the extracted text is the words the person wrote and nothing
+ * else. Three of them draw no words at all and must contribute none; the rest must contribute exactly
+ * theirs, in the place they were put.
+ *
+ * Every template, because a stray glyph is invisible from the code and obvious to a recruiter's parser.
+ */
+describe('the blocks a person can add', () => {
+  const wordless = [
+    { kind: 'divider' as const, title: '', items: [], space: 12 },
+    { kind: 'pageBreak' as const, title: '', items: [] },
+    { kind: 'space' as const, title: '', items: [], space: 40 },
+  ]
+
+  it.each(TEMPLATE_IDS)(
+    '%s draws divider, page break and space silently',
+    async (templateId) => {
+      const plain = { ...fixtures[0].resume, custom: [] }
+      const marked = { ...plain, custom: wordless }
+      const before = await extractPdfText(
+        (await renderResume(plain, { templateId })).bytes,
+      )
+      const after = await extractPdfText(
+        (await renderResume(marked, { templateId })).bytes,
+      )
+      expect(withoutCounters(after.text)).toBe(withoutCounters(before.text))
+    },
+  )
+
+  it.each(TEMPLATE_IDS)(
+    '%s prints a heading, a paragraph and a pair',
+    async (templateId) => {
+      const resume = {
+        ...fixtures[0].resume,
+        custom: [
+          { kind: 'heading' as const, title: 'HEADINGMARKER', items: [] },
+          { kind: 'text' as const, title: '', items: ['PARAGRAPHMARKER'] },
+          {
+            kind: 'keyValue' as const,
+            title: '',
+            items: [],
+            pairs: [{ label: 'LABELMARKER', value: 'VALUEMARKER' }],
+          },
+        ],
+      }
+      const { text } = await extractPdfText(
+        (await renderResume(resume, { templateId })).bytes,
+      )
+      for (const marker of [
+        'HEADINGMARKER',
+        'PARAGRAPHMARKER',
+        'LABELMARKER',
+        'VALUEMARKER',
+      ]) {
+        expect(text, `${templateId} dropped ${marker}`).toContain(marker)
+      }
+    },
+  )
+
+  /**
+   * A page break is a page break, not a tall gap that a reflow above it can eat.
+   *
+   * With something after it. The first version of this put the break last and expected a second sheet,
+   * which was the test being wrong rather than the block: a break with nothing following it should
+   * produce no page, and takumi is right not to emit a blank one.
+   */
+  it('starts a new sheet where it is placed', async () => {
+    const tail = {
+      kind: 'section' as const,
+      title: 'References',
+      items: ['On request'],
+    }
+    const one = { ...fixtures[0].resume, custom: [tail] }
+    const two = {
+      ...one,
+      custom: [{ kind: 'pageBreak' as const, title: '', items: [] }, tail],
+    }
+    const before = await extractPdfText((await renderResume(one)).bytes)
+    const after = await extractPdfText((await renderResume(two)).bytes)
+    expect(after.pages).toBe(before.pages + 1)
+  })
+})

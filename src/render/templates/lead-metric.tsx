@@ -11,6 +11,9 @@ import { Fragment } from 'react'
 import { Document, Image, Page } from '@/lib/pdf-primitives'
 import { PdfcnThemeProvider } from '@/components/pdf/theme-provider'
 import type { PdfcnTheme } from '@/components/pdf/theme-types'
+import { Block } from './block'
+import { groupsOf, Ordered, Slot, volunteerGroup } from '../sections'
+import type { Group } from '../sections'
 import type { Resume, WorkItem } from '@/schema/resume'
 import {
   formatLocation,
@@ -282,6 +285,36 @@ function LeadMetricBody({
   const showPersonalDetails =
     convention === 'eu' && basics.personalDetails.length > 0
 
+  /* One renderer for a titled block of lines: custom sections, awards, publications, volunteering. */
+  const group = (section: Group, i: number) => (
+    <Fragment key={i}>
+      <SectionKicker title={section.title} theme={theme} />
+      {section.items.map((item, j) => (
+        <div
+          key={j}
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            gap: 6,
+            marginTop: 2,
+          }}
+        >
+          <div
+            style={{
+              color: style.bulletsInAccent
+                ? accent
+                : theme.colors.mutedForeground,
+            }}
+          >
+            •
+          </div>
+          <div style={{ flexGrow: 1 }}>{item}</div>
+        </div>
+      ))}
+    </Fragment>
+  )
+  const volunteering = volunteerGroup(resume, locale)
+
   return (
     <div
       style={{
@@ -463,81 +496,20 @@ function LeadMetricBody({
       ) : null}
 
       {/* ── Experience ── */}
-      {resume.work.length === 0 ? null : (
-        <>
-          <SectionKicker
-            kicker={local.kickers.work}
-            title={local.headings.work}
+      <Ordered
+        resume={resume}
+        /* This design has no order axis of its own; Experience first is what it always drew. */
+        fallback="experience"
+        custom={(section, i) => (
+          <Block
+            key={i}
+            block={section}
             theme={theme}
-            kind="work"
-          />
-          {resume.work.map((w, i) => (
-            <NumberedJob
-              key={i}
-              item={w}
-              index={i}
-              theme={theme}
-              locale={locale}
-            />
-          ))}
-        </>
-      )}
-
-      {/* ── Education ── */}
-      {resume.education.length === 0 ? null : (
-        <>
-          <SectionKicker
-            kicker={local.kickers.education}
-            title={local.headings.education}
-            theme={theme}
-            kind="education"
-          />
-          {resume.education.map((e, i) => (
-            <div
-              key={i}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 1,
-                marginTop: theme.spacing.componentGap,
-                breakInside: 'avoid',
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <span style={{ fontWeight: 700 }}>
-                  {joinParts([e.degree, e.field], ' ')}
-                  {e.degree === undefined && e.field === undefined
-                    ? e.institution
-                    : ` — ${e.institution}`}
-                </span>
-                <span
-                  style={{
-                    fontSize: theme.typography.body.fontSize - 1.5,
-                    color: theme.colors.mutedForeground,
-                  }}
-                >
-                  {formatRange(e.startDate, e.endDate, locale)}
-                </span>
-              </div>
-              {e.location || e.grade ? (
+            chrome={{
+              heading: (title) => <SectionKicker title={title} theme={theme} />,
+              line: (text, k) => (
                 <div
-                  style={{
-                    fontSize: theme.typography.body.fontSize - 1.5,
-                    color: theme.colors.mutedForeground,
-                  }}
-                >
-                  {joinParts([e.location, e.grade])}
-                </div>
-              ) : null}
-              {e.highlights.map((h, j) => (
-                <div
-                  key={j}
+                  key={k}
                   style={{
                     display: 'flex',
                     flexDirection: 'row',
@@ -554,146 +526,238 @@ function LeadMetricBody({
                   >
                     •
                   </div>
-                  <div style={{ flexGrow: 1 }}>{h}</div>
+                  <div style={{ flexGrow: 1 }}>{text}</div>
+                </div>
+              ),
+            }}
+          />
+        )}
+      >
+        <Slot name="work">
+          {resume.work.length === 0 ? null : (
+            <>
+              <SectionKicker
+                kicker={local.kickers.work}
+                title={local.headings.work}
+                theme={theme}
+                kind="work"
+              />
+              {resume.work.map((w, i) => (
+                <NumberedJob
+                  key={i}
+                  item={w}
+                  index={i}
+                  theme={theme}
+                  locale={locale}
+                />
+              ))}
+            </>
+          )}
+        </Slot>
+        <Slot name="education">
+          {resume.education.length === 0 ? null : (
+            <>
+              <SectionKicker
+                kicker={local.kickers.education}
+                title={local.headings.education}
+                theme={theme}
+                kind="education"
+              />
+              {resume.education.map((e, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 1,
+                    marginTop: theme.spacing.componentGap,
+                    breakInside: 'avoid',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <span style={{ fontWeight: 700 }}>
+                      {joinParts([e.degree, e.field], ' ')}
+                      {e.degree === undefined && e.field === undefined
+                        ? e.institution
+                        : ` — ${e.institution}`}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: theme.typography.body.fontSize - 1.5,
+                        color: theme.colors.mutedForeground,
+                      }}
+                    >
+                      {formatRange(e.startDate, e.endDate, locale)}
+                    </span>
+                  </div>
+                  {e.location || e.grade ? (
+                    <div
+                      style={{
+                        fontSize: theme.typography.body.fontSize - 1.5,
+                        color: theme.colors.mutedForeground,
+                      }}
+                    >
+                      {joinParts([e.location, e.grade])}
+                    </div>
+                  ) : null}
+                  {e.highlights.map((h, j) => (
+                    <div
+                      key={j}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'row',
+                        gap: 6,
+                        marginTop: 2,
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: style.bulletsInAccent
+                            ? accent
+                            : theme.colors.mutedForeground,
+                        }}
+                      >
+                        •
+                      </div>
+                      <div style={{ flexGrow: 1 }}>{h}</div>
+                    </div>
+                  ))}
                 </div>
               ))}
-            </div>
-          ))}
-        </>
-      )}
-
-      {/* ── Projects ── */}
-      {resume.projects.length === 0 ? null : (
-        <>
-          <SectionKicker
-            kicker={local.kickers.projects}
-            title={local.headings.projects}
-            theme={theme}
-            kind="projects"
-          />
-          {resume.projects.map((p, i) => (
-            <div
-              key={i}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 1,
-                marginTop: theme.spacing.componentGap,
-                breakInside: 'avoid',
-              }}
-            >
-              <div style={{ fontWeight: 700 }}>
+            </>
+          )}
+        </Slot>
+        <Slot name="skills">
+          {resume.skills.length === 0 ? null : (
+            <>
+              <SectionKicker
+                kicker={local.kickers.skills}
+                title={local.headings.skills}
+                theme={theme}
+                kind="skills"
+              />
+              {resume.skills.map((group, i) => (
+                <div key={i} style={{ marginTop: 4, breakInside: 'avoid' }}>
+                  <span style={{ fontWeight: 700 }}>{group.category}: </span>
+                  <span>{group.items.join(', ')}</span>
+                </div>
+              ))}
+            </>
+          )}
+        </Slot>
+        <Slot name="projects">
+          {resume.projects.length === 0 ? null : (
+            <>
+              <SectionKicker
+                kicker={local.kickers.projects}
+                title={local.headings.projects}
+                theme={theme}
+                kind="projects"
+              />
+              {resume.projects.map((p, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 1,
+                    marginTop: theme.spacing.componentGap,
+                    breakInside: 'avoid',
+                  }}
+                >
+                  <div style={{ fontWeight: 700 }}>
+                    {joinParts(
+                      [`/${String(i + 1).padStart(2, '0')} ${p.name}`, p.role],
+                      ' — ',
+                    )}
+                  </div>
+                  {p.description ? <div>{p.description}</div> : null}
+                  {p.highlights.map((h, j) => (
+                    <div
+                      key={j}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'row',
+                        gap: 6,
+                        marginTop: 2,
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: style.bulletsInAccent
+                            ? accent
+                            : theme.colors.mutedForeground,
+                        }}
+                      >
+                        •
+                      </div>
+                      <div style={{ flexGrow: 1 }}>{h}</div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </>
+          )}
+        </Slot>
+        <Slot name="certifications">
+          {resume.certifications.length === 0 ? null : (
+            <>
+              <SectionKicker
+                title={local.headings.certifications}
+                theme={theme}
+              />
+              {resume.certifications.map((c, i) => (
+                <div key={i} style={{ marginTop: 3, breakInside: 'avoid' }}>
+                  {joinParts([c.name, c.issuer], ' — ')}
+                  <span style={{ color: theme.colors.mutedForeground }}>
+                    {c.date === undefined ? '' : `  ${formatYearMonth(c.date)}`}
+                    {c.identifier === undefined ? '' : `  (${c.identifier})`}
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
+        </Slot>
+        <Slot name="languages">
+          {resume.languages.length === 0 ? null : (
+            <>
+              <SectionKicker
+                kicker={local.kickers.languages}
+                title={local.headings.languages}
+                theme={theme}
+              />
+              <div style={{ marginTop: 4 }}>
                 {joinParts(
-                  [`/${String(i + 1).padStart(2, '0')} ${p.name}`, p.role],
-                  ' — ',
+                  resume.languages.map((l) => {
+                    const level = l.level ?? l.raw
+                    return level === undefined ? l.name : `${l.name} (${level})`
+                  }),
                 )}
               </div>
-              {p.description ? <div>{p.description}</div> : null}
-              {p.highlights.map((h, j) => (
-                <div
-                  key={j}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'row',
-                    gap: 6,
-                    marginTop: 2,
-                  }}
-                >
-                  <div
-                    style={{
-                      color: style.bulletsInAccent
-                        ? accent
-                        : theme.colors.mutedForeground,
-                    }}
-                  >
-                    •
-                  </div>
-                  <div style={{ flexGrow: 1 }}>{h}</div>
-                </div>
-              ))}
-            </div>
-          ))}
-        </>
-      )}
-
-      {/* ── Skills & Languages ── */}
-      {resume.skills.length === 0 ? null : (
-        <>
-          <SectionKicker
-            kicker={local.kickers.skills}
-            title={local.headings.skills}
-            theme={theme}
-            kind="skills"
-          />
-          {resume.skills.map((group, i) => (
-            <div key={i} style={{ marginTop: 4, breakInside: 'avoid' }}>
-              <span style={{ fontWeight: 700 }}>{group.category}: </span>
-              <span>{group.items.join(', ')}</span>
-            </div>
-          ))}
-        </>
-      )}
-
-      {resume.certifications.length === 0 ? null : (
-        <>
-          <SectionKicker title={local.headings.certifications} theme={theme} />
-          {resume.certifications.map((c, i) => (
-            <div key={i} style={{ marginTop: 3, breakInside: 'avoid' }}>
-              {joinParts([c.name, c.issuer], ' — ')}
-              <span style={{ color: theme.colors.mutedForeground }}>
-                {c.date === undefined ? '' : `  ${formatYearMonth(c.date)}`}
-                {c.identifier === undefined ? '' : `  (${c.identifier})`}
-              </span>
-            </div>
-          ))}
-        </>
-      )}
-
-      {resume.languages.length === 0 ? null : (
-        <>
-          <SectionKicker
-            kicker={local.kickers.languages}
-            title={local.headings.languages}
-            theme={theme}
-          />
-          <div style={{ marginTop: 4 }}>
-            {joinParts(
-              resume.languages.map((l) => {
-                const level = l.level ?? l.raw
-                return level === undefined ? l.name : `${l.name} (${level})`
-              }),
-            )}
-          </div>
-        </>
-      )}
-
-      {resume.custom.map((section, i) => (
-        <Fragment key={i}>
-          <SectionKicker title={section.title} theme={theme} />
-          {section.items.map((item, j) => (
-            <div
-              key={j}
-              style={{
-                display: 'flex',
-                flexDirection: 'row',
-                gap: 6,
-                marginTop: 2,
-              }}
-            >
-              <div
-                style={{
-                  color: style.bulletsInAccent
-                    ? accent
-                    : theme.colors.mutedForeground,
-                }}
-              >
-                •
-              </div>
-              <div style={{ flexGrow: 1 }}>{item}</div>
-            </div>
-          ))}
-        </Fragment>
-      ))}
+            </>
+          )}
+        </Slot>
+        {/*
+          Three sections that were in the schema, filled by extraction and printed by the `.docx`
+          export — and rendered by no PDF template at all. Drawn through the same renderer this
+          design uses for a custom section, which is the shape all three already have.
+        */}
+        <Slot name="awards">
+          {groupsOf(resume.awards).map((g, i) => group(g, i))}
+        </Slot>
+        <Slot name="publications">
+          {groupsOf(resume.publications).map((g, i) => group(g, i))}
+        </Slot>
+        <Slot name="volunteer">
+          {volunteering === undefined ? null : group(volunteering, 0)}
+        </Slot>
+      </Ordered>
     </div>
   )
 }

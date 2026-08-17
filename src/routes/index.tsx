@@ -27,6 +27,8 @@ import {
 } from '@/components/consent-gate'
 import type { ConsentState } from '@/components/consent-gate'
 import { AccountMenu, ModelMenu } from '@/components/topbar-controls'
+import { Specimen } from '@/components/block-gallery'
+import { ProTag } from '@/components/pro-tag'
 import { useFilePicker } from '@/components/dropzone'
 import { Library } from '@/components/library'
 import { PaperPreview } from '@/components/paper-preview'
@@ -37,8 +39,13 @@ import { SavedCvs } from '@/components/saved-cvs'
 import { keyOf, RewriteReview } from '@/components/rewrite-review'
 import { AdvertForm, TargetPanel } from '@/components/target-panel'
 import { BeforeAfter } from '@/components/before-after'
-import { DesignGallery } from '@/components/design-gallery'
+import {
+  DesignGallery,
+  Specimen as DesignSpecimen,
+} from '@/components/design-gallery'
 import { ButtonLabel, Spinner } from '@/components/working'
+import { ModelNotes } from '@/components/model-notes'
+import type { ModelNote } from '@/components/model-notes'
 import { DownloadFailed, saveRendered } from '@/lib/download'
 import {
   clearWorkingCopy,
@@ -59,12 +66,25 @@ import type { BulletRewrite } from '@/optimize/rewrite'
 import { shiftTarget } from '@/optimize/rewrite-shift'
 import { diffResumes } from '@/optimize/variant-diff'
 import { DESIGNS, tierOf } from '@/render/designs'
-import { Resume } from '@/schema/resume'
+import { kindOf, Resume } from '@/schema/resume'
+import { BLOCK_SPECS, unsafeBlocks } from '@/render/blocks'
 import type { FieldProvenance } from '@/schema/provenance'
 import { needsReview } from '@/schema/provenance'
 import { estimateFit } from '@/render/fit'
 import { quoteFamily, withColours } from '@/render/themes/custom'
 import { DesignAxes } from '@/components/design-axes'
+import { WorkspaceSplit } from '@/components/workspace-split'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Toaster } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 import { styleOf } from '@/render/themes/style'
 import { getTheme } from '@/render/themes'
 import type { ThemeId } from '@/render/themes'
@@ -76,8 +96,40 @@ import type { TemplateId } from '@/render/templates/registry'
 export const Route = createFileRoute('/')({
   // Validated in `@/lib/workspace-search`, with its reasoning and its tests.
   validateSearch: validateWorkspaceSearch,
-  component: HunterReady,
+  component: Workspace,
 })
+
+/**
+ * The route, plus the one surface that has to outlive every screen inside it.
+ *
+ * A toast is for the thing that happened while you were looking somewhere else, so its host cannot
+ * live inside a panel that unmounts when you switch tabs. `richColors` is off: this product has three
+ * semantic colours with measured contrast (DESIGN.md), and sonner's own palette is a fourth opinion.
+ */
+function Workspace() {
+  return (
+    <>
+      <HunterReady />
+      <Toaster position="bottom-right" closeButton />
+    </>
+  )
+}
+
+/**
+ * One row of the narrated wait, exactly as `/api/progress` sends it.
+ *
+ * Declared rather than imported from `src/lib/progress.ts` because that module owns a server-side Map;
+ * a type-only import would be erased, but the shape is the wire contract between two halves of the app
+ * and writing it out is what makes that contract visible from this side.
+ */
+interface Stage {
+  label: string
+  detail?: string
+  done: boolean
+  at: number
+  /** Present only on the model call: which section of the answer is being written. */
+  notes?: Array<ModelNote>
+}
 
 interface Loaded {
   resume: Resume
@@ -166,13 +218,13 @@ const STEPS_HOW = [
   },
   {
     icon: 'pencil' as const,
-    title: 'Correct what is on the page',
-    body: 'Every detail we read, with the ones we were unsure of marked and the line each came from. Written from scratch instead? Same form, empty.',
+    title: 'Correct it, then arrange it',
+    body: 'Every detail we read, with the ones we were unsure of marked and the line each came from. Add sections of your own, reorder them, remove what does not belong.',
   },
   {
     icon: 'download' as const,
     title: 'Download it',
-    body: 'A clean, well-set A4 PDF, or a Word file for the portals that ask for one. We check both by reading the finished document back.',
+    body: 'A clean, well-set A4 PDF. A Word file for the portals that ask for one. A single web page for anywhere else. We check by reading the finished document back.',
   },
 ]
 
@@ -292,6 +344,41 @@ function StartFromScratch({
 }
 
 /**
+ * One design per voice, for the strip on the landing page.
+ *
+ * Seventeen, not a hundred and three. The catalogue multiplies twenty-eight structures by seventeen
+ * voices, and the structures are an ordering decision somebody makes about their own history; the
+ * voices are the part that can be *seen* at swatch size. Showing one of each is the honest sample:
+ * every ink in the catalogue appears exactly once, and nothing is drawn that does not exist.
+ *
+ * Free first, then the rest in catalogue order. Not a ranking — the four free voices are the ones a
+ * visitor can have today, and burying them behind thirteen they cannot yet buy would be a strip that
+ * advertises a plan instead of a product.
+ *
+ * Derived from `DESIGNS` rather than listed, so a new theme joins the strip by existing.
+ */
+const VOICES = (() => {
+  const pick = new Map<string, (typeof DESIGNS)[number]>()
+  for (const design of DESIGNS) {
+    const held = pick.get(design.theme)
+    // A free pairing wins the slot: it is the one a reader can actually reach.
+    if (
+      held === undefined ||
+      (held.tier === 'paid' && design.tier === 'free')
+    ) {
+      pick.set(design.theme, design)
+    }
+  }
+  const all = [...pick.values()]
+  return [
+    ...all.filter((d) => d.tier === 'free'),
+    ...all.filter((d) => d.tier === 'paid'),
+  ]
+})()
+
+const FREE_VOICES = VOICES.filter((d) => d.tier === 'free').length
+
+/**
  * The comparison, and the rule it follows: **the left column is not a strawman.**
  *
  * Every competitor's version of this section makes the reader's current situation sound pathetic
@@ -343,7 +430,10 @@ const FAQ = [
   },
   {
     q: 'Do I have to pay?',
-    a: 'No. Upload, correct, and download without an account and without paying. A paid plan adds the larger model, all sixty designs, and CVs remembered between visits. It is not open yet.',
+    // Rewritten twice. "All sixty designs" was a catalogue that has since grown to 103, and "it is
+    // not open yet" described a gate that beta has since opened. An answer about money is the one a
+    // page cannot afford to have stale.
+    a: 'No, and during beta there is nothing to pay for. Everything marked Pro is included: the larger model, all 103 designs, your own typefaces and colours, and CVs remembered between visits. Those become a paid plan later and we will say so before that happens. Twelve designs and the model on our own hardware stay free afterwards.',
   },
   {
     q: 'What does "a CV that screening software can read" mean?',
@@ -482,8 +572,44 @@ function Icon({
  */
 function Wordmark({ className = 'text-[17px]' }: { className?: string }) {
   return (
-    <span className={`font-bold tracking-[-0.03em] text-ink ${className}`}>
-      HunterReady<span className="text-signal">.</span>
+    <span className="inline-flex items-baseline gap-2">
+      <span className={`font-bold tracking-[-0.03em] text-ink ${className}`}>
+        HunterReady<span className="text-signal">.</span>
+      </span>
+      {/*
+        Beside the name, on every screen, because that is what "beta" is a fact about.
+
+        Not a banner: a strip somebody dismisses is a strip that stops being true the moment they
+        dismiss it, and this stays true. A chip next to the mark is the smallest thing that is on
+        screen whenever the product is, and `title` carries the sentence for anyone who wants it.
+      */}
+      <BetaChip />
+    </span>
+  )
+}
+
+/**
+ * "This is beta and it can change under you."
+ *
+ * ## Why it is said in four places and not one
+ *
+ * Because the sentence answers a different question in each. Beside the mark it says what the product
+ * *is*; on the landing page it sets the expectation before somebody uploads anything; beside Download
+ * it says what the file they are about to rely on is; on the privacy page it says the terms of the
+ * thing they are trusting can move. One notice at the top would be read once and would not be there at
+ * the two moments that matter.
+ *
+ * ## And why it is not a dismissible banner
+ *
+ * A banner somebody closes stops saying it. This does not change and neither should the notice.
+ */
+function BetaChip() {
+  return (
+    <span
+      title="HunterReady is in beta. Features and layouts can change at any time, and your saved CVs may need re-checking after an update."
+      className="rounded-full border border-hairline-strong px-1.5 py-px text-[10px] font-bold uppercase tracking-[0.08em] text-ink-soft"
+    >
+      Beta
     </span>
   )
 }
@@ -542,12 +668,112 @@ function SessionControls({
     <div className="flex items-center gap-2">
       <PlanChip plan={consent.plan} />
       <ModelMenu
-        provider={consent.provider}
+        providers={consent.providers}
         choice={consent.choice}
         onDecide={consent.decide}
       />
       <AccountMenu plan={consent.plan} onOpenAccount={onOpenAccount} />
     </div>
+  )
+}
+
+/**
+ * Download, and the other two formats behind a chevron.
+ *
+ * ## Why it lives on the document
+ *
+ * It was pinned to the bottom of the editing panel for this whole build, which is where the *editing*
+ * ends — but the thing being downloaded is the sheet on the right, and the button sat as far from it
+ * as the layout allows. Edd moved it: it belongs in the document's own header, beside the page count
+ * and the parse badge, which are the other two facts about the same artefact.
+ *
+ * The panel gets its full height back, which is the second half of the win: that footer was the only
+ * thing standing between a long list of sections and the bottom of the screen.
+ *
+ * ## The split is the shape of the decision
+ *
+ * PDF is what almost everyone sends and the one whose look they just chose; Word is for the portals
+ * that demand it and HTML is for a link. One click for the common case, two for the others.
+ */
+function DownloadControl({
+  busy,
+  disabled,
+  onDownload,
+}: {
+  busy: DownloadFormat | undefined
+  /** A paid design this visitor cannot render. `/api/render` is the gate; this is the courtesy. */
+  disabled: boolean
+  onDownload: (format: DownloadFormat) => void
+}) {
+  return (
+    <span className="flex items-stretch gap-px">
+      <button
+        type="button"
+        disabled={busy !== undefined || disabled}
+        aria-busy={busy === 'pdf'}
+        onClick={() => onDownload('pdf')}
+        className="btn btn-primary h-8 rounded-r-none px-3.5 text-[13px]"
+      >
+        {busy === 'pdf' ? (
+          <Spinner className="h-4 w-4" />
+        ) : (
+          <Icon name="download" className="h-4 w-4" />
+        )}
+        {busy === 'pdf' ? 'Building…' : 'Download'}
+      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          disabled={busy !== undefined || disabled}
+          aria-label="Choose another format"
+          className="btn btn-primary h-8 rounded-l-none px-2 disabled:pointer-events-none disabled:opacity-50"
+        >
+          <Icon name="chevron-down" className="h-4 w-4" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-[17rem]">
+          <DropdownMenuItem
+            onSelect={() => onDownload('pdf')}
+            className="flex-col items-start gap-0.5"
+          >
+            <span className="text-[14px] font-semibold text-ink">PDF</span>
+            <span className="text-[12px] leading-snug text-ink-soft">
+              The design you chose, checked by the parse test.
+            </span>
+          </DropdownMenuItem>
+          {/*
+            Word says what it is *for* rather than what it is. Nobody prefers .docx; they are told to
+            upload one, and that is the moment this menu has to answer.
+          */}
+          <DropdownMenuItem
+            onSelect={() => onDownload('docx')}
+            className="flex-col items-start gap-0.5"
+          >
+            <span className="text-[14px] font-semibold text-ink">
+              Word (.docx)
+            </span>
+            <span className="text-[12px] leading-snug text-ink-soft">
+              For portals that ask for a Word file. One fixed layout, not the
+              design.
+            </span>
+          </DropdownMenuItem>
+          {/*
+            HTML says what it is *not*, because that is the surprising half: it carries the design
+            faithfully and it has no pages.
+          */}
+          <DropdownMenuItem
+            onSelect={() => onDownload('html')}
+            className="flex-col items-start gap-0.5"
+          >
+            <span className="text-[14px] font-semibold text-ink">
+              Web page (.html)
+            </span>
+            <span className="text-[12px] leading-snug text-ink-soft">
+              The same design, one continuous page, fonts included. Opens
+              anywhere, offline.
+            </span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </span>
   )
 }
 
@@ -617,7 +843,7 @@ async function downloadDocument(
   resume: Resume,
   templateId: TemplateId,
   themeId: ThemeId,
-  format: 'pdf' | 'docx' = 'pdf',
+  format: DownloadFormat = 'pdf',
   axes: {
     fonts?: { body?: string; heading?: string }
     colours?: { accent?: string; paper?: string }
@@ -655,8 +881,11 @@ async function downloadDocument(
  * platform and not in every window — and the same button also serves the cold first render and a loaded
  * production box, where the wait is seconds. A brief flash is the cost of never being silent.
  */
+/** The three files this workspace can hand somebody. Named once so the menu and the hook agree. */
+export type DownloadFormat = 'pdf' | 'docx' | 'html'
+
 function useDownloads() {
-  const [format, setFormat] = useState<'pdf' | 'docx' | undefined>()
+  const [format, setFormat] = useState<DownloadFormat | undefined>()
   const [failure, setFailure] = useState<string | undefined>()
 
   const start = useCallback(
@@ -664,7 +893,7 @@ function useDownloads() {
       resume: Resume,
       templateId: TemplateId,
       themeId: ThemeId,
-      wanted: 'pdf' | 'docx' = 'pdf',
+      wanted: DownloadFormat = 'pdf',
       /* The reader's axes, so the file that lands matches the preview they were looking at. */
       axes: {
         fonts?: { body?: string; heading?: string }
@@ -678,11 +907,18 @@ function useDownloads() {
       try {
         await downloadDocument(resume, templateId, themeId, wanted, axes)
       } catch (error) {
-        setFailure(
+        const message =
           error instanceof DownloadFailed
             ? error.message
-            : 'Something went wrong building the file. Your CV is still here. Try again.',
-        )
+            : 'Something went wrong building the file. Your CV is still here. Try again.'
+        setFailure(message)
+        /*
+          Said twice on purpose, and they are not the same message doing the same job. The inline note
+          stays beside the button that failed, which is where somebody looks when they try again. The
+          toast is for the case the note cannot cover: a long panel scrolled away from its own footer,
+          where a failure would otherwise be silent.
+        */
+        toast.error('That file did not build', { description: message })
       } finally {
         setFormat(undefined)
       }
@@ -741,6 +977,8 @@ function Segmented<T extends string>({
     label: string
     hint?: string
     disabled?: boolean
+    /** A paid capability. Shown whether or not the option is currently usable. */
+    pro?: boolean
   }>
   value: T
   onChange: (id: T) => void
@@ -787,7 +1025,15 @@ function Segmented<T extends string>({
                 onChange(option.id)
               }}
             >
-              {option.label}
+              {/*
+                The tag rides inside the segment rather than beside the legend, because the tier is a
+                fact about one option and not about the control: "Our own server" says "Free, always"
+                and the two companies next to it will not be.
+              */}
+              <span className="flex items-center gap-1.5">
+                {option.label}
+                {option.pro === true && <ProTag subtle />}
+              </span>
             </button>
           )
         })}
@@ -830,56 +1076,54 @@ function PanelTabs({
 }) {
   return (
     /*
-      One row, always — scrolling rather than wrapping.
+      Radix `Tabs` rather than the hand-rolled strip that was here.
 
-      `flex-wrap` put four tabs on the first line and stranded "Account" alone and centred beneath
-      them at 375px, which reads as a rendering fault rather than a fifth tab. A tab strip is a single
-      axis by definition: the fix is to let it scroll, not to let it fold. `scrollbar-none` because a
-      visible bar under a pill row is noise on the one viewport with the least room for it, and the
-      partially-cut last tab is itself the affordance that says "there is more this way".
+      The roles were already right — `tablist`, `tab`, `aria-selected` — and that is the half that is
+      easy. The half that was missing is the behaviour the ARIA pattern actually requires: arrow keys
+      move between tabs, Home and End jump to the ends, and only the selected tab is in the tab order
+      so a keyboard user tabs *past* the strip rather than through five stops in it. None of that was
+      here, and all of it comes with the primitive.
 
-      `min-w-0` on the buttons, and `flex-1` only from `sm` up: below that they take their natural
-      width so the labels never truncate; above it they share the row as before, where they fit.
+      Rendered without `TabsContent`: the panels live further down the tree, keyed off the same state,
+      and pulling them in here would mean moving five large blocks to satisfy a component.
+
+      One row, always — scrolling rather than wrapping. `flex-wrap` put four tabs on the first line and
+      stranded "Account" alone beneath them at 375px, which reads as a rendering fault rather than a
+      fifth tab. A tab strip is a single axis by definition: the fix is to let it scroll, not fold.
     */
-    <div
-      role="tablist"
-      aria-label="CV panels"
-      className="scrollbar-none flex shrink-0 gap-1 overflow-x-auto rounded-full bg-band p-1"
+    <Tabs
+      value={active}
+      onValueChange={(next) => onChange(next as PanelId)}
+      className="shrink-0"
     >
-      {PANELS.map((panel) => {
-        const on = panel.id === active
-        const badge = badges[panel.id]
-        return (
-          <button
-            key={panel.id}
-            type="button"
-            role="tab"
-            aria-selected={on}
-            onClick={() => onChange(panel.id)}
-            className={[
-              'flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1.5 text-[13px] transition-colors sm:flex-1 sm:shrink',
-              on
-                ? 'border border-signal-edge bg-ground font-semibold text-signal'
-                : 'border border-transparent font-medium text-ink-soft hover:text-ink',
-            ].join(' ')}
-          >
-            {panel.label}
-            {badge !== undefined && (
-              <span
-                className={[
-                  'tally rounded-full px-1.5 text-[11px] font-bold',
-                  badge.tone === 'caution'
-                    ? 'bg-caution text-white'
-                    : 'bg-signal text-white',
-                ].join(' ')}
-              >
-                {badge.text}
-              </span>
-            )}
-          </button>
-        )
-      })}
-    </div>
+      <TabsList
+        aria-label="CV panels"
+        className="scrollbar-none flex w-full gap-1 overflow-x-auto rounded-full bg-band p-1"
+      >
+        {PANELS.map((panel) => {
+          const badge = badges[panel.id]
+          return (
+            <TabsTrigger
+              key={panel.id}
+              value={panel.id}
+              className="flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border border-transparent px-2.5 py-1.5 text-[13px] font-medium text-ink-soft transition-colors hover:text-ink data-[state=active]:border-signal-edge data-[state=active]:bg-ground data-[state=active]:font-semibold data-[state=active]:text-signal sm:flex-1 sm:shrink"
+            >
+              {panel.label}
+              {badge !== undefined && (
+                <Badge
+                  className={[
+                    'tally rounded-full border-transparent px-1.5 text-[11px] font-bold text-white',
+                    badge.tone === 'caution' ? 'bg-caution' : 'bg-signal',
+                  ].join(' ')}
+                >
+                  {badge.text}
+                </Badge>
+              )}
+            </TabsTrigger>
+          )
+        })}
+      </TabsList>
+    </Tabs>
   )
 }
 
@@ -888,15 +1132,22 @@ function HunterReady() {
   const navigate = useNavigate({ from: Route.fullPath })
 
   const [loaded, setLoaded] = useState<Loaded | undefined>()
+  /**
+   * Whether the "Worth knowing" panel has been closed for the CV currently loaded.
+   *
+   * Keyed to the document rather than to the session: the remarks are about *this* file — a table
+   * flattened, headings guessed from the text — so a second upload has its own, and closing the first
+   * one must not hide them. `origin` and the name are enough to tell two loads apart without holding a
+   * copy of the document to compare against.
+   */
+  const [dismissedNotice, setDismissedNotice] = useState<string | undefined>()
   const [busy, setBusy] = useState(false)
   /**
    * The live stage list while a file is being read — polled from /api/progress against an id this
    * client minted. What turns a five-minute spinner into a narrated wait (task: Edd's complaint that
    * the user "no tiene puta idea de lo que está pasando").
    */
-  const [stages, setStages] = useState<
-    Array<{ label: string; detail?: string; done: boolean; at: number }>
-  >([])
+  const [stages, setStages] = useState<Array<Stage>>([])
   const progressIdRef = useRef<string | undefined>(undefined)
   const [error, setError] = useState<string | undefined>()
   const consent = useProcessingConsent()
@@ -1171,14 +1422,7 @@ function HunterReady() {
         )
         .then((payload) => {
           if (Array.isArray(payload.steps)) {
-            setStages(
-              payload.steps as Array<{
-                label: string
-                detail?: string
-                done: boolean
-                at: number
-              }>,
-            )
+            setStages(payload.steps as Array<Stage>)
           }
         })
         .catch(() => {
@@ -1203,10 +1447,7 @@ function HunterReady() {
          * the field is absent. Declining has to change what happens, not what is displayed — otherwise
          * the second button on the gate is decoration.
          */
-        body.append(
-          'processing',
-          consent.choice === 'granted' ? 'provider' : 'local',
-        )
+        body.append('processing', consent.choice ?? 'local')
         const response = await fetch('/api/ingest', { method: 'POST', body })
         const payload = (await response.json()) as Record<string, unknown>
 
@@ -1317,7 +1558,7 @@ function HunterReady() {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
               resume: loaded.resume,
-              processing: consent.choice === 'granted' ? 'provider' : 'local',
+              processing: consent.choice ?? 'local',
               answers,
               only: [
                 {
@@ -1480,7 +1721,7 @@ function HunterReady() {
           body: JSON.stringify({
             resume: { ...loaded.resume, locale },
             target: locale,
-            processing: consent.choice === 'granted' ? 'provider' : 'local',
+            processing: consent.choice ?? 'local',
             progress: progressIdRef.current,
           }),
         })
@@ -1553,7 +1794,7 @@ function HunterReady() {
           body: JSON.stringify({
             advert,
             resume: loaded.resume,
-            processing: consent.choice === 'granted' ? 'provider' : 'local',
+            processing: consent.choice ?? 'local',
             progress: progressIdRef.current,
           }),
         })
@@ -1652,7 +1893,7 @@ function HunterReady() {
           <StepBar />
           <div className="flex flex-1 items-center justify-center px-4 py-10 sm:px-6">
             <ConsentGate
-              provider={consent.provider as string}
+              providers={consent.providers}
               onDecide={consent.decide}
             />
           </div>
@@ -1765,6 +2006,14 @@ function HunterReady() {
                           {stage.detail}
                         </span>
                       )}
+                      {/*
+                        The long stage narrating itself. Only the model call carries notes, and only
+                        while it streams, so every other row is unchanged — including on the screens
+                        that render this same list for a translation or a cover letter.
+                      */}
+                      {stage.notes !== undefined && (
+                        <ModelNotes notes={stage.notes} />
+                      )}
                     </span>
 
                     {/*
@@ -1865,6 +2114,19 @@ function HunterReady() {
                   <span aria-hidden className="h-3.5 w-[3px] bg-signal" />
                   Your CV, read back to you
                 </span>
+
+                {/*
+                  Said here rather than only in the header, because this is the sentence somebody needs
+                  *before* they hand over their employment history, not after. Ordinary body text and
+                  not a warning colour: beta is a fact about the product, not a fault in it.
+                */}
+                <p
+                  className="rise text-[13px] leading-relaxed text-ink-soft"
+                  style={{ animationDelay: '60ms' }}
+                >
+                  HunterReady is in beta. It works, and it changes often: what
+                  you see here can move or improve at any time.
+                </p>
 
                 {/*
                   No manual <br />, and `text-balance` instead.
@@ -1971,7 +2233,7 @@ function HunterReady() {
             The heading holds the left column and stays put while the steps scroll past it, which is
             what a heading is for when its list is long enough to leave it behind.
           */}
-          <section className="border-b border-hairline bg-band">
+          <section className="band-fade border-b border-hairline">
             <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20 lg:px-8 lg:py-16">
               <Reveal>
                 <div className="flex flex-col gap-4 lg:sticky lg:top-24">
@@ -2097,7 +2359,7 @@ function HunterReady() {
             want a source reference. It is the one place on the page where saying HOW is more
             persuasive than saying WHAT.
           */}
-          <section className="border-b border-hairline bg-band">
+          <section className="band-fade border-b border-hairline">
             <div className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
               <Reveal>
                 <span className="eyebrow">Evidence</span>
@@ -2128,6 +2390,207 @@ function HunterReady() {
                   </Reveal>
                 ))}
               </div>
+            </div>
+          </section>
+
+          {/*
+            The catalogue, and the price of a third of it.
+
+            Placed after Evidence on purpose. The closing line of this section says that eight of these
+            take "Parse verified" off your document, and that sentence is worth nothing to a reader who
+            does not yet know what the badge is. Evidence explains the badge one section earlier.
+
+            A tile grid, which is a layout family this page uses nowhere else: six sections already run
+            as split columns, numbered rails, ledger rows or divided lists, and a seventh in any of
+            those shapes would read as more of the same. It earns the grid honestly too, because the
+            content genuinely is twenty-four small parallel things.
+
+            The drawings are `Specimen` from the gallery itself, not a picture of it. A second set of
+            drawings would drift, and the one that drifted would be this one.
+
+            One `Reveal` around the whole grid rather than one per tile: `reveal.tsx` says a stagger
+            across three cards already outruns the eye, and twenty-four would be a wave.
+          */}
+          <section className="border-b border-hairline bg-ground">
+            <div className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
+              <Reveal>
+                <div className="flex max-w-2xl flex-col gap-4">
+                  <h2 className="text-section text-balance text-ink">
+                    Twenty-four things you can put on it
+                    <span className="text-signal">.</span>
+                  </h2>
+                  {/* Forty words. The hero's lead is thirty-four and every other lead on the page
+                      sits near it, so the first draft at forty-seven read as a different page. */}
+                  <p className="text-lead text-ink-soft">
+                    A licence, a portfolio link, a signature, a page that ends
+                    exactly where you want it to. Put your sections in any
+                    order, and take out the ones you do not need. Your name is
+                    the only one that cannot move.
+                  </p>
+                </div>
+              </Reveal>
+
+              <Reveal delay={80}>
+                {/* Three across on a phone, not two. At two columns this section measured 1872px
+                    against a 1190px hero, so a catalogue that is one fact of the page took up more
+                    of it than the argument did. Three columns and eight rows put it back in family
+                    with its neighbours. */}
+                <ul className="mt-10 grid grid-cols-3 gap-2.5 sm:grid-cols-4 sm:gap-3 lg:grid-cols-6">
+                  {BLOCK_SPECS.map((spec) => (
+                    <li
+                      key={spec.kind}
+                      className={[
+                        'flex flex-col overflow-hidden rounded-card border bg-ground',
+                        // The caution border is the only variation, and it carries the same meaning
+                        // here as it does in the gallery: this one costs you something.
+                        spec.safe
+                          ? 'border-hairline'
+                          : 'border-caution/30 bg-caution-wash/40',
+                      ].join(' ')}
+                    >
+                      <span
+                        aria-hidden
+                        className="border-b border-hairline bg-band/60"
+                      >
+                        <Specimen kind={spec.kind} />
+                      </span>
+                      <span className="p-2.5 text-[12px] font-medium leading-snug text-ink">
+                        {spec.label}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Reveal>
+
+              {/*
+                The honest half, and the reason the tinted eight are tinted.
+
+                They exist because they were asked for twice, and a product that answers "no, that
+                would break the guarantee" to a person who wants a QR code on their CV has decided
+                for them. This says the price out loud instead, in the same words the workspace uses
+                when you add one.
+              */}
+              <Reveal delay={140}>
+                <div className="mt-8 flex flex-col gap-3 border-t border-hairline pt-6 sm:flex-row sm:items-start sm:gap-8">
+                  {/* No icon. There is no `caution` glyph in this family and the family is
+                      deliberately one family, so the choice was to draw a twenty-fifth icon or to
+                      let the eight tinted tiles directly above do the pointing. They do. */}
+                  <h3 className="shrink-0 text-title text-caution">
+                    Eight of them cost you the check
+                  </h3>
+                  <p className="max-w-[62ch] text-[14px] leading-relaxed text-ink-soft">
+                    A table, a chart, a picture, a QR code, a running header or
+                    footer, a watermark, a form to fill in. They render, and
+                    screening software reads them badly. Add one and your
+                    document stops saying Parse verified and starts saying Not
+                    parse-checked, because that badge is a claim about your
+                    file, not about our test suite.
+                  </p>
+                </div>
+              </Reveal>
+            </div>
+          </section>
+
+          {/*
+            The catalogue of designs, and the page's one moment of real colour.
+
+            **This is where colour is allowed in, and the reason is that it is not ours.** DESIGN.md's
+            One Accent rule holds everywhere on this page: Signal is the only chrome hue and nothing
+            below introduces a second one. What is coloured here are the specimens, and each one is
+            drawn in the ink of the document it represents — teal, navy, rust, forest, maroon, rose,
+            plum, bronze, coral, steel, umber. Selling a catalogue of designs on a grey page would be
+            selling it with the one thing removed that a person is choosing between.
+
+            `Specimen` is the gallery's own component, so a swatch cannot flatter a theme the PDF will
+            not match. That is the same argument as the block specimens one section up, and it is the
+            only reason a marketing page may draw a product at all.
+
+            A scroll-snap strip, which is a family this page uses nowhere else, and readable in a way
+            an auto-scrolling marquee is not. These are choices somebody makes; a design sliding past
+            on a timer cannot be chosen. The strip communicates breadth by being cut off at the edge.
+          */}
+          <section className="band-tint border-b border-hairline">
+            <div className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
+              <Reveal>
+                <div className="flex max-w-2xl flex-col gap-4">
+                  <h2 className="text-section text-balance text-ink">
+                    A hundred and three ways it can look
+                    <span className="text-signal">.</span>
+                  </h2>
+                  <p className="text-lead text-ink-soft">
+                    Twenty-eight ways to order a life, and seventeen voices to
+                    set it in. Every one of them renders the same details and
+                    passes the same parse test, so the choice is only ever about
+                    what suits you.
+                  </p>
+                </div>
+              </Reveal>
+
+              <Reveal delay={80}>
+                {/*
+                  `-mx-4 px-4` so the strip bleeds to the edge of a phone: a row that stops inside the
+                  page gutter looks like it ended, and this one has not.
+                */}
+                <ul className="scrollbar-none -mx-4 mt-9 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+                  {VOICES.map((design) => (
+                    <li
+                      key={design.id}
+                      className="flex w-[13.5rem] shrink-0 snap-start flex-col gap-2"
+                    >
+                      {/*
+                        The ink on the top edge, because at swatch size the treatment that carries it
+                        is a 3px bar inside a pale card and the strip read as seventeen grey tiles.
+                        This is that design's own accent and nothing else: `minimal` and `editorial`
+                        come out near-black here, which is correct, because that is what they are.
+                      */}
+                      <span
+                        aria-hidden
+                        className="h-[3px] w-full rounded-full"
+                        style={{
+                          backgroundColor: styleOf(getTheme(design.theme))
+                            .accent,
+                        }}
+                      />
+                      <DesignSpecimen design={design} />
+                      {/*
+                        Left-aligned and adjacent, not `justify-between`. Pushed apart, each card's
+                        "Free" sat against the next card's name and read as belonging to it.
+                      */}
+                      <span className="flex items-center gap-2 px-0.5">
+                        <span className="text-[13px] font-semibold text-ink">
+                          {design.label.split(' · ')[1] ?? design.label}
+                        </span>
+                        {/*
+                          Marked on the paid ones, not the free ones. The first version chipped the
+                          four included voices "Free", which reads as a distinction only while the
+                          other thirteen are unreachable. Beta hands all of them over, so the useful
+                          fact flipped: everything here works today, and this is which ones are Pro.
+                        */}
+                        {design.tier === 'paid' ? <ProTag /> : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Reveal>
+
+              {/*
+                Rewritten with beta. The previous version said four voices were free and the rest
+                sat behind a plan that could not be bought, which was true of the gate and is now
+                true of nothing: `betaPaidFree` hands the whole catalogue over. What has to survive
+                is the second half of that honesty, which is that this ends.
+              */}
+              <Reveal delay={140}>
+                <p className="mt-7 max-w-[68ch] border-t border-hairline pt-6 text-[14px] leading-relaxed text-ink-soft">
+                  <span className="font-medium text-ink">
+                    All 103 are yours while we are in beta,
+                  </span>{' '}
+                  including the {VOICES.length - FREE_VOICES} voices marked Pro.
+                  Those become part of a paid plan later and we will say so
+                  before that happens. {FREE_VOICES} of them stay free
+                  afterwards, and every design renders the same document as
+                  every other, checked by the same test.
+                </p>
+              </Reveal>
             </div>
           </section>
 
@@ -2551,10 +3014,7 @@ function HunterReady() {
                             roleTitle: reading.roleTitle,
                             company: reading.company,
                             progress: progressIdRef.current,
-                            processing:
-                              consent.choice === 'granted'
-                                ? 'provider'
-                                : 'local',
+                            processing: consent.choice ?? 'local',
                           }),
                         })
                         const payload = (await response.json()) as Record<
@@ -2593,10 +3053,7 @@ function HunterReady() {
                           body: JSON.stringify({
                             text,
                             target: resolveLocale(loaded.resume.locale),
-                            processing:
-                              consent.choice === 'granted'
-                                ? 'provider'
-                                : 'local',
+                            processing: consent.choice ?? 'local',
                           }),
                         })
                         if (!response.ok) return undefined
@@ -2728,6 +3185,15 @@ function HunterReady() {
   // ── Step 2: check what we read, and take the print ──────────────────────────────────────
   const toCheck = loaded.provenance.filter(needsReview).length
   /**
+   * Which document the "Worth knowing" panel is talking about.
+   *
+   * The warnings themselves are the identity: they are a fixed set of sentences the ingest produced
+   * about this file, so two loads that produced the same remarks are, for the purpose of "have I read
+   * this already", the same remarks. Cheaper and more honest than a document hash, which would bring
+   * the panel back every time somebody edited a bullet it does not mention.
+   */
+  const noticeKey = `${loaded.origin}|${loaded.warnings.join('|')}`
+  /**
    * What the document has gained since it arrived — the number the comparison is offered on.
    *
    * Computed every render rather than memoised: `diffResumes` walks two documents of a few hundred
@@ -2783,6 +3249,29 @@ function HunterReady() {
    */
   const lockedDesign =
     tierOf(templateId, themeId) === 'paid' && consent.paidDesigns !== true
+
+  /**
+   * Blocks on this document that the parse check cannot survive.
+   *
+   * Computed here rather than in the panel because the badge beside the sheet is what most people
+   * read, and it is the claim that has to stop being made. The panel already carries the reason on
+   * each block; this is the same fact where the decision to send the file gets taken.
+   */
+  const risky = unsafeBlocks(loaded.resume.custom, kindOf)
+
+  /**
+   * One place that knows how to ask for a file, so the button and every item in its menu agree.
+   *
+   * The two controls used to build their argument lists separately, and they had already drifted: the
+   * PDF passed the reader's chosen fonts and colours, the Word button passed none. That was defensible
+   * while `.docx` had one fixed layout and no axes to carry — but it is the kind of difference that
+   * survives a refactor by accident, and the menu was about to add a third caller to copy it wrong.
+   */
+  const download = (format: DownloadFormat) =>
+    downloads.start(loaded.resume, templateId, themeId, format, {
+      fonts: customFonts,
+      colours: customColours,
+    })
 
   return (
     <div className="flex min-h-screen flex-col bg-band">
@@ -2879,404 +3368,444 @@ function HunterReady() {
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col gap-5 lg:min-h-0 lg:flex-row">
-          {/* What changes the document, and what still needs checking. */}
-          {/*
+        <WorkspaceSplit
+          storageId="hunterready.workspace-split.v1"
+          panel={
+            <>
+              {/* What changes the document, and what still needs checking. */}
+              {/*
             One column, five panels, one at a time.
 
             `overflow-y-auto` moved from the column to the *panel* below: the tab strip has to stay put
             while its content scrolls, or the way back out of a long panel scrolls away with it.
           */}
-          <aside className="flex w-full shrink-0 flex-col gap-3 lg:w-[400px] lg:min-h-0">
-            <PanelTabs
-              active={panel}
-              onChange={setPanel}
-              badges={{
-                ...(toCheck > 0
-                  ? {
-                      check: {
-                        text: String(toCheck),
-                        tone: 'caution' as const,
-                      },
-                    }
-                  : {}),
-                ...(rewrites !== undefined && pendingRewrites > 0
-                  ? {
-                      wording: {
-                        text: String(pendingRewrites),
-                        tone: 'signal' as const,
-                      },
-                    }
-                  : {}),
-              }}
-            />
+              <aside className="flex w-full min-w-0 flex-col gap-3 lg:min-h-0">
+                <PanelTabs
+                  active={panel}
+                  onChange={setPanel}
+                  badges={{
+                    ...(toCheck > 0
+                      ? {
+                          check: {
+                            text: String(toCheck),
+                            tone: 'caution' as const,
+                          },
+                        }
+                      : {}),
+                    ...(rewrites !== undefined && pendingRewrites > 0
+                      ? {
+                          wording: {
+                            text: String(pendingRewrites),
+                            tone: 'signal' as const,
+                          },
+                        }
+                      : {}),
+                  }}
+                />
 
-            <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-2 lg:pr-1">
-              {panel === 'check' &&
-                (loaded.warnings.length > 0 || fit.advice !== undefined) && (
-                  <div className="rounded-card border border-caution/25 bg-caution-wash p-4">
-                    <h2 className="text-[13px] font-semibold text-caution">
-                      Worth knowing
-                    </h2>
-                    <ul className="mt-2 flex flex-col gap-1.5">
-                      {loaded.warnings.map((warning, i) => (
-                        <li
-                          key={i}
-                          className="text-[13px] leading-relaxed text-ink"
+                <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-2 lg:pr-1">
+                  {panel === 'check' &&
+                    dismissedNotice !== noticeKey &&
+                    (loaded.warnings.length > 0 ||
+                      fit.advice !== undefined) && (
+                      <Alert className="relative rounded-card border-caution/25 bg-caution-wash p-4">
+                        <AlertTitle className="pr-7 text-[13px] font-semibold text-caution">
+                          Worth knowing
+                        </AlertTitle>
+                        {/*
+                          Dismissible, because it is a remark and not a blocker.
+
+                          It says how the file was read — a table flattened, headings guessed — which is
+                          worth knowing exactly once. Unclosable, it sits above the form for the whole
+                          session, taking the top of a panel that is one long list of things to correct
+                          and pushing the actual work down on every visit to the tab. Nothing is lost by
+                          closing it: everything it describes is visible in the fields it is describing,
+                          which are marked.
+
+                          It comes back when a different CV is loaded — `noticeDismissed` resets with
+                          `loaded` — because then it is a remark about a different document.
+                        */}
+                        <button
+                          type="button"
+                          onClick={() => setDismissedNotice(noticeKey)}
+                          aria-label="Dismiss this notice"
+                          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full text-caution/70 transition-colors hover:bg-caution/10 hover:text-caution"
                         >
-                          {warning}
-                        </li>
-                      ))}
-                      {/*
+                          <svg
+                            aria-hidden
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            className="h-4 w-4"
+                          >
+                            <path d="M6 6l12 12M18 6 6 18" />
+                          </svg>
+                        </button>
+                        <AlertDescription>
+                          <ul className="mt-2 flex flex-col gap-1.5">
+                            {loaded.warnings.map((warning, i) => (
+                              <li
+                                key={i}
+                                className="text-[13px] leading-relaxed text-ink"
+                              >
+                                {warning}
+                              </li>
+                            ))}
+                            {/*
                         Length advice belongs beside the other remarks about the document's content,
                         not as a caption over the render. It is last because it is the softest: the
                         others describe something we could not read, this one describes a judgement
                         call that is the candidate's to make.
                       */}
-                      {fit.advice !== undefined && (
-                        <li className="text-[13px] leading-relaxed text-ink">
-                          {fit.advice}
-                        </li>
-                      )}
-                    </ul>
-                  </div>
-                )}
+                            {fit.advice !== undefined && (
+                              <li className="text-[13px] leading-relaxed text-ink">
+                                {fit.advice}
+                              </li>
+                            )}
+                          </ul>
+                        </AlertDescription>
+                      </Alert>
+                    )}
 
-              {panel === 'check' && (
-                <ReviewForm
-                  resume={loaded.resume}
-                  provenance={loaded.provenance}
-                  ocr={loaded.ocr}
-                  authoring={loaded.origin === 'blank'}
-                  /*
+                  {panel === 'check' && (
+                    <ReviewForm
+                      resume={loaded.resume}
+                      provenance={loaded.provenance}
+                      ocr={loaded.ocr}
+                      authoring={loaded.origin === 'blank'}
+                      /*
                 The provenance comes back on structural edits, and taking it is not optional: adding or
                 removing a row renumbers every index-based path after it, so keeping the old list would
                 leave "we were not sure we read this" pointing at a row the person just typed.
               */
-                  onChange={(resume, provenance, edit) => {
-                    setLoaded({
-                      ...loaded,
-                      resume,
-                      ...(provenance === undefined ? {} : { provenance }),
-                    })
-                    /*
+                      onChange={(resume, provenance, edit) => {
+                        setLoaded({
+                          ...loaded,
+                          resume,
+                          ...(provenance === undefined ? {} : { provenance }),
+                        })
+                        /*
                       A structural edit renumbers the coordinates the open suggestions point at, so
                       they shift with it — the same arithmetic the provenance flags just went through.
                       The accepted set is keyed by those coordinates too, so it is rebuilt through the
                       same mapping: an accepted suggestion stays accepted at its new address, and the
                       deleted row's entries leave both lists together.
                     */
-                    if (edit !== undefined && rewrites !== undefined) {
-                      const moved = rewrites.flatMap((entry) => {
-                        const next = shiftTarget(entry, edit)
-                        return next === undefined
-                          ? []
-                          : [{ before: keyOf(entry), entry: next }]
-                      })
-                      setRewrites(moved.map((m) => m.entry))
-                      setAccepted(
-                        (current) =>
-                          new Set(
-                            moved
-                              .filter((m) => current.has(m.before))
-                              .map((m) => keyOf(m.entry)),
-                          ),
-                      )
-                    }
-                  }}
-                  /*
+                        if (edit !== undefined && rewrites !== undefined) {
+                          const moved = rewrites.flatMap((entry) => {
+                            const next = shiftTarget(entry, edit)
+                            return next === undefined
+                              ? []
+                              : [{ before: keyOf(entry), entry: next }]
+                          })
+                          setRewrites(moved.map((m) => m.entry))
+                          setAccepted(
+                            (current) =>
+                              new Set(
+                                moved
+                                  .filter((m) => current.has(m.before))
+                                  .map((m) => keyOf(m.entry)),
+                              ),
+                          )
+                        }
+                      }}
+                      /*
                     Read off the registry rather than compared against a template id, so a third
                     convention would be one entry in one file — that check does not want to live in the
                     form, which has no business knowing which templates exist.
                   */
-                  photoShown={template.convention === 'eu'}
-                  onUseEuropeanLayout={() => setTemplateId('modern-eu')}
-                />
-              )}
+                      photoShown={template.convention === 'eu'}
+                      onUseEuropeanLayout={() => setTemplateId('modern-eu')}
+                    />
+                  )}
 
-              {/*
+                  {/*
               Wording comes *after* the check, never before it — which a tab strip states less firmly
               than a stack did, so the copy carries it: "Once your details are right". The order is the
               argument, and improving a sentence we misread is worse than leaving it alone.
             */}
-              {panel === 'wording' && (
-                <div className="card flex flex-col gap-3 p-4">
-                  {/*
+                  {panel === 'wording' && (
+                    <div className="card flex flex-col gap-3 p-4">
+                      {/*
                     Language, at the head of Wording — moved here from Design at Edd's direction: it is
                     a decision about *words*, and this is the words panel. Switching now translates the
                     whole document (src/optimize/translate.ts carries the guards and the history of the
                     line it moves); the wait narrates itself below, and the comparison opens after.
                   */}
-                  <div className="flex flex-col gap-2 border-b border-hairline pb-4">
-                    <Segmented
-                      label="Language"
-                      options={localeOptions().map((option) => ({
-                        id: option.id,
-                        label: option.label,
-                        hint: 'The whole document: headings, dates and your own words. We show you the before and after.',
-                      }))}
-                      value={resolveLocale(loaded.resume.locale)}
-                      onChange={(locale) => void switchLanguage(locale)}
-                    />
-                    {translating && stages.length > 0 && (
-                      <ol className="flex flex-col gap-1.5">
-                        {stages.map((stage, index) => (
-                          <li
-                            key={index}
-                            className="flex items-center gap-2 text-[13px]"
-                          >
-                            {stage.done ? (
-                              <svg
-                                aria-hidden
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2.4"
-                                strokeLinecap="round"
-                                className="h-3.5 w-3.5 shrink-0 text-affirm"
-                              >
-                                <path d="m5 12.5 4.5 4.5L19 7" />
-                              </svg>
-                            ) : (
-                              <Spinner className="h-3 w-3 shrink-0 text-signal" />
-                            )}
-                            <span
-                              className={
-                                stage.done ? 'text-ink-faint' : 'text-ink-soft'
-                              }
-                            >
-                              {stage.label}
-                              {stage.detail === undefined
-                                ? ''
-                                : `. ${stage.detail}`}
-                            </span>
-                          </li>
-                        ))}
-                      </ol>
-                    )}
-                    {translateNote !== undefined && (
-                      <p
-                        role="status"
-                        className="text-[13px] leading-relaxed text-ink-soft"
-                      >
-                        {translateNote}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col gap-1">
-                    <h2 className="text-[15px] font-semibold text-ink">
-                      Wording
-                    </h2>
-                    <p className="text-[13px] leading-relaxed text-ink-soft">
-                      Once your details are right, we can suggest stronger
-                      wording for each bullet. Nothing changes unless you accept
-                      it.
-                    </p>
-                  </div>
-
-                  {rewrites === undefined ? (
-                    <div className="flex flex-col gap-2">
-                      <button
-                        type="button"
-                        disabled={rewriting}
-                        aria-busy={rewriting}
-                        onClick={() => void askForRewrites()}
-                        className="btn btn-quiet px-4 py-2.5 text-[14px]"
-                      >
-                        <ButtonLabel
-                          busy={rewriting}
-                          idle="Suggest better wording"
-                          working="Reading your bullets…"
+                      <div className="flex flex-col gap-2 border-b border-hairline pb-4">
+                        <Segmented
+                          label="Language"
+                          options={localeOptions().map((option) => ({
+                            id: option.id,
+                            label: option.label,
+                            hint: 'The whole document: headings, dates and your own words. We show you the before and after.',
+                          }))}
+                          value={resolveLocale(loaded.resume.locale)}
+                          onChange={(locale) => void switchLanguage(locale)}
                         />
-                      </button>
-                      {rewriting && rewriteChecklist === undefined && (
-                        <span
+                        {translating && stages.length > 0 && (
+                          <ol className="flex flex-col gap-1.5">
+                            {stages.map((stage, index) => (
+                              <li
+                                key={index}
+                                className="flex items-center gap-2 text-[13px]"
+                              >
+                                {stage.done ? (
+                                  <svg
+                                    aria-hidden
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2.4"
+                                    strokeLinecap="round"
+                                    className="h-3.5 w-3.5 shrink-0 text-affirm"
+                                  >
+                                    <path d="m5 12.5 4.5 4.5L19 7" />
+                                  </svg>
+                                ) : (
+                                  <Spinner className="h-3 w-3 shrink-0 text-signal" />
+                                )}
+                                <span
+                                  className={
+                                    stage.done
+                                      ? 'text-ink-faint'
+                                      : 'text-ink-soft'
+                                  }
+                                >
+                                  {stage.label}
+                                  {stage.detail === undefined
+                                    ? ''
+                                    : `. ${stage.detail}`}
+                                </span>
+                              </li>
+                            ))}
+                          </ol>
+                        )}
+                        {translateNote !== undefined && (
+                          <p
+                            role="status"
+                            className="text-[13px] leading-relaxed text-ink-soft"
+                          >
+                            {translateNote}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <h2 className="text-[15px] font-semibold text-ink">
+                          Wording
+                        </h2>
+                        <p className="text-[13px] leading-relaxed text-ink-soft">
+                          Once your details are right, we can suggest stronger
+                          wording for each bullet. Nothing changes unless you
+                          accept it.
+                        </p>
+                      </div>
+
+                      {rewrites === undefined ? (
+                        <div className="flex flex-col gap-2">
+                          <button
+                            type="button"
+                            disabled={rewriting}
+                            aria-busy={rewriting}
+                            onClick={() => void askForRewrites()}
+                            className="btn btn-quiet px-4 py-2.5 text-[14px]"
+                          >
+                            <ButtonLabel
+                              busy={rewriting}
+                              idle="Suggest better wording"
+                              working="Reading your bullets…"
+                            />
+                          </button>
+                          {rewriting && rewriteChecklist === undefined && (
+                            <span
+                              role="status"
+                              className="text-meta leading-relaxed text-ink-soft"
+                            >
+                              One pass over every bullet. The longer your
+                              history, the longer this takes.
+                            </span>
+                          )}
+                          {rewriteChecklist !== undefined && (
+                            <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-field border border-hairline bg-ground px-3 py-2.5">
+                              {/*
+                            Every bullet named before the first model call, ticked green as each one
+                            finishes. The queue is the progress bar — no percentage can lie about what
+                            is left when what is left is listed.
+                          */}
+                              {rewriteChecklist.map((entry, i) => {
+                                const previous = rewriteChecklist[i - 1]
+                                const showCompany =
+                                  previous === undefined ||
+                                  previous.company !== entry.company
+                                return (
+                                  <div key={i} className="flex flex-col gap-1">
+                                    {showCompany && (
+                                      <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-faint first:mt-0">
+                                        {entry.company}
+                                      </span>
+                                    )}
+                                    <span className="flex items-start gap-2">
+                                      {entry.status === 'done' ? (
+                                        <svg
+                                          aria-hidden
+                                          viewBox="0 0 24 24"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          strokeWidth="2.6"
+                                          strokeLinecap="round"
+                                          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-affirm"
+                                        >
+                                          <path d="m5 12.5 4.5 4.5L19 7" />
+                                        </svg>
+                                      ) : entry.status === 'working' ? (
+                                        <Spinner className="mt-0.5 h-3 w-3 shrink-0 text-signal" />
+                                      ) : entry.status === 'failed' ? (
+                                        <span
+                                          aria-label="skipped"
+                                          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-center text-[11px] font-bold leading-none text-caution"
+                                        >
+                                          !
+                                        </span>
+                                      ) : (
+                                        <span
+                                          aria-hidden
+                                          className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full border border-hairline-strong"
+                                        />
+                                      )}
+                                      <span
+                                        className={`line-clamp-1 text-[12px] leading-relaxed ${
+                                          entry.status === 'done'
+                                            ? 'text-ink-faint'
+                                            : 'text-ink-soft'
+                                        }`}
+                                      >
+                                        {entry.text}
+                                      </span>
+                                    </span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          {rewriteChecklist !== undefined && (
+                            <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-field border border-hairline bg-ground px-3 py-2.5">
+                              {/*
+                            Every bullet named before the first model call, ticked green as each one
+                            finishes. The queue is the progress bar — no percentage can lie about what
+                            is left when what is left is listed.
+                          */}
+                              {rewriteChecklist.map((entry, i) => {
+                                const previous = rewriteChecklist[i - 1]
+                                const showCompany =
+                                  previous === undefined ||
+                                  previous.company !== entry.company
+                                return (
+                                  <div key={i} className="flex flex-col gap-1">
+                                    {showCompany && (
+                                      <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-faint first:mt-0">
+                                        {entry.company}
+                                      </span>
+                                    )}
+                                    <span className="flex items-start gap-2">
+                                      {entry.status === 'done' ? (
+                                        <svg
+                                          aria-hidden
+                                          viewBox="0 0 24 24"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          strokeWidth="2.6"
+                                          strokeLinecap="round"
+                                          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-affirm"
+                                        >
+                                          <path d="m5 12.5 4.5 4.5L19 7" />
+                                        </svg>
+                                      ) : entry.status === 'working' ? (
+                                        <Spinner className="mt-0.5 h-3 w-3 shrink-0 text-signal" />
+                                      ) : entry.status === 'failed' ? (
+                                        <span
+                                          aria-label="skipped"
+                                          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-center text-[11px] font-bold leading-none text-caution"
+                                        >
+                                          !
+                                        </span>
+                                      ) : (
+                                        <span
+                                          aria-hidden
+                                          className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full border border-hairline-strong"
+                                        />
+                                      )}
+                                      <span
+                                        className={`line-clamp-1 text-[12px] leading-relaxed ${
+                                          entry.status === 'done'
+                                            ? 'text-ink-faint'
+                                            : 'text-ink-soft'
+                                        }`}
+                                      >
+                                        {entry.text}
+                                      </span>
+                                    </span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                          {rewrites.filter(
+                            (entry) =>
+                              entry.suggestion !== undefined &&
+                              !accepted.has(keyOf(entry)),
+                          ).length >= 2 && (
+                            <button
+                              type="button"
+                              onClick={acceptAllRewrites}
+                              className="btn btn-quiet self-start px-4 py-2 text-[13px]"
+                            >
+                              Accept all{' '}
+                              {
+                                rewrites.filter(
+                                  (entry) =>
+                                    entry.suggestion !== undefined &&
+                                    !accepted.has(keyOf(entry)),
+                                ).length
+                              }{' '}
+                              suggestions
+                            </button>
+                          )}
+                          <RewriteReview
+                            rewrites={rewrites}
+                            accepted={accepted}
+                            onAccept={acceptRewrite}
+                            onDismiss={dismissRewrite}
+                            onAnswer={(answers) => void askForRewrites(answers)}
+                            busy={rewriting}
+                          />
+                        </div>
+                      )}
+
+                      {rewriteNote !== undefined && (
+                        <p
                           role="status"
-                          className="text-meta leading-relaxed text-ink-soft"
+                          className="text-[13px] leading-relaxed text-ink-soft"
                         >
-                          One pass over every bullet. The longer your history,
-                          the longer this takes.
-                        </span>
+                          {rewriteNote}
+                        </p>
                       )}
-                      {rewriteChecklist !== undefined && (
-                        <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-field border border-hairline bg-ground px-3 py-2.5">
-                          {/*
-                            Every bullet named before the first model call, ticked green as each one
-                            finishes. The queue is the progress bar — no percentage can lie about what
-                            is left when what is left is listed.
-                          */}
-                          {rewriteChecklist.map((entry, i) => {
-                            const previous = rewriteChecklist[i - 1]
-                            const showCompany =
-                              previous === undefined ||
-                              previous.company !== entry.company
-                            return (
-                              <div key={i} className="flex flex-col gap-1">
-                                {showCompany && (
-                                  <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-faint first:mt-0">
-                                    {entry.company}
-                                  </span>
-                                )}
-                                <span className="flex items-start gap-2">
-                                  {entry.status === 'done' ? (
-                                    <svg
-                                      aria-hidden
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2.6"
-                                      strokeLinecap="round"
-                                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-affirm"
-                                    >
-                                      <path d="m5 12.5 4.5 4.5L19 7" />
-                                    </svg>
-                                  ) : entry.status === 'working' ? (
-                                    <Spinner className="mt-0.5 h-3 w-3 shrink-0 text-signal" />
-                                  ) : entry.status === 'failed' ? (
-                                    <span
-                                      aria-label="skipped"
-                                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-center text-[11px] font-bold leading-none text-caution"
-                                    >
-                                      !
-                                    </span>
-                                  ) : (
-                                    <span
-                                      aria-hidden
-                                      className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full border border-hairline-strong"
-                                    />
-                                  )}
-                                  <span
-                                    className={`line-clamp-1 text-[12px] leading-relaxed ${
-                                      entry.status === 'done'
-                                        ? 'text-ink-faint'
-                                        : 'text-ink-soft'
-                                    }`}
-                                  >
-                                    {entry.text}
-                                  </span>
-                                </span>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      {rewriteChecklist !== undefined && (
-                        <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-field border border-hairline bg-ground px-3 py-2.5">
-                          {/*
-                            Every bullet named before the first model call, ticked green as each one
-                            finishes. The queue is the progress bar — no percentage can lie about what
-                            is left when what is left is listed.
-                          */}
-                          {rewriteChecklist.map((entry, i) => {
-                            const previous = rewriteChecklist[i - 1]
-                            const showCompany =
-                              previous === undefined ||
-                              previous.company !== entry.company
-                            return (
-                              <div key={i} className="flex flex-col gap-1">
-                                {showCompany && (
-                                  <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-faint first:mt-0">
-                                    {entry.company}
-                                  </span>
-                                )}
-                                <span className="flex items-start gap-2">
-                                  {entry.status === 'done' ? (
-                                    <svg
-                                      aria-hidden
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2.6"
-                                      strokeLinecap="round"
-                                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-affirm"
-                                    >
-                                      <path d="m5 12.5 4.5 4.5L19 7" />
-                                    </svg>
-                                  ) : entry.status === 'working' ? (
-                                    <Spinner className="mt-0.5 h-3 w-3 shrink-0 text-signal" />
-                                  ) : entry.status === 'failed' ? (
-                                    <span
-                                      aria-label="skipped"
-                                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-center text-[11px] font-bold leading-none text-caution"
-                                    >
-                                      !
-                                    </span>
-                                  ) : (
-                                    <span
-                                      aria-hidden
-                                      className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full border border-hairline-strong"
-                                    />
-                                  )}
-                                  <span
-                                    className={`line-clamp-1 text-[12px] leading-relaxed ${
-                                      entry.status === 'done'
-                                        ? 'text-ink-faint'
-                                        : 'text-ink-soft'
-                                    }`}
-                                  >
-                                    {entry.text}
-                                  </span>
-                                </span>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                      {rewrites.filter(
-                        (entry) =>
-                          entry.suggestion !== undefined &&
-                          !accepted.has(keyOf(entry)),
-                      ).length >= 2 && (
-                        <button
-                          type="button"
-                          onClick={acceptAllRewrites}
-                          className="btn btn-quiet self-start px-4 py-2 text-[13px]"
-                        >
-                          Accept all{' '}
-                          {
-                            rewrites.filter(
-                              (entry) =>
-                                entry.suggestion !== undefined &&
-                                !accepted.has(keyOf(entry)),
-                            ).length
-                          }{' '}
-                          suggestions
-                        </button>
-                      )}
-                      <RewriteReview
-                        rewrites={rewrites}
-                        accepted={accepted}
-                        onAccept={acceptRewrite}
-                        onDismiss={dismissRewrite}
-                        onAnswer={(answers) => void askForRewrites(answers)}
-                        busy={rewriting}
-                      />
                     </div>
                   )}
 
-                  {rewriteNote !== undefined && (
-                    <p
-                      role="status"
-                      className="text-[13px] leading-relaxed text-ink-soft"
-                    >
-                      {rewriteNote}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/*
+                  {/*
               The account, offered after the CV exists and never before it (ADR-004, ADR-011: the
               artifact comes before any question). It renders nothing at all on an installation with no
               database, so a deployment that cannot keep an account never offers one.
             */}
-              {panel === 'account' && (
-                <div className="flex flex-col gap-4">
-                  {/*
+                  {panel === 'account' && (
+                    <div className="flex flex-col gap-4">
+                      {/*
                     The standing answer to "who reads my CV", reachable at any moment.
 
                     It lives here rather than beside a button because it is a fact about the person,
@@ -3284,62 +3813,77 @@ function HunterReady() {
                     the translation alike. The gate still asks once on the first upload; this is
                     where the answer lives afterwards, which is what makes the gate's promise true.
                   */}
-                  <ProcessingChoice
-                    provider={consent.provider}
-                    choice={consent.choice}
-                    onDecide={consent.decide}
-                    Control={Segmented}
-                  />
-                  <Library
-                    resume={loaded.resume}
-                    /*
+                      <ProcessingChoice
+                        providers={consent.providers}
+                        choice={consent.choice}
+                        onDecide={consent.decide}
+                        Control={Segmented}
+                      />
+                      <Library
+                        resume={loaded.resume}
+                        /*
                 A CV opened from the library gets a fresh `original`, because it is a different
                 document. Keeping the old one would compare a stored CV against a file uploaded earlier
                 in the same session, and "before and after" would show a distance nobody travelled.
               */
-                    onLoad={(resume) =>
-                      setLoaded({ ...loaded, resume, original: resume })
-                    }
-                    savedId={savedResumeId}
-                    onSavedIdChange={setSavedResumeId}
-                  />
-                </div>
-              )}
+                        onLoad={(resume) =>
+                          setLoaded({ ...loaded, resume, original: resume })
+                        }
+                        savedId={savedResumeId}
+                        onSavedIdChange={setSavedResumeId}
+                      />
+                    </div>
+                  )}
 
-              {/*
+                  {/*
               Targeting sits below wording for the same reason wording sits below the check: each step
               is only worth doing once the one above it is right. Tailoring a CV we misread aims the
               wrong document at the job.
             */}
-              {panel === 'job' && (
-                <div className="card flex flex-col gap-3 p-4">
-                  <div className="flex flex-col gap-1">
-                    <h2 className="text-[15px] font-semibold text-ink">
-                      Applying for something specific?
-                    </h2>
-                    <p className="text-[13px] leading-relaxed text-ink-soft">
-                      Paste the advert and we will show you which of their
-                      requirements your CV already answers, which are buried,
-                      and which are missing. We never add one you have not
-                      claimed.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setTargeting(true)}
-                    className="btn btn-quiet self-start px-4 py-2.5 text-[14px]"
-                  >
-                    {reading === undefined
-                      ? 'Target a job advert'
-                      : 'Back to this job'}
-                    <Icon name="arrow-right" className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
+                  {panel === 'job' && (
+                    <div className="card flex flex-col gap-3 p-4">
+                      <div className="flex flex-col gap-1">
+                        {/*
+                          Tagged, and the sentence under it has to be exact, because `/api/target`
+                          does **not** refuse without the plan — it falls back to `resolveLocalProvider`
+                          like rewriting and translation do. What is Pro here is the larger model
+                          reading the advert, not the tab. "Pro" alone over a feature that works
+                          without Pro would be the page overstating its own paywall, which is the one
+                          direction this product cannot afford to be wrong in.
+                        */}
+                        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
+                          Applying for something specific?
+                          <ProTag />
+                        </h2>
+                        <p className="text-[13px] leading-relaxed text-ink-soft">
+                          Paste the advert and we will show you which of their
+                          requirements your CV already answers, which are
+                          buried, and which are missing. We never add one you
+                          have not claimed.
+                        </p>
+                        <p className="mt-1 text-meta leading-relaxed text-ink-soft">
+                          Reading an advert well is what the larger model is
+                          for, and that model is Pro. It still runs on our own
+                          server without it. Free for everyone while we are in
+                          beta.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setTargeting(true)}
+                        className="btn btn-quiet self-start px-4 py-2.5 text-[14px]"
+                      >
+                        {reading === undefined
+                          ? 'Target a job advert'
+                          : 'Back to this job'}
+                        <Icon name="arrow-right" className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
 
-              {panel === 'design' && (
-                <div className="card flex flex-col gap-3 p-4">
-                  {/*
+                  {panel === 'design' && (
+                    <div className="card flex flex-col gap-3 p-4">
+                      {/*
                     Thirty pairings, replacing the three segmented rows that were here.
 
                     The rows were a fine control for twelve combinations spread across two questions. They
@@ -3348,107 +3892,118 @@ function HunterReady() {
                     question. `design-gallery.tsx` carries why the cards show a type specimen rather than a
                     thumbnail of a page.
                   */}
-                  <div className="flex flex-col gap-1">
-                    <h2 className="text-[15px] font-semibold text-ink">
-                      Design
-                    </h2>
-                    <p className="text-[13px] leading-relaxed text-ink-soft">
-                      The layout decides what a reader meets first. The type
-                      decides how it sounds. Both are free to change at any
-                      point, and nothing about your CV is rewritten.
-                    </p>
-                    {/*
+                      <div className="flex flex-col gap-1">
+                        <h2 className="text-[15px] font-semibold text-ink">
+                          Design
+                        </h2>
+                        <p className="text-[13px] leading-relaxed text-ink-soft">
+                          The layout decides what a reader meets first. The type
+                          decides how it sounds. Both are free to change at any
+                          point, and nothing about your CV is rewritten.
+                        </p>
+                        {/*
                       Said here because a control that only appears on hover is a control most people
                       never find. The card's "Full page" button is deliberately quiet so that a
                       hundred of them do not shout; the cost of that is one sentence of telling.
                     */}
-                    <p className="text-[13px] leading-relaxed text-ink-soft">
-                      To see a whole page before choosing, use{' '}
-                      <strong className="font-semibold text-ink">
-                        Full page
-                      </strong>{' '}
-                      on any card. From there the arrows, or the left and right
-                      keys, walk the rest without closing it.
-                    </p>
-                  </div>
+                        <p className="text-[13px] leading-relaxed text-ink-soft">
+                          To see a whole page before choosing, use{' '}
+                          <strong className="font-semibold text-ink">
+                            Full page
+                          </strong>{' '}
+                          on any card. From there the arrows, or the left and
+                          right keys, walk the rest without closing it.
+                        </p>
+                      </div>
 
-                  {previousLook !== undefined && (
-                    /*
+                      {previousLook !== undefined && (
+                        /*
                       Offered rather than announced: a banner every time somebody picks a card would be
                       noise on the action they most repeat. It sits where the change happened and says
                       what it goes back *to*, because "Undo" alone asks the reader to remember.
                     */
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTemplateId(previousLook.templateId)
-                        setThemeId(previousLook.themeId)
-                        setCustomFonts(previousLook.fonts)
-                        setCustomColours(previousLook.colours)
-                        setPreviousLook(undefined)
-                      }}
-                      className="btn btn-quiet self-start px-3 py-1.5 text-[13px]"
-                    >
-                      <Icon name="arrow-left" className="h-4 w-4" />
-                      Back to {previousLook.label}
-                    </button>
-                  )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTemplateId(previousLook.templateId)
+                            setThemeId(previousLook.themeId)
+                            setCustomFonts(previousLook.fonts)
+                            setCustomColours(previousLook.colours)
+                            setPreviousLook(undefined)
+                          }}
+                          className="btn btn-quiet self-start px-3 py-1.5 text-[13px]"
+                        >
+                          <Icon name="arrow-left" className="h-4 w-4" />
+                          Back to {previousLook.label}
+                        </button>
+                      )}
 
-                  <DesignAxes
-                    axes={{ fonts: customFonts, colours: customColours }}
-                    defaults={{
-                      body: getTheme(
-                        themeId,
-                      ).typography.body.fontFamily.replace(/^["']|["']$/g, ''),
-                      heading: getTheme(
-                        themeId,
-                      ).typography.heading.fontFamily.replace(
-                        /^["']|["']$/g,
-                        '',
-                      ),
-                      accent:
-                        styleOf(getTheme(themeId)).accent ??
-                        getTheme(themeId).colors.primary,
-                      paper: getTheme(themeId).colors.background,
-                    }}
-                    onChange={(next) => {
-                      setCustomFonts(next.fonts)
-                      setCustomColours(next.colours)
-                    }}
-                  />
-
-                  <DesignGallery
-                    templateId={templateId}
-                    themeId={themeId}
-                    resume={loaded.resume}
-                    /*
+                      <DesignGallery
+                        templateId={templateId}
+                        themeId={themeId}
+                        resume={loaded.resume}
+                        /*
                       `=== true` on purpose: the field is `undefined` until the server answers, and an
                       unknown entitlement must draw as locked rather than as unlocked. A padlock that
                       appears a moment late is untidy; one that vanishes a moment late offers something
                       the render endpoint will refuse.
                     */
-                    entitled={consent.paidDesigns === true}
-                    onChoose={(design) => {
-                      setPreviousLook({
-                        templateId,
-                        themeId,
-                        fonts: customFonts,
-                        colours: customColours,
-                        label:
-                          DESIGNS.find(
-                            (d) =>
-                              d.structure === templateId && d.theme === themeId,
-                          )?.label ?? 'the last look',
-                      })
-                      setTemplateId(design.structure)
-                      setThemeId(design.theme)
-                    }}
-                  />
-                </div>
-              )}
-            </div>
+                        entitled={consent.paidDesigns === true}
+                        onChoose={(design) => {
+                          setPreviousLook({
+                            templateId,
+                            themeId,
+                            fonts: customFonts,
+                            colours: customColours,
+                            label:
+                              DESIGNS.find(
+                                (d) =>
+                                  d.structure === templateId &&
+                                  d.theme === themeId,
+                              )?.label ?? 'the last look',
+                          })
+                          setTemplateId(design.structure)
+                          setThemeId(design.theme)
+                        }}
+                      />
 
-            {/*
+                      <DesignAxes
+                        axes={{ fonts: customFonts, colours: customColours }}
+                        /*
+                      The same flag the gallery reads, and for the same reason it uses `=== true`: the
+                      field is `undefined` until the server answers, and an unknown entitlement has to
+                      draw as locked. Offering the pickers a moment early would offer something
+                      `/api/render` then refuses.
+                    */
+                        entitled={consent.paidDesigns === true}
+                        defaults={{
+                          body: getTheme(
+                            themeId,
+                          ).typography.body.fontFamily.replace(
+                            /^["']|["']$/g,
+                            '',
+                          ),
+                          heading: getTheme(
+                            themeId,
+                          ).typography.heading.fontFamily.replace(
+                            /^["']|["']$/g,
+                            '',
+                          ),
+                          accent:
+                            styleOf(getTheme(themeId)).accent ??
+                            getTheme(themeId).colors.primary,
+                          paper: getTheme(themeId).colors.background,
+                        }}
+                        onChange={(next) => {
+                          setCustomFonts(next.fonts)
+                          setCustomColours(next.colours)
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/*
               The download, at the foot of its own column.
 
               Restored here after being deleted by accident: the edit that swapped the Design panel for the
@@ -3459,103 +4014,59 @@ function HunterReady() {
               Outside the scrolling panel, so the last action never scrolls out of reach, and a full-width
               primary pill because DESIGN.md is right that it reads as one decisive action.
             */}
-            <div className="flex shrink-0 flex-col gap-2 border-t border-hairline pt-3">
-              {/*
-                Disabled on a locked design rather than left to fail at the endpoint. `/api/render` is the
-                real gate — a client cannot be trusted with one — but letting somebody press a button whose
-                only possible outcome is a refusal is not respect for the gate, just a worse way to say no.
-              */}
-              <button
-                type="button"
-                disabled={downloads.busyFormat !== undefined || lockedDesign}
-                aria-busy={downloads.busyFormat === 'pdf'}
-                onClick={() =>
-                  void downloads.start(
-                    loaded.resume,
-                    templateId,
-                    themeId,
-                    'pdf',
-                    {
-                      fonts: customFonts,
-                      colours: customColours,
-                    },
-                  )
-                }
-                className="btn btn-primary w-full px-6 py-3 text-[15px]"
-              >
-                {downloads.busyFormat === 'pdf' ? (
-                  <Spinner className="h-[18px] w-[18px]" />
-                ) : (
-                  <Icon name="download" className="h-[18px] w-[18px]" />
-                )}
-                {downloads.busyFormat === 'pdf'
-                  ? 'Building your PDF…'
-                  : 'Download the PDF'}
-              </button>
-              {/*
-                Word, beside the PDF rather than hidden behind a menu — v0.6. Many ATS portals require or
-                prefer `.docx`, and several parse it better than any PDF. It stays the quiet button: the PDF
-                is what most people send and the one whose look they just chose.
-              */}
-              <button
-                type="button"
-                disabled={downloads.busyFormat !== undefined || lockedDesign}
-                aria-busy={downloads.busyFormat === 'docx'}
-                onClick={() =>
-                  void downloads.start(
-                    loaded.resume,
-                    templateId,
-                    themeId,
-                    'docx',
-                  )
-                }
-                title="For portals that ask for a Word file"
-                className="btn btn-quiet w-full px-4 py-2.5 text-[14px]"
-              >
-                <ButtonLabel
-                  busy={downloads.busyFormat === 'docx'}
-                  idle="Word (.docx)"
-                  working="Building…"
-                />
-              </button>
-              {lockedDesign && (
-                <p className="text-meta leading-relaxed text-ink-soft">
-                  Pick a design marked Included to download, or keep this one to
-                  compare.
-                </p>
-              )}
-              {downloads.failure !== undefined && (
-                <p
-                  role="status"
-                  className="rounded-field border border-alert/25 bg-alert-wash px-3 py-2 text-[13px] leading-relaxed text-ink"
-                >
-                  {downloads.failure}
-                </p>
-              )}
-            </div>
-          </aside>
+                {/*
+                  Pinned to the bottom, and `sticky` rather than `fixed`.
 
-          {/*
+                  It was already outside the scrolling panel, which pins it whenever the workspace owns
+                  the scroll — and on a short viewport the *page* owns the scroll instead, so the last
+                  action slid away under the fold exactly when the column was longest. `sticky bottom-0`
+                  holds it in both cases without taking it out of the flow: `fixed` would need a matching
+                  spacer under the column or the final section would sit behind it forever.
+
+                  The background is opaque and the shadow is DESIGN.md's elevation, saying the true
+                  thing — this surface is above the one scrolling past beneath it.
+                */}
+              </aside>
+            </>
+          }
+          document={
+            /*
             The document. It is the only element in this world allowed real visual density, and it
             keeps its own surround so it reads as a sheet on a desk rather than as another panel.
-          */}
-          <main className="card flex min-h-[70vh] flex-1 flex-col overflow-hidden lg:min-h-0">
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-hairline px-4 py-2.5">
-              <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
-                Your PDF
-                {template.atsRating === 'verified' ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-affirm-wash px-2 py-0.5 text-[11px] font-semibold text-affirm">
-                    <Icon name="verified" className="h-3.5 w-3.5" />
-                    Parse verified
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center rounded-full bg-caution-wash px-2 py-0.5 text-[11px] font-semibold text-caution">
-                    Design-first
-                  </span>
-                )}
-              </span>
-              <span className="flex flex-wrap items-center gap-3">
-                {/*
+          */
+            <main className="card flex min-h-[70vh] flex-1 flex-col overflow-hidden lg:min-h-0">
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-hairline px-4 py-2.5">
+                <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
+                  Your PDF
+                  {/*
+                    The badge is a claim about **this document**, not about the template.
+                    
+                    It was a fact about the template while a template was all a person could choose.
+                    They can now put a table on the page, and a document carrying a table is one the
+                    round-trip test would not pass — so the badge has to come off, or it is the
+                    product's central claim quietly going untrue while the interface still asserts it.
+                    That honesty is the entire basis on which the risky blocks were built at all.
+                  */}
+                  {risky.length > 0 ? (
+                    <span
+                      title={`${risky.map((spec) => spec.label).join(', ')} — see the note on each in Check`}
+                      className="inline-flex items-center rounded-full bg-caution-wash px-2 py-0.5 text-[11px] font-semibold text-caution"
+                    >
+                      Not parse-checked
+                    </span>
+                  ) : template.atsRating === 'verified' ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-affirm-wash px-2 py-0.5 text-[11px] font-semibold text-affirm">
+                      <Icon name="verified" className="h-3.5 w-3.5" />
+                      Parse verified
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full bg-caution-wash px-2 py-0.5 text-[11px] font-semibold text-caution">
+                      Design-first
+                    </span>
+                  )}
+                </span>
+                <span className="flex flex-wrap items-center gap-3">
+                  {/*
                   The before-and-after switch, and it exists only once there is something to show.
 
                   DESIGN.md: don't show a progress indicator for progress that has not happened. A button
@@ -3564,7 +4075,7 @@ function HunterReady() {
                   freshly uploaded CV this is simply not here, and it appears the moment the first
                   correction or accepted suggestion lands.
                 */}
-                {/*
+                  {/*
                   And never on a CV written here, whatever the diff says.
 
                   Found in the browser walk: authoring one from scratch put "5 changes since you
@@ -3573,57 +4084,98 @@ function HunterReady() {
                   of everything the person has typed, presented as an achievement over a file that
                   never existed. Same falsehood as the counter and the empty states, one pane over.
                 */}
-                {changes.length > 0 && (
-                  <button
-                    type="button"
-                    aria-pressed={comparing}
-                    onClick={() => setComparing(!comparing)}
-                    className={[
-                      'flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-semibold transition-colors',
-                      comparing
-                        ? 'border-signal-edge bg-signal-wash text-signal'
-                        : 'border-hairline-strong text-ink-soft hover:text-ink',
-                    ].join(' ')}
-                  >
-                    {comparing ? 'Just the new one' : 'Before and after'}
-                    <span className="tally rounded-full bg-signal px-1.5 text-[11px] font-bold text-white">
-                      {changes.length}
-                    </span>
-                  </button>
-                )}
-                <span className="tally text-meta text-ink-soft">
-                  A4 · {pages} page{pages === 1 ? '' : 's'}
-                  {readFields > 0 &&
-                    ` · ${readFields - toCheck}/${readFields} read cleanly`}
+                  {changes.length > 0 && (
+                    <button
+                      type="button"
+                      aria-pressed={comparing}
+                      onClick={() => setComparing(!comparing)}
+                      className={[
+                        'flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-semibold transition-colors',
+                        comparing
+                          ? 'border-signal-edge bg-signal-wash text-signal'
+                          : 'border-hairline-strong text-ink-soft hover:text-ink',
+                      ].join(' ')}
+                    >
+                      {comparing ? 'Just the new one' : 'Before and after'}
+                      <span className="tally rounded-full bg-signal px-1.5 text-[11px] font-bold text-white">
+                        {changes.length}
+                      </span>
+                    </button>
+                  )}
+                  <span className="tally text-meta text-ink-soft">
+                    A4 · {pages} page{pages === 1 ? '' : 's'}
+                    {readFields > 0 &&
+                      ` · ${readFields - toCheck}/${readFields} read cleanly`}
+                  </span>
+                  {/*
+                    Beta, beside the button that hands over the file.
+
+                    It followed the download across from the panel footer, because this is the moment
+                    it is for: somebody about to send this to an employer should know the tool that
+                    made it is still moving. Hidden below `lg`, where the header is already three
+                    facts and a split button on one line — the chip beside the wordmark carries it
+                    there, and the landing page says it in full before anyone uploads anything.
+                  */}
+                  <span className="tally hidden text-meta text-ink-faint lg:inline">
+                    Beta · the file does not change after you download it
+                  </span>
+                  {/*
+                    The download, on the document rather than under the editor.
+
+                    It spent this whole build pinned to the bottom of the left panel, which is where
+                    the *editing* ends — but the thing being downloaded is the sheet on the right, and
+                    the button was as far from it as the layout allows. Here it sits with the page
+                    count and the parse badge, which are the other two facts about the same artefact,
+                    and the panel gets its full height back for the work it is actually for.
+                  */}
+                  <DownloadControl
+                    busy={downloads.busyFormat}
+                    disabled={lockedDesign}
+                    onDownload={download}
+                  />
                 </span>
-              </span>
-            </div>
-            {/*
+              </div>
+              {/*
               Said where the document is, because the document is the thing that cannot be downloaded.
               Caution rather than alert: nothing has failed — this is a fact about the plan, and colouring a
               price as an error would make it feel like a fault.
             */}
-            {lockedDesign && (
-              <p className="border-b border-caution/25 bg-caution-wash px-4 py-2 text-[13px] leading-relaxed text-ink">
-                This design is part of the paid plan. You can see it here, and
-                download any design marked <strong>Included</strong>, which
-                produce the same document, checked by the same parse test.
-              </p>
-            )}
-            {/*
+              {lockedDesign && (
+                <p className="border-b border-caution/25 bg-caution-wash px-4 py-2 text-[13px] leading-relaxed text-ink">
+                  This design is part of the paid plan. You can see it here, and
+                  download any design marked <strong>Included</strong>, which
+                  produce the same document, checked by the same parse test.
+                </p>
+              )}
+              {/*
+                A failed build, beside the button that failed.
+
+                It followed the download out of the panel, which is the point of moving either: a
+                message about a file belongs where the file is, and it used to sit two columns away
+                from the control that produced it.
+              */}
+              {downloads.failure !== undefined && (
+                <p
+                  role="status"
+                  className="border-b border-alert/25 bg-alert-wash px-4 py-2 text-[13px] leading-relaxed text-ink"
+                >
+                  {downloads.failure}
+                </p>
+              )}
+              {/*
               The fit advice used to sit here, in a band across the top of the paper. It is a remark
               about the *content* — that a fifteen-year history squeezed onto one page has probably
               lost something — and content is what the Check panel is for. Above the document it read
               as a caption on the render, which is the one thing it is not about, and it was there on
               every panel including the ones where nobody is editing anything.
             */}
-            {/*
+              {/*
               Comparing replaces the preview rather than opening beside it or over it. A modal would put
               the achievement in a box to be dismissed, and a third column would shrink both sheets to
               the point where neither is legible. The switch is one click away in either direction, which
               is what makes replacing it safe — every station in this flow is re-enterable.
             */}
-            {/*
+              {/*
               `changes.length > 0` as well as `comparing`, because `compare=true` is now something a URL
               can assert and a URL can be wrong.
 
@@ -3633,30 +4185,31 @@ function HunterReady() {
               address bar. Ignoring the flag instead is the same rule the search validator follows: an
               impossible request falls back to the ordinary screen rather than to a dead end.
             */}
-            {comparing && changes.length > 0 ? (
-              <BeforeAfter
-                original={comparisonBase ?? loaded.original}
-                current={loaded.resume}
-                changes={changes}
-                theme={theme}
-                Template={template.Component}
-                since={loaded.origin === 'blank' ? 'fit' : 'upload'}
-              />
-            ) : (
-              <PaperPreview
-                resume={loaded.resume}
-                theme={theme}
-                Template={template.Component}
-                /*
+              {comparing && changes.length > 0 ? (
+                <BeforeAfter
+                  original={comparisonBase ?? loaded.original}
+                  current={loaded.resume}
+                  changes={changes}
+                  theme={theme}
+                  Template={template.Component}
+                  since={loaded.origin === 'blank' ? 'fit' : 'upload'}
+                />
+              ) : (
+                <PaperPreview
+                  resume={loaded.resume}
+                  theme={theme}
+                  Template={template.Component}
+                  /*
                   This is the preview whose count the header beside it shows. The first attempt wired the
                   callback to the targeting branch's preview instead — the label kept reading the estimate
                   while the sheets beside it disagreed, which is the bug being fixed, one screen over.
                 */
-                onPagesMeasured={setMeasuredPages}
-              />
-            )}
-          </main>
-        </div>
+                  onPagesMeasured={setMeasuredPages}
+                />
+              )}
+            </main>
+          }
+        />
       </div>
     </div>
   )

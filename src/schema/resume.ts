@@ -149,11 +149,142 @@ export const LanguageItem = z.object({
   raw: z.string().optional(),
 })
 
-/** The escape hatch. Real CVs have "Speaking", "Patents", "Military service". */
+/**
+ * The escape hatch. Real CVs have "Speaking", "Patents", "Military service".
+ *
+ * `space` makes one of these a **spacer** instead: blank room between two sections, and nothing else.
+ * It sits here rather than in a structure of its own because the thing being asked for is positional —
+ * "leave a gap *here*" — and `custom` is already the ordered list the person arranges. A parallel list
+ * of gaps addressed by index would be a second ordering to keep in step with the first.
+ *
+ * ## Why this is not a schemaVersion bump
+ *
+ * CLAUDE.md requires one for a change to the contract, and this is not one: the field is optional, so
+ * every document ever written still parses, unchanged, into the same value it did before. Nothing to
+ * migrate — there is no old shape, only a shape that says less. A bump would signal a break to every
+ * reader of `schemaVersion` and there is nothing for them to do about it.
+ *
+ * ## And why a layout value is allowed in a semantic schema
+ *
+ * It is the one exception and it should stay the one. Everything else here is a fact about the person;
+ * this is a fact about the page. The justification is that the alternative is worse: people space a CV
+ * out with empty custom sections titled " " today, and that lands in the ATS text as a blank heading.
+ * A spacer that the renderer knows about draws nothing, extracts as nothing, and cannot be mistaken for
+ * a section that failed to parse.
+ */
+/**
+ * What a block *is*, when it is not a section.
+ *
+ * `custom` began as "a section this CV has that our schema does not name". Then it gained a spacer,
+ * and a spacer is not a section — so this is the discriminator that was implied from that moment. It
+ * is optional and absent means `section`, which is what every document written before now holds.
+ *
+ * The list is short on purpose and will stay short. pdfcn publishes twenty-four components; these are
+ * the ones a CV can carry without breaking the parse. **Tables, page headers and footers, watermarks,
+ * QR codes, charts and form fields are deliberately absent** — docs/05: a table is the commonest way a
+ * CV loses its employment history in a screener, header and footer regions are discarded by many
+ * parsers, and a chart or a QR code extracts as nothing at all, which makes it a claim the reader can
+ * see and the software cannot.
+ */
+export const BLOCK_KINDS = [
+  // Text and structure
+  'section',
+  'heading',
+  'text',
+  'list',
+  'keyValue',
+  'card',
+  'alert',
+  'callout',
+  'quote',
+  'signature',
+  'link',
+  'badge',
+  'table',
+  'graph',
+  'form',
+  'image',
+  'qrCode',
+  // Page furniture
+  'divider',
+  'space',
+  'pageBreak',
+  'keepTogether',
+  'pageHeader',
+  'pageFooter',
+  'watermark',
+] as const
+
+export type BlockKind = (typeof BLOCK_KINDS)[number]
+
 export const CustomSection = z.object({
+  /** Which kind of block this is. Absent means `section`, which is what it always was. */
+  kind: z.enum(BLOCK_KINDS).optional(),
+  /**
+   * A stable handle, so `sectionOrder` can name this section rather than its position.
+   *
+   * Optional, and absent on every document written before ordering existed. A section without one is
+   * simply unnamed in the order and falls to the tail — the behaviour it had already. The interface
+   * assigns ids the first time somebody reorders anything, which is the first moment they matter.
+   */
+  id: z.string().optional(),
   title: z.string(),
   items: z.array(z.string()).default([]),
+  /**
+   * Blank space above and below, in pixels, when this entry is a spacer rather than a section.
+   *
+   * Present means spacer. 25 each side by default, which is the gap Edd asked for; 0 is legal and
+   * means "a spacer the reader has closed up" rather than "not a spacer", which is what `undefined`
+   * says. Capped because a 900px gap is a blank page nobody meant to send.
+   */
+  space: z.number().int().min(0).max(240).optional(),
+  /**
+   * Label/value pairs, for a `keyValue` block.
+   *
+   * A definition list is the one shape `items` cannot carry: encoding "Label: value" into a string and
+   * splitting it back would make a colon in somebody's value into a formatting instruction, and CVs
+   * are full of colons.
+   */
+  pairs: z
+    .array(z.object({ label: z.string(), value: z.string() }))
+    .max(40)
+    .optional(),
+  /**
+   * One value, for the blocks that are one value: a badge's word, a link's address, a watermark.
+   *
+   * Deliberately not `items[0]`. A block whose content is a single string and a block whose content is
+   * a list are different things to edit, and collapsing them would make every single-value editor
+   * reach into an array to find its own field.
+   */
+  value: z.string().max(2000).optional(),
+  /** A second value where one is a label and the other a target — a link's text beside its address. */
+  label: z.string().max(300).optional(),
+  /** Rows of cells, for a table or a chart's data. First row is the header. */
+  rows: z.array(z.array(z.string()).max(8)).max(60).optional(),
+  /** Which of a block's looks: an alert's tone, a divider's stroke, a chart's shape. */
+  variant: z.string().max(30).optional(),
 })
+
+/** What a block is, resolving the absent-means-section default in one place. */
+export function kindOf(section: {
+  kind?: BlockKind
+  space?: number
+}): BlockKind {
+  if (section.kind !== undefined) return section.kind
+  // Written before `kind` existed: a spacer was "the one with a `space`".
+  return section.space === undefined ? 'section' : 'space'
+}
+
+/** Spacers draw room, never words. One predicate, so nine templates cannot each decide differently. */
+export function isSpacer(section: {
+  kind?: BlockKind
+  space?: number
+}): boolean {
+  return kindOf(section) === 'space'
+}
+
+/** What a new spacer starts at — 25px above and below (Edd's number). */
+export const DEFAULT_SPACE = 25
 
 export const Resume = z.object({
   schemaVersion: z.literal('1.0'),
@@ -170,6 +301,19 @@ export const Resume = z.object({
   publications: z.array(CustomSection).default([]),
   volunteer: z.array(WorkItem).default([]),
   custom: z.array(CustomSection).default([]),
+  /**
+   * The order the person put their sections in, as tokens — `work`, `languages`, `custom:<id>`.
+   *
+   * Empty means "the design decides", which is what every document said until now and still says
+   * unless somebody moves something. Unknown tokens are ignored and unmentioned sections fall to the
+   * tail in the design's own order, so this can never hide a section: the worst a stale token can do
+   * is nothing. See `src/render/sections.tsx`.
+   *
+   * `basics` is deliberately not a token. The name and contact details are the one block whose place
+   * is not a matter of taste — a CV whose reader meets the phone number after the job history is a
+   * CV with a bug, and every ATS heuristic assumes the header is the header.
+   */
+  sectionOrder: z.array(z.string()).default([]),
 })
 
 export type Resume = z.infer<typeof Resume>

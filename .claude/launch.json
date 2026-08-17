@@ -2,11 +2,27 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "//": "ONE dev environment, deliberately. This attaches to the real stack — the app image plus Postgres plus the model — started with `pnpm docker:build` then `docker compose -f docker-compose.yml -f docker-compose.local.yml up -d`. NOT `pnpm docker:run`, which starts the app alone with no database and no model, so persistence reports itself off and every generated text silently falls back to regular expressions. 3100 because Hermes' WhatsApp bridge holds 127.0.0.1:3000 while Docker publishes on *:3000, and a URL that resolves to one of two servers depending on v4/v6 order is not something to debug twice.",
-      "//2": "There used to be `vite dev` entries here on 3007 and 3008 as well, and having both was worse than having one. `vite dev` reaches no database and no model: /api/processing answered with an empty body, extraction fell back to the rule engine, and Wording, translation, accounts and encryption-at-rest were all quietly off — so a feature could look fine there and be broken in the only environment that runs it. It also cannot prove the render path at all (ADR-005: the Block 1 spike passed vite dev AND `pnpm build`, then 500'd in production because Rollup never emitted the renderer's WASM). Two servers on two ports, one of them lying about half the product, is noise. Do not add them back.",
-      "//3": "The cost is the inner loop: a source change needs `pnpm docker:build` and a restart of the app service, about a minute. Pay it. The alternative is verifying against a server that cannot run the feature.",
+      "//": "The one that ships. Attaches to the real stack — the app image plus Postgres plus the model — started with `pnpm app` (Compose builds `hunterready-app:latest`; NOT `pnpm docker:run`, which starts the app alone with no database and no model, so persistence reports itself off and every generated text silently falls back to regular expressions). 3100 because Hermes' WhatsApp bridge holds 127.0.0.1:3000 while Docker publishes on *:3000, and a URL that resolves to one of two servers depending on v4/v6 order is not something to debug twice.",
+      "//2": "Believe this one. ADR-005 lived in the build, not in the browser: the Block 1 spike passed `vite dev` AND `pnpm build`, then 500'd in production because Rollup never emitted the renderer's WASM. Anything touching the render path is not done until it has been seen here.",
       "name": "hunterready",
       "url": "http://localhost:3100"
+    },
+    {
+      "//": "The real build, without the image. Same Postgres, same models, same WASM renderer, same fonts, and `/api/render` returns a byte-identical PDF. What it does NOT have is LibreOffice and Tesseract, so `.doc` ingestion and OCR fail here and only here (ADR-012). This is the default way to trust a build; the container above is for those two paths and for the last check before a release.",
+      "//2": "Needs db and llm up: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d db llm",
+      "name": "hunterready-host",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["host"],
+      "port": 3011
+    },
+    {
+      "//": "The fast loop, restored — and the reason the old note here said 'do not add them back' no longer holds. That entry was removed when a bare `vite dev` reached no database and no model, so a feature could look finished on 3007 and be broken in the only environment that runs it. `pnpm dev:ui` proxies every `/api/*` call to the container on 3100, so the same Postgres, the same model, the same WASM renderer and the same entitlements answer. CLAUDE.md documents the reversal and the evidence for it.",
+      "//2": "What this owns is the CLIENT BUNDLE: a component edit is on screen in about three seconds with no image rebuild. It does not own the build, so it cannot retire the entry above. Iterate here, believe 3100.",
+      "//3": "Needs the container up first, or every API call 502s.",
+      "name": "hunterready-ui",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev:ui"],
+      "port": 3007
     }
   ]
 }

@@ -16,11 +16,13 @@ import { applyHeuristics } from './heuristics'
 import { buildUserPrompt, PROMPT_VERSION, SYSTEM_PROMPT } from './prompt'
 import { extractByRules } from './fallback'
 import { detectLocale } from './detect-locale'
-import { resolveLocalProvider, resolveProvider } from './provider'
+import { providerById, resolveLocalProvider, resolveProvider } from './provider'
 import { recoverMissingHighlights } from './recover'
 import { errorEvent } from '@/lib/log'
 import { findPhone, redactForLlm, reinstateDeep } from './redact'
 import { unwrapToolInput } from './tool-input'
+import { ask } from './ask'
+import type { NoteFn } from '@/lib/progress'
 
 const MAX_TOKENS = 8192
 const MAX_REPAIRS = 2
@@ -45,6 +47,14 @@ export interface ExtractOptions {
   /** Live narration for the waiting screen. Stage labels and counts only — never document content. */
   onProgress?: (label: string, detail?: string) => void
   /**
+   * The finer narration *inside* the model call: which section of the answer is being written.
+   *
+   * Separate from `onProgress` rather than a second argument to it, because the two are different
+   * kinds of fact — one is a stage of the pipeline, the other is a key of our own schema — and the
+   * type is what keeps free text out of the second. See `narrate.ts`.
+   */
+  onNote?: NoteFn
+  /**
    * Set false when the user declined to have their CV sent to a third-party model provider.
    *
    * This is what makes the consent gate's second button true rather than decorative: declining has to
@@ -53,6 +63,17 @@ export interface ExtractOptions {
    * does extraction fall back to rules.
    */
   useProvider?: boolean
+  /**
+   * Which named company the person chose, when they chose one.
+   *
+   * Consent under docs/07 is consent to a *named* provider, so once more than one is on offer the
+   * choice has to travel with the work rather than be re-derived from the environment. Absent, the
+   * deployment's own resolution order applies — which is every caller that predates the choice.
+   *
+   * An id that resolves to nothing falls to the local model rather than to another company. That is
+   * the only safe direction: the alternative is sending somebody's CV to a business they did not name.
+   */
+  providerId?: string
 }
 
 export interface ExtractSuccess {
@@ -92,6 +113,28 @@ function toolSchema(): Record<string, unknown> {
   })
 }
 
+/**
+ * `{ resume: object, provenance: array[3] }` — the keys and kinds of a value, never its contents.
+ *
+ * Safe to log by construction: the keys come from our own schema and the kinds are `object`, `array`,
+ * `string`. A CV's text cannot reach it, because no value is ever read.
+ */
+function describeShape(value: unknown): string {
+  if (value === null || typeof value !== 'object') return typeof value
+  if (Array.isArray(value)) return `array[${value.length}]`
+  return `{ ${Object.entries(value)
+    .slice(0, 8)
+    .map(([key, inner]) => {
+      const kind = Array.isArray(inner)
+        ? `array[${inner.length}]`
+        : inner === null
+          ? 'null'
+          : typeof inner
+      return `${key}: ${kind}`
+    })
+    .join(', ')} }`
+}
+
 /** Stamp the detected language onto a freshly extracted resume. One place, both paths. */
 function withDetectedLocale<T extends { locale: string }>(
   resume: T,
@@ -127,6 +170,7 @@ export async function extractResume(
    * So the local model corrects the rules instead of replacing them. See `local-refine.ts`.
    */
   const onProgress = options.onProgress ?? (() => {})
+  const onNote = options.onNote
 
   if (options.useProvider === false) {
     const local = resolveLocalProvider()
@@ -157,6 +201,7 @@ export async function extractResume(
       provenance,
       provider: local,
       signal: options.signal,
+      onNote,
     })
     return {
       ok: true,
@@ -170,7 +215,10 @@ export async function extractResume(
     }
   }
 
-  const provider = resolveProvider()
+  const provider =
+    options.providerId === undefined
+      ? resolveProvider()
+      : providerById(options.providerId)
 
   // Nothing available at all: rules rather than failing. The promise in every error message here is
   // "you can still build your CV", and that promise has to be true.
@@ -200,7 +248,8 @@ export async function extractResume(
     let response: Anthropic.Message
     try {
       onProgress('The model is reading your CV and structuring it')
-      response = await client.messages.create(
+      response = await ask(
+        client,
         {
           model,
           max_tokens: MAX_TOKENS,
@@ -217,7 +266,19 @@ export async function extractResume(
           tool_choice: { type: 'tool', name: 'submit_cv' },
           messages,
         },
-        { signal: options.signal },
+        /*
+          Reasoning asked for here and nowhere else. This is the call that takes half a minute, and
+          measured against MiniMax it is the only one whose wait has anything observable in it — the
+          tool JSON arrives in a single delta at the very end, so without the thinking channel the
+          screen has nothing to report until the answer has already landed. `ask` climbs down to a plain
+          streamed call, then an unstreamed one, if the provider will not have it.
+        */
+        {
+          signal: options.signal,
+          onNote,
+          reasoning: true,
+          ...(provider.forcesThinking === true ? { forcesThinking: true } : {}),
+        },
       )
     } catch (error) {
       /**
@@ -274,6 +335,37 @@ export async function extractResume(
 
     if (!payload.success) {
       repairs++
+      /**
+       * Logged, because three silent repairs and a rule-engine fallback is the quietest failure this
+       * pipeline has.
+       *
+       * `ingest.extracted` already reports `method: rules`, which says *that* it happened and nothing
+       * about why — and the difference between "the provider is down" and "this model cannot satisfy
+       * the schema" is the difference between waiting and changing something. Found when DeepSeek's
+       * v4-pro degraded every upload with no error anywhere: the calls all succeeded.
+       *
+       * Paths and codes only. An issue's `message` can quote the offending value, and that value is a
+       * line of somebody's CV (docs/07). A path is a field name from our own schema.
+       */
+      errorEvent('extract.invalid_payload', {
+        model,
+        attempt: repairs,
+        stop: response.stop_reason ?? 'none',
+        code: payload.error.issues
+          .slice(0, 6)
+          .map((issue) => `${issue.path.join('.') || '(root)'}:${issue.code}`)
+          .join(' '),
+        /*
+          The shape it sent, as key names and types — never values.
+
+          "resume: invalid_type" says the contract was missed and nothing about how, and the how is the
+          whole diagnosis: a gateway wrapping the input in one more object looks identical in the error
+          to a model sending a string where an object belongs. `tool-input.ts` exists because that has
+          already happened once (Ollama's extra `object` key); this is what would have found it in a
+          minute instead of a session.
+        */
+        shape: describeShape(unwrapToolInput(toolUse.input)),
+      })
       messages.push(
         { role: 'assistant', content: blocks },
         {

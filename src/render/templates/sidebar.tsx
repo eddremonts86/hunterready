@@ -32,6 +32,9 @@ import { Fragment } from 'react'
 import { Document, Image, Page } from '@/lib/pdf-primitives'
 import { PdfcnThemeProvider } from '@/components/pdf/theme-provider'
 import type { PdfcnTheme } from '@/components/pdf/theme-types'
+import { Block } from './block'
+import { groupsOf, Ordered, Slot, volunteerGroup } from '../sections'
+import type { Group } from '../sections'
 import type { Resume, WorkItem } from '@/schema/resume'
 import {
   formatLocation,
@@ -220,6 +223,17 @@ export function SidebarBody({
     fontSize: theme.typography.body.fontSize - 1,
   }
 
+  /* One renderer for a titled block of lines: custom sections, awards, publications, volunteering. */
+  const group = (section: Group, i: number) => (
+    <Fragment key={i}>
+      <MainHeading title={section.title} theme={theme} />
+      {section.items.map((item, j) => (
+        <Bullet key={j} text={item} theme={theme} />
+      ))}
+    </Fragment>
+  )
+  const volunteering = volunteerGroup(resume, locale)
+
   return (
     <div
       style={{
@@ -279,114 +293,145 @@ export function SidebarBody({
           </div>
         )}
 
-        {resume.work.length === 0 ? null : (
-          <>
-            <MainHeading
-              title={local.headings.work}
+        <Ordered
+          resume={resume}
+          fallback={'experience'}
+          custom={(section, i) => (
+            <Block
+              key={i}
+              block={section}
               theme={theme}
-              kind="work"
+              chrome={{
+                heading: (title) => <MainHeading title={title} theme={theme} />,
+                line: (text, k) => <Bullet key={k} text={text} theme={theme} />,
+              }}
             />
-            {resume.work.map((w, i) => (
-              <Job key={i} item={w} theme={theme} locale={locale} />
-            ))}
-          </>
-        )}
-
-        {resume.education.length === 0 ? null : (
-          <>
-            <MainHeading
-              title={local.headings.education}
-              theme={theme}
-              kind="education"
-            />
-            {resume.education.map((e, i) => (
-              <div
-                key={i}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 1,
-                  marginTop: theme.spacing.componentGap,
-                  breakInside: 'avoid',
-                }}
-              >
-                <div style={{ fontWeight: 700 }}>
-                  {joinParts([e.degree, e.field], ' ')}
-                  {e.degree === undefined && e.field === undefined
-                    ? e.institution
-                    : ` — ${e.institution}`}
-                </div>
-                <div
-                  style={{
-                    fontSize: theme.typography.body.fontSize - 1.5,
-                    color: theme.colors.mutedForeground,
-                  }}
-                >
-                  {joinParts([
-                    formatRange(e.startDate, e.endDate, locale),
-                    e.location,
-                    e.grade,
-                  ])}
-                </div>
-                {e.highlights.map((h, j) => (
-                  <Bullet key={j} text={h} theme={theme} />
+          )}
+        >
+          <Slot name="work">
+            {resume.work.length === 0 ? null : (
+              <>
+                <MainHeading
+                  title={local.headings.work}
+                  theme={theme}
+                  kind="work"
+                />
+                {resume.work.map((w, i) => (
+                  <Job key={i} item={w} theme={theme} locale={locale} />
                 ))}
-              </div>
-            ))}
-          </>
-        )}
-
-        {resume.projects.length === 0 ? null : (
-          <>
-            <MainHeading title={local.headings.projects} theme={theme} />
-            {resume.projects.map((p, i) => (
-              <div
-                key={i}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 1,
-                  marginTop: theme.spacing.componentGap,
-                  breakInside: 'avoid',
-                }}
-              >
-                <div style={{ fontWeight: 700 }}>
-                  {joinParts([p.name, p.role], ' — ')}
-                </div>
-                {p.description === undefined ? null : (
-                  <div>{p.description}</div>
-                )}
-                {p.highlights.map((h, j) => (
-                  <Bullet key={j} text={h} theme={theme} />
+              </>
+            )}
+          </Slot>
+          <Slot name="education">
+            {resume.education.length === 0 ? null : (
+              <>
+                <MainHeading
+                  title={local.headings.education}
+                  theme={theme}
+                  kind="education"
+                />
+                {resume.education.map((e, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 1,
+                      marginTop: theme.spacing.componentGap,
+                      breakInside: 'avoid',
+                    }}
+                  >
+                    <div style={{ fontWeight: 700 }}>
+                      {joinParts([e.degree, e.field], ' ')}
+                      {e.degree === undefined && e.field === undefined
+                        ? e.institution
+                        : ` — ${e.institution}`}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: theme.typography.body.fontSize - 1.5,
+                        color: theme.colors.mutedForeground,
+                      }}
+                    >
+                      {joinParts([
+                        formatRange(e.startDate, e.endDate, locale),
+                        e.location,
+                        e.grade,
+                      ])}
+                    </div>
+                    {e.highlights.map((h, j) => (
+                      <Bullet key={j} text={h} theme={theme} />
+                    ))}
+                  </div>
                 ))}
-              </div>
-            ))}
-          </>
-        )}
-
-        {resume.certifications.length === 0 ? null : (
-          <>
-            <MainHeading title={local.headings.certifications} theme={theme} />
-            {resume.certifications.map((c, i) => (
-              <div key={i} style={{ marginTop: 3, breakInside: 'avoid' }}>
-                {joinParts([c.name, c.issuer], ' — ')}
-                <span style={{ color: theme.colors.mutedForeground }}>
-                  {c.date === undefined ? '' : `  ${formatYearMonth(c.date)}`}
-                  {c.identifier === undefined ? '' : `  (${c.identifier})`}
-                </span>
-              </div>
-            ))}
-          </>
-        )}
-
-        {resume.custom.map((section, i) => (
-          <Fragment key={i}>
-            <MainHeading title={section.title} theme={theme} />
-            {section.items.map((item, j) => (
-              <Bullet key={j} text={item} theme={theme} />
-            ))}
-          </Fragment>
-        ))}
+              </>
+            )}
+          </Slot>
+          <Slot name="projects">
+            {resume.projects.length === 0 ? null : (
+              <>
+                <MainHeading title={local.headings.projects} theme={theme} />
+                {resume.projects.map((p, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 1,
+                      marginTop: theme.spacing.componentGap,
+                      breakInside: 'avoid',
+                    }}
+                  >
+                    <div style={{ fontWeight: 700 }}>
+                      {joinParts([p.name, p.role], ' — ')}
+                    </div>
+                    {p.description === undefined ? null : (
+                      <div>{p.description}</div>
+                    )}
+                    {p.highlights.map((h, j) => (
+                      <Bullet key={j} text={h} theme={theme} />
+                    ))}
+                  </div>
+                ))}
+              </>
+            )}
+          </Slot>
+          <Slot name="certifications">
+            {resume.certifications.length === 0 ? null : (
+              <>
+                <MainHeading
+                  title={local.headings.certifications}
+                  theme={theme}
+                />
+                {resume.certifications.map((c, i) => (
+                  <div key={i} style={{ marginTop: 3, breakInside: 'avoid' }}>
+                    {joinParts([c.name, c.issuer], ' — ')}
+                    <span style={{ color: theme.colors.mutedForeground }}>
+                      {c.date === undefined
+                        ? ''
+                        : `  ${formatYearMonth(c.date)}`}
+                      {c.identifier === undefined ? '' : `  (${c.identifier})`}
+                    </span>
+                  </div>
+                ))}
+              </>
+            )}
+          </Slot>
+          {/*
+            Three sections that were in the schema, filled by extraction and printed by the `.docx`
+            export — and rendered by no PDF template at all. Drawn through the same renderer this
+            design uses for a custom section, which is the shape all three already have.
+          */}
+          <Slot name="awards">
+            {groupsOf(resume.awards).map((g, i) => group(g, i))}
+          </Slot>
+          <Slot name="publications">
+            {groupsOf(resume.publications).map((g, i) => group(g, i))}
+          </Slot>
+          <Slot name="volunteer">
+            {volunteering === undefined ? null : group(volunteering, 0)}
+          </Slot>
+        </Ordered>
       </div>
 
       {/* ── The colored column: identity and scannables. Last in DOM, left on the page ── */}

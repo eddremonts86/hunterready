@@ -14,7 +14,7 @@
  * that, and the mapping below narrows it further to a name a person would recognise.
  */
 import { createFileRoute } from '@tanstack/react-router'
-import { resolveProvider } from '@/structure/provider'
+import { availableProviders, resolveProvider } from '@/structure/provider'
 import { encryptionEnabled } from '@/db/crypto'
 import { designsUnlocked, entitlementFor } from '@/lib/entitlements'
 
@@ -30,6 +30,7 @@ function displayName(label: string): string {
   if (host.endsWith('minimax.io') || host.endsWith('minimaxi.com')) {
     return 'MiniMax'
   }
+  if (host.endsWith('deepseek.com')) return 'DeepSeek'
   if (host.endsWith('openai.com')) return 'OpenAI'
   return host
 }
@@ -59,6 +60,18 @@ export const Route = createFileRoute('/api/processing')({
              */
             provider:
               provider === undefined ? null : displayName(provider.label),
+            /**
+             * Every model this visitor could choose, named.
+             *
+             * `provider` above is the deployment's default and stays for anything reading one answer.
+             * This is the list the consent gate draws, because the choice is the person's now — and
+             * docs/07's requirement is consent to a *named company*, so a list of names is exactly the
+             * shape that requirement takes once there is more than one.
+             *
+             * Empty for a caller who is not entitled, the same as `provider` is: a menu of transfers
+             * nobody may make is an offer the server would refuse.
+             */
+            providers: thirdParty ? availableProviders() : [],
             /**
              * Whether stored CVs are encrypted at rest on *this* installation (ADR-021).
              *

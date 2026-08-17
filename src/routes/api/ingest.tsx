@@ -13,9 +13,10 @@ import { extractResume } from '@/structure/extract'
 import { resolveLocalProvider, resolveProvider } from '@/structure/provider'
 import { sanityWarnings } from '@/structure/sanity'
 import { checkRateLimit, clientKey } from '@/lib/rate-limit'
-import { progressEnd, progressReporter } from '@/lib/progress'
+import { progressEnd, progressNoter, progressReporter } from '@/lib/progress'
 import { errorEvent, event, requestId } from '@/lib/log'
 import { mayUseThirdParty } from '@/lib/entitlements'
+import { consentedToTransfer, providerIdFrom } from '@/lib/chosen-provider'
 
 export const Route = createFileRoute('/api/ingest')({
   server: {
@@ -63,6 +64,8 @@ export const Route = createFileRoute('/api/ingest')({
          * to (docs/07-privacy.md).
          */
         let mayUseProvider = false
+        /** The company the person named, when they named one. See the comment where it is read. */
+        let chosenProvider: string | undefined
         /**
          * The live-progress channel (src/lib/progress.ts). The id is minted by the client and travels
          * with the upload; everything reported against it is stage labels and counts, never content.
@@ -81,9 +84,17 @@ export const Route = createFileRoute('/api/ingest')({
            * upload leaves the server — which makes the statelessness promise and the transfer promise
            * the same promise for the commonest kind of visitor.
            */
+          /*
+            `processing` carries the id of the company the person picked — `minimax`, `deepseek` — or
+            `local`, or nothing at all from a client that predates the choice. Anything that is not a
+            known id is not consent: `providerById` returns undefined for it and extraction stays on
+            this machine, which is the direction a malformed request must always fall.
+          */
+          const asked = form.get('processing')
+          chosenProvider = providerIdFrom(asked)
           mayUseProvider = await mayUseThirdParty(
             request,
-            form.get('processing') === 'provider',
+            consentedToTransfer(asked),
           )
           const file = form.get('file')
           if (!(file instanceof File)) {
@@ -137,7 +148,13 @@ export const Route = createFileRoute('/api/ingest')({
 
         const extracted = await extractResume(ingested.normalized.text, {
           useProvider: mayUseProvider,
+          ...(chosenProvider === undefined
+            ? {}
+            : { providerId: chosenProvider }),
           onProgress,
+          // The long stage narrating itself: which section of the answer the model is writing, as it
+          // streams. Keys and counts — see `src/structure/narrate.ts` for why it can never be more.
+          onNote: progressNoter(progressId),
         })
         if (!extracted.ok) {
           if (progressId !== undefined) progressEnd(progressId)

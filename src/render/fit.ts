@@ -10,6 +10,7 @@
  * hint that turns into a fact after the download.
  */
 import type { PdfcnTheme } from '@/components/pdf/theme-types'
+import { kindOf } from '@/schema/resume'
 import type { Resume } from '@/schema/resume'
 import { PHOTO_BOX_PT } from './templates/modern-base'
 import { styleOf } from './themes/style'
@@ -137,8 +138,38 @@ export function estimateFit(
   height += section(resume.languages.length)
   height += resume.languages.length > 0 ? leading : 0
 
+  /*
+    The blocks a person placed, each costing what it actually costs.
+
+    Before this they were all charged as a heading plus their lines, which billed a spacer for a
+    heading it does not draw and a page break for a section it is not. The measured count supersedes
+    this within a frame, so the error was short-lived — but it is the number on screen until the
+    preview has laid anything out, and a first paint that says two pages for a one-page CV is the kind
+    of wrong somebody acts on.
+  */
   for (const custom of resume.custom) {
-    height += section(1) + custom.items.length * leading
+    switch (kindOf(custom)) {
+      case 'space':
+      case 'divider':
+        height += (custom.space ?? 25) * 2
+        break
+      // A break costs whatever is left of the page it ends. Charged as a full one: it is the honest
+      // upper bound, and the measurement that replaces it knows the real answer.
+      case 'pageBreak':
+        height += usable - (height % usable)
+        break
+      case 'heading':
+        height += section(1)
+        break
+      case 'text':
+        height += custom.items.length * leading
+        break
+      case 'keyValue':
+        height += section(1) + (custom.pairs?.length ?? 0) * leading
+        break
+      default:
+        height += section(1) + custom.items.length * leading
+    }
   }
 
   const pages = Math.max(1, Math.ceil(height / usable))

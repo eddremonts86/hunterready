@@ -70,6 +70,44 @@ function thirdPartyForEveryone(): boolean {
 }
 
 /**
+ * Beta: every paid capability is included, and every one of them still says Pro.
+ *
+ * **This is a pricing decision, not a bug and not a leak.** The product is in beta, nothing can be
+ * bought, and a gate in front of a checkout that does not exist only costs people the feature. So
+ * during beta the answer to "may I use this" is yes for everything.
+ *
+ * ## The label is the other half, and it is not optional
+ *
+ * Giving the paid half away silently would teach every beta user that the catalogue, the mixed axes
+ * and the larger model are simply what the product is, and the day pricing opens they would
+ * experience it as a removal. Each of these surfaces therefore keeps a **Pro** tag while it is free,
+ * so the thing somebody is using is labelled as the thing they will later pay for. `ProTag` in
+ * `src/components/pro-tag.tsx` is that label, and it is drawn from `design.tier` and from the
+ * capability itself, never from the entitlement — which is exactly why it survives this switch.
+ *
+ * ## Why one switch may move both flags here, when ADR-030's may not
+ *
+ * `paidDesigns`' own note below says a temporary switch aimed at one capability must not be able to
+ * move a second one, because that is how ADR-030's suspension handed the paid catalogue to anonymous
+ * visitors. That warning still stands and it is about `HR_THIRD_PARTY_FOR_ALL`, which was aimed at
+ * the *model* and reached the *designs* by accident. This one is aimed at both on purpose: "give
+ * everything away during beta" is a single intention, stated once, and a reader can check that the
+ * intention matches the code. The failure that note describes was a switch doing more than its name
+ * said. This switch's name says exactly this.
+ *
+ * ## The exit
+ *
+ * Default on, because the product is in beta today and the deployed site should behave the way the
+ * beta says it does. `HR_BETA_PAID_FREE=false` ends it, which is one Coolify edit and a restart. It
+ * goes false when pricing opens — the last item before v1.0 in docs/08-roadmap.md — and the work of
+ * building a checkout necessarily passes through this module, so it is not a switch that can be
+ * forgotten in a corner.
+ */
+export function betaPaidFree(): boolean {
+  return process.env.HR_BETA_PAID_FREE !== 'false'
+}
+
+/**
  * The developer switch: every design unlocked for this **process**.
  *
  * Edd's complaint was exact: a developer who cannot download and try the paid half of the catalogue
@@ -125,24 +163,47 @@ export async function entitlementFor(request: Request): Promise<Entitlement> {
     it is what the topbar chip and the logs report — only the entitlement is overridden.
   */
   const everyone = thirdPartyForEveryone()
+  /*
+    Beta moves both flags, on purpose and by its own name. Everything else in this function is
+    unchanged underneath it, so turning the switch off restores the plan logic exactly rather than
+    leaving a beta-shaped hole in it.
+  */
+  const beta = betaPaidFree()
 
   if (!isPersistenceEnabled()) {
-    return { thirdParty: everyone, paidDesigns: false, plan: 'anonymous' }
+    return {
+      thirdParty: everyone || beta,
+      paidDesigns: beta,
+      plan: 'anonymous',
+    }
   }
 
   try {
     const userId = await currentUserId(request)
     if (userId === undefined) {
-      return { thirdParty: everyone, paidDesigns: false, plan: 'anonymous' }
+      return {
+        thirdParty: everyone || beta,
+        paidDesigns: beta,
+        plan: 'anonymous',
+      }
     }
 
     const plan = await getPlan(userId)
     const paid = THIRD_PARTY_PLANS.has(plan)
-    // The suspension moves `thirdParty` and nothing else. `paidDesigns` stays on the plan, always.
-    return { thirdParty: everyone || paid, paidDesigns: paid, plan }
+    // The suspension moves `thirdParty` and nothing else. `paidDesigns` stays on the plan, or on beta.
+    return {
+      thirdParty: everyone || beta || paid,
+      paidDesigns: beta || paid,
+      plan,
+    }
   } catch {
-    // A failed lookup is not a licence to spend. See the note above about failing closed.
-    return { thirdParty: everyone, paidDesigns: false, plan: 'free' }
+    /*
+      A failed lookup is not a licence to spend, and beta does not change that: the branch above is
+      about a plan that could not be read, and the cheap answer is still the right one. Beta grants
+      what beta grants regardless of the account, so it is applied here too — but nothing here is
+      inferred from a query that threw.
+    */
+    return { thirdParty: everyone || beta, paidDesigns: beta, plan: 'free' }
   }
 }
 

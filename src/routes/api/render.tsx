@@ -20,6 +20,7 @@ import { errorEvent } from '@/lib/log'
 import { DEFAULT_DESIGN_ID, findDesign, tierOf } from '@/render/designs'
 import { Resume } from '@/schema/resume'
 import { renderResume } from '@/render/render'
+import { renderResumeHtml } from '@/render/html'
 import { REGISTERED_FAMILIES } from '@/render/fonts'
 import { normalizeHex } from '@/render/themes/custom'
 import { docxFilename, renderDocx } from '@/render/docx/docx'
@@ -76,7 +77,7 @@ function readSelection(url: URL): {
 }
 
 /**
- * May this caller have this design?
+ * May this caller have this look — the design, and the typefaces and colours laid over it?
  *
  * **The gate lives here and not in the interface**, and that is the whole point of it. This endpoint is
  * public — it has to be, because an anonymous visitor is the commonest user and gets a PDF without an
@@ -92,15 +93,27 @@ function readSelection(url: URL): {
  */
 async function refuseUnlessEntitled(
   request: Request,
-  templateId: TemplateId | undefined,
-  themeId: ThemeId | undefined,
+  selection: ReturnType<typeof readSelection>,
 ): Promise<Response | undefined> {
   const fallback = findDesign(DEFAULT_DESIGN_ID)
-  const structure = templateId ?? fallback?.structure
-  const theme = themeId ?? fallback?.theme
+  const structure = selection.templateId ?? fallback?.structure
+  const theme = selection.themeId ?? fallback?.theme
   if (structure === undefined || theme === undefined) return undefined
 
-  if (tierOf(structure, theme) === 'free') return undefined
+  /**
+   * Two paid things now, gated together because they are the same purchase.
+   *
+   * "Make it yours" — a typeface and a colour of your own, mixed across designs — went out on the free
+   * tier while the ninety-one designs it can imitate were behind a plan, which made the plan optional:
+   * take a free layout, set the paid one's ink and face on it, and the gate had been walked around
+   * through the front door. So the axes are checked here, at the same door, in the same breath.
+   *
+   * The default look is not a custom look. `fonts` and `colours` are undefined unless the caller asked
+   * for something, so an untouched free design is untouched by this.
+   */
+  const custom =
+    selection.fonts !== undefined || selection.colours !== undefined
+  if (tierOf(structure, theme) === 'free' && !custom) return undefined
 
   // The developer switch (see entitlements.ts): a catalogue you cannot try is one you cannot test.
   if (designsUnlocked()) return undefined
@@ -116,16 +129,24 @@ async function refuseUnlessEntitled(
   /**
    * 402, not 403. "Payment required" is the accurate status for a thing that exists, works, and is not
    * included in this plan — and it is the one a client can act on by offering an upgrade rather than by
-   * reporting an error. The message names the design so the interface never has to guess which was
-   * refused, and carries no CV content (docs/07).
+   * reporting an error. The message names what was refused so the interface never has to guess, and
+   * carries no CV content (docs/07).
+   *
+   * The two refusals are told apart by their code, because they are answered differently: a locked
+   * design has eleven free alternatives to point at, and a locked axis has none — the only honest reply
+   * there is what the plan would add.
    */
-  errorEvent('render.design_locked', { code: `${structure}|${theme}` })
+  const locked = tierOf(structure, theme) !== 'free'
+  errorEvent(locked ? 'render.design_locked' : 'render.axes_locked', {
+    code: `${structure}|${theme}`,
+  })
   return Response.json(
     {
-      error: 'design_locked',
+      error: locked ? 'design_locked' : 'axes_locked',
       plan,
-      message:
-        'That design is part of the paid plan. Every layout marked free renders exactly the same document, verified by the same test.',
+      message: locked
+        ? 'That design is part of the paid plan. Every layout marked free renders exactly the same document, verified by the same test.'
+        : 'Choosing your own typefaces and colours is part of the paid plan. Every included design renders the same document, verified by the same test.',
     },
     { status: 402 },
   )
@@ -161,8 +182,32 @@ function docxResponse(bytes: Uint8Array, filename: string) {
 }
 
 /** Unknown values fall back to PDF, for the same reason an unknown template does. */
-function wantsDocx(url: URL): boolean {
-  return url.searchParams.get('format') === 'docx'
+/**
+ * Which of the three files was asked for. Anything unrecognised is a PDF, which is the default the
+ * whole product is built around and the safe answer to a query string somebody mistyped.
+ */
+type Format = 'pdf' | 'docx' | 'html'
+
+function wantsFormat(url: URL): Format {
+  const asked = url.searchParams.get('format')
+  return asked === 'docx' || asked === 'html' ? asked : 'pdf'
+}
+
+/**
+ * The HTML export is a whole document rather than a fragment, so it is served as one.
+ *
+ * `content-disposition: attachment` even though a browser could display it: the person pressed
+ * Download, and a CV that opens in the current tab has replaced the workspace they were editing it in.
+ * Same `no-store` as the other two — a CV is personal data and no intermediary should hold a copy.
+ */
+function htmlResponse(html: string, filename: string, download: boolean) {
+  return new Response(html, {
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'content-disposition': `${download ? 'attachment' : 'inline'}; filename="${filename}"`,
+      'cache-control': 'no-store, no-cache, must-revalidate, private',
+    },
+  })
 }
 
 export const Route = createFileRoute('/api/render')({
@@ -188,15 +233,20 @@ export const Route = createFileRoute('/api/render')({
          * It is a sample document rather than anybody's CV, which is exactly why it would be the way to
          * evaluate a paid design for free — render the nurse in every locked pairing and screenshot it.
          */
-        const refusal = await refuseUnlessEntitled(
-          request,
-          selection.templateId,
-          selection.themeId,
-        )
+        const refusal = await refuseUnlessEntitled(request, selection)
         if (refusal !== undefined) return refusal
 
-        if (wantsDocx(url)) {
+        const format = wantsFormat(url)
+        if (format === 'docx') {
           return docxResponse(renderDocx(resume), docxFilename(resume))
+        }
+        if (format === 'html') {
+          const page = await renderResumeHtml(resume, selection)
+          return htmlResponse(
+            page.html,
+            page.filename,
+            url.searchParams.get('download') === '1',
+          )
         }
 
         const { bytes, filename } = await renderResume(resume, selection)
@@ -250,11 +300,7 @@ export const Route = createFileRoute('/api/render')({
         }
 
         const selection = readSelection(url)
-        const refusal = await refuseUnlessEntitled(
-          request,
-          selection.templateId,
-          selection.themeId,
-        )
+        const refusal = await refuseUnlessEntitled(request, selection)
         if (refusal !== undefined) return refusal
 
         /**
@@ -270,11 +316,16 @@ export const Route = createFileRoute('/api/render')({
          * response, log or error.
          */
         try {
-          if (wantsDocx(url)) {
+          const format = wantsFormat(url)
+          if (format === 'docx') {
             return docxResponse(
               renderDocx(parsed.data),
               docxFilename(parsed.data),
             )
+          }
+          if (format === 'html') {
+            const page = await renderResumeHtml(parsed.data, selection)
+            return htmlResponse(page.html, page.filename, true)
           }
 
           const { bytes, filename } = await renderResume(parsed.data, selection)
@@ -291,7 +342,7 @@ export const Route = createFileRoute('/api/render')({
            * and `code` is on the log's allowlist for exactly this kind of value.
            */
           errorEvent('render.failed', {
-            format: wantsDocx(url) ? 'docx' : 'pdf',
+            format: wantsFormat(url),
             code: error instanceof Error ? error.constructor.name : 'unknown',
           })
           return Response.json(

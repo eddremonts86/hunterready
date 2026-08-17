@@ -31,6 +31,7 @@ import { getTheme } from '@/render/themes'
 import { templates } from '@/render/templates/registry'
 import type { Design } from '@/render/designs'
 import { PaperPreview } from './paper-preview'
+import { Skeleton } from '@/components/ui/skeleton'
 
 function Chevron({ direction }: { direction: 'left' | 'right' }) {
   return (
@@ -152,6 +153,8 @@ export function DesignPreviewDialog({
   const theme = getTheme(design.theme)
   const template = templates[design.structure]
   const shown = showingSample && sample !== undefined ? sample : resume
+  /* The one moment this dialog waits on the network: the sample, fetched only if asked for. */
+  const fetchingSample = showingSample && sample === undefined
   const at = designs.findIndex((d) => d.id === design.id)
   const previous = at > 0 ? designs[at - 1] : undefined
   const next = at >= 0 && at < designs.length - 1 ? designs[at + 1] : undefined
@@ -161,13 +164,23 @@ export function DesignPreviewDialog({
       ref={ref}
       aria-labelledby="design-preview-heading"
       /*
-        Sized to the sheet, not to a round number. An A4 preview is 794px wide and cannot stretch, so
-        a 900px dialog left 53px of centring space on each side of the document while the header
-        started at 20px: three different left edges in one box. 794 + two 24px gutters is 842.
+        One fixed size, always: 90% of the viewport in both axes.
+
+        It used to be sheet-width with `max-h`, which meant the shell measured its own contents — and
+        the contents change constantly. A one-page CV, a two-page one, the loading skeleton and the
+        side-by-side comparison are four different heights, so every one of those switches resized the
+        dialog under the reader's cursor. A window that moves while you are reading it is worse than
+        one that is occasionally larger than it needs to be.
+
+        The cost, stated because it undoes something deliberate: the earlier version was 842px so the
+        header's left edge lined up with the sheet's. At 90vw the sheet cannot fill the width and
+        centres instead, so the header spans and the document floats in the middle of it. That is the
+        ordinary arrangement for a document viewer, and it is the price of the shell holding still.
+        Comparison gets the width it always wanted in exchange.
       */
-      className="m-auto w-[min(96vw,842px)] rounded-card border border-hairline bg-ground p-0 backdrop:bg-ink/40"
+      className="m-auto h-[90vh] w-[90vw] rounded-card border border-hairline bg-ground p-0 backdrop:bg-ink/40"
     >
-      <div className="flex max-h-[92vh] flex-col">
+      <div className="flex h-full min-h-0 flex-col">
         {/*
           Two rows, because they answer different questions.
 
@@ -270,7 +283,31 @@ export function DesignPreviewDialog({
         )}
 
         <div className="flex min-h-0 flex-1">
-          {comparing && current !== undefined ? (
+          {fetchingSample ? (
+            /*
+              A skeleton shaped like the sheet it replaces, rather than a spinner in the middle of an
+              empty box. The dialog is already the size of an A4 page, so a spinner would leave a
+              large hole and then fill it, which reads as a jump; an outline of the page reads as the
+              page arriving.
+            */
+            <div className="flex flex-1 items-start justify-center bg-band p-6">
+              <div className="flex w-full max-w-[794px] flex-col gap-4 rounded-card bg-ground p-8">
+                <Skeleton className="h-8 w-1/2" />
+                <Skeleton className="h-3 w-1/3" />
+                <Skeleton className="mt-4 h-3 w-full" />
+                <Skeleton className="h-3 w-11/12" />
+                <Skeleton className="mt-6 h-4 w-28" />
+                {[0, 1, 2].map((row) => (
+                  <div key={row} className="flex flex-col gap-2">
+                    <Skeleton className="h-3 w-2/3" />
+                    <Skeleton className="h-2.5 w-1/3" />
+                    <Skeleton className="h-2.5 w-full" />
+                    <Skeleton className="h-2.5 w-10/12" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : comparing && current !== undefined ? (
             /*
               Side by side, each labelled, with the one in use on the left because that is the thing
               being compared *against*. They share the dialog's width, so each is narrower than a
