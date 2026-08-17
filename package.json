@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite dev --port 3000",
     "dev:ui": "vite dev --port 3007",
+    "stale": "node scripts/dev/stale.mjs",
     "generate-routes": "tsr generate",
     "build": "vite build && node scripts/copy-assets.mjs",
     "start": "node .output/server/index.mjs",

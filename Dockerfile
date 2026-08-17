@@ -37,6 +37,11 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 
 # Builds, then copies the takumi WASM and the bundled fonts into .output (see copy-assets.mjs).
+# Stamped into the bundle so `/api/health` can say which commit it is serving, and `pnpm stale` can
+# compare it with the working tree. Cheap, and it ends the "is the container behind?" guessing game.
+ARG HR_COMMIT=unknown
+ENV HR_COMMIT=$HR_COMMIT
+
 RUN pnpm build
 
 # ── test ──────────────────────────────────────────────────────────────────────────────────

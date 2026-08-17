@@ -15,6 +15,10 @@ services:
       context: .
       # Never the `test` stage: that one carries node_modules and dev dependencies.
       target: runtime
+      args:
+        # Stamped into the bundle and reported by `/api/health`, so `pnpm stale` can tell you the
+        # container is behind instead of you working it out from a change that will not appear.
+        HR_COMMIT: ${HR_COMMIT:-unknown}
     container_name: hunterready-app
     restart: unless-stopped
     depends_on:
