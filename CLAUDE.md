@@ -142,7 +142,7 @@ why a moved button costs a rebuild.
 
 ⚠️ **It does not replace the container for anything that ships.** ADR-005's failure — a green
 `vite dev`, a green `pnpm build`, and a 500 in production because Rollup never emitted the WASM —
-lived in the *build*, not in the browser. So before calling render work done, still:
+lived in the _build_, not in the browser. So before calling render work done, still:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build app   # or pnpm build && pnpm start

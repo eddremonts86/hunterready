@@ -15,7 +15,10 @@ import { execSync } from 'node:child_process'
 const URL_BASE = process.env.HR_API ?? 'http://localhost:3100'
 
 const git = (args) =>
-  execSync(`git ${args}`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+  execSync(`git ${args}`, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  }).trim()
 
 let payload
 try {
@@ -49,8 +52,8 @@ if (built === 'unknown') {
 
 if (built === head) {
   // The Dockerfile and the compose file shape the image too, so a change to either is a stale one.
-    const dirty =
-      git('status --porcelain -- src Dockerfile docker-compose.yml') !== ''
+  const dirty =
+    git('status --porcelain -- src Dockerfile docker-compose.yml') !== ''
   console.log(
     dirty
       ? `~ ${URL_BASE} matches HEAD (${shortHead}), but the working tree has uncommitted changes it cannot know about.`

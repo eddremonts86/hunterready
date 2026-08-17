@@ -370,7 +370,7 @@ function HeaderButton({
 /**
  * The control that opens the gallery.
  *
- * A trigger, not a menu, since the choosing moved into `block-gallery.tsx` — twenty-three items with
+ * A trigger, not a menu, since the choosing moved into `block-gallery.tsx` — twenty-four items with
  * specimens is a page, and a dropdown anchored to a 60px button was a page pretending to be a popover.
  */
 function AddMenu({

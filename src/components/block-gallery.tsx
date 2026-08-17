@@ -66,7 +66,14 @@ function Head({ w = 'w-1/2' }: { w?: string }) {
   return <span className={`block h-[5px] rounded-full bg-ink ${w}`} />
 }
 
-function Specimen({ kind }: { kind: BlockKind }) {
+/**
+ * Exported because the landing page shows the same twenty-four drawings.
+ *
+ * Two copies of "what a chart block looks like" would drift the first time one of them was touched,
+ * and the one that drifted would be the marketing one, which is the copy a stranger sees before they
+ * trust us with anything. One drawing, two places.
+ */
+export function Specimen({ kind }: { kind: BlockKind }) {
   const frame = 'flex h-[52px] w-full flex-col justify-center gap-[5px] px-3'
 
   switch (kind) {

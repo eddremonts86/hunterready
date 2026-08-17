@@ -27,6 +27,7 @@ import {
 } from '@/components/consent-gate'
 import type { ConsentState } from '@/components/consent-gate'
 import { AccountMenu, ModelMenu } from '@/components/topbar-controls'
+import { Specimen } from '@/components/block-gallery'
 import { useFilePicker } from '@/components/dropzone'
 import { Library } from '@/components/library'
 import { PaperPreview } from '@/components/paper-preview'
@@ -62,7 +63,7 @@ import { shiftTarget } from '@/optimize/rewrite-shift'
 import { diffResumes } from '@/optimize/variant-diff'
 import { DESIGNS, tierOf } from '@/render/designs'
 import { kindOf, Resume } from '@/schema/resume'
-import { unsafeBlocks } from '@/render/blocks'
+import { BLOCK_SPECS, unsafeBlocks } from '@/render/blocks'
 import type { FieldProvenance } from '@/schema/provenance'
 import { needsReview } from '@/schema/provenance'
 import { estimateFit } from '@/render/fit'
@@ -213,13 +214,13 @@ const STEPS_HOW = [
   },
   {
     icon: 'pencil' as const,
-    title: 'Correct what is on the page',
-    body: 'Every detail we read, with the ones we were unsure of marked and the line each came from. Written from scratch instead? Same form, empty.',
+    title: 'Correct it, then arrange it',
+    body: 'Every detail we read, with the ones we were unsure of marked and the line each came from. Add sections of your own, reorder them, remove what does not belong.',
   },
   {
     icon: 'download' as const,
     title: 'Download it',
-    body: 'A clean, well-set A4 PDF, or a Word file for the portals that ask for one. We check both by reading the finished document back.',
+    body: 'A clean, well-set A4 PDF. A Word file for the portals that ask for one. A single web page for anywhere else. We check by reading the finished document back.',
   },
 ]
 
@@ -2337,6 +2338,104 @@ function HunterReady() {
                   </Reveal>
                 ))}
               </div>
+            </div>
+          </section>
+
+          {/*
+            The catalogue, and the price of a third of it.
+
+            Placed after Evidence on purpose. The closing line of this section says that eight of these
+            take "Parse verified" off your document, and that sentence is worth nothing to a reader who
+            does not yet know what the badge is. Evidence explains the badge one section earlier.
+
+            A tile grid, which is a layout family this page uses nowhere else: six sections already run
+            as split columns, numbered rails, ledger rows or divided lists, and a seventh in any of
+            those shapes would read as more of the same. It earns the grid honestly too, because the
+            content genuinely is twenty-four small parallel things.
+
+            The drawings are `Specimen` from the gallery itself, not a picture of it. A second set of
+            drawings would drift, and the one that drifted would be this one.
+
+            One `Reveal` around the whole grid rather than one per tile: `reveal.tsx` says a stagger
+            across three cards already outruns the eye, and twenty-four would be a wave.
+          */}
+          <section className="border-b border-hairline bg-ground">
+            <div className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
+              <Reveal>
+                <div className="flex max-w-2xl flex-col gap-4">
+                  <h2 className="text-section text-balance text-ink">
+                    Twenty-four things you can put on it
+                    <span className="text-signal">.</span>
+                  </h2>
+                  {/* Forty words. The hero's lead is thirty-four and every other lead on the page
+                      sits near it, so the first draft at forty-seven read as a different page. */}
+                  <p className="text-lead text-ink-soft">
+                    A licence, a portfolio link, a signature, a page that ends
+                    exactly where you want it to. Put your sections in any
+                    order, and take out the ones you do not need. Your name is
+                    the only one that cannot move.
+                  </p>
+                </div>
+              </Reveal>
+
+              <Reveal delay={80}>
+                {/* Three across on a phone, not two. At two columns this section measured 1872px
+                    against a 1190px hero, so a catalogue that is one fact of the page took up more
+                    of it than the argument did. Three columns and eight rows put it back in family
+                    with its neighbours. */}
+                <ul className="mt-10 grid grid-cols-3 gap-2.5 sm:grid-cols-4 sm:gap-3 lg:grid-cols-6">
+                  {BLOCK_SPECS.map((spec) => (
+                    <li
+                      key={spec.kind}
+                      className={[
+                        'flex flex-col overflow-hidden rounded-card border bg-ground',
+                        // The caution border is the only variation, and it carries the same meaning
+                        // here as it does in the gallery: this one costs you something.
+                        spec.safe
+                          ? 'border-hairline'
+                          : 'border-caution/30 bg-caution-wash/40',
+                      ].join(' ')}
+                    >
+                      <span
+                        aria-hidden
+                        className="border-b border-hairline bg-band/60"
+                      >
+                        <Specimen kind={spec.kind} />
+                      </span>
+                      <span className="p-2.5 text-[12px] font-medium leading-snug text-ink">
+                        {spec.label}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Reveal>
+
+              {/*
+                The honest half, and the reason the tinted eight are tinted.
+
+                They exist because they were asked for twice, and a product that answers "no, that
+                would break the guarantee" to a person who wants a QR code on their CV has decided
+                for them. This says the price out loud instead, in the same words the workspace uses
+                when you add one.
+              */}
+              <Reveal delay={140}>
+                <div className="mt-8 flex flex-col gap-3 border-t border-hairline pt-6 sm:flex-row sm:items-start sm:gap-8">
+                  {/* No icon. There is no `caution` glyph in this family and the family is
+                      deliberately one family, so the choice was to draw a twenty-fifth icon or to
+                      let the eight tinted tiles directly above do the pointing. They do. */}
+                  <h3 className="shrink-0 text-title text-caution">
+                    Eight of them cost you the check
+                  </h3>
+                  <p className="max-w-[62ch] text-[14px] leading-relaxed text-ink-soft">
+                    A table, a chart, a picture, a QR code, a running header or
+                    footer, a watermark, a form to fill in. They render, and
+                    screening software reads them badly. Add one and your
+                    document stops saying Parse verified and starts saying Not
+                    parse-checked, because that badge is a claim about your
+                    file, not about our test suite.
+                  </p>
+                </div>
+              </Reveal>
             </div>
           </section>
 
