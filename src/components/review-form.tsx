@@ -30,14 +30,8 @@ import {
 import { formatRange } from '@/render/format'
 import { ExtraSections } from '@/components/extra-sections'
 import { BlockEditor } from '@/components/block-editor'
-import { BLOCK_SPECS, specFor } from '@/render/blocks'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { BlockGallery } from '@/components/block-gallery'
+import { specFor } from '@/render/blocks'
 import { ButtonGroup, ButtonGroupSeparator } from '@/components/ui/button-group'
 import { orderedSections, tokenFor } from '@/render/sections'
 import type { SectionName } from '@/render/sections'
@@ -373,74 +367,41 @@ function HeaderButton({
   )
 }
 
+/**
+ * The control that opens the gallery.
+ *
+ * A trigger, not a menu, since the choosing moved into `block-gallery.tsx` — twenty-three items with
+ * specimens is a page, and a dropdown anchored to a 60px button was a page pretending to be a popover.
+ */
 function AddMenu({
   onAdd,
 }: {
   onAdd: (block: Resume['custom'][number]) => void
 }) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label="Add something to your CV"
-        className="ml-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-hairline-strong bg-ground px-3.5 text-[13px] font-semibold text-signal transition-colors hover:bg-signal-wash"
-      >
-        <svg
-          aria-hidden
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          className="h-4 w-4"
+    <BlockGallery
+      onAdd={onAdd}
+      trigger={
+        <button
+          type="button"
+          aria-label="Add something to your CV"
+          className="ml-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-hairline-strong bg-ground px-3.5 text-[13px] font-semibold text-signal transition-colors hover:bg-signal-wash"
         >
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-        Add
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        className="max-h-[70vh] w-[19rem] overflow-y-auto"
-      >
-        {(
-          [
-            ['content', 'Content'],
-            ['layout', 'Page'],
-            ['risky', 'Costs the parse check'],
-          ] as const
-        ).map(([group, heading]) => (
-          <div key={group}>
-            {/*
-              The third group is named for what it costs rather than for what it holds. Somebody
-              scanning a menu should not have to open an item to discover it will take "Parse verified"
-              off their document.
-            */}
-            <DropdownMenuLabel
-              className={`text-[11px] font-semibold uppercase tracking-[0.06em] ${
-                group === 'risky' ? 'text-caution' : 'text-ink-faint'
-              }`}
-            >
-              {heading}
-            </DropdownMenuLabel>
-            {BLOCK_SPECS.filter((spec) => spec.group === group).map((spec) => (
-              <DropdownMenuItem
-                key={spec.kind}
-                onSelect={() =>
-                  onAdd({ kind: spec.kind, ...spec.make() } as never)
-                }
-                className="flex-col items-start gap-0.5"
-              >
-                <span className="text-[14px] font-semibold text-ink">
-                  {spec.label}
-                </span>
-                <span className="text-[12px] leading-snug text-ink-soft">
-                  {spec.hint}
-                </span>
-              </DropdownMenuItem>
-            ))}
-          </div>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <svg
+            aria-hidden
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            className="h-4 w-4"
+          >
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          Add
+        </button>
+      }
+    />
   )
 }
 
