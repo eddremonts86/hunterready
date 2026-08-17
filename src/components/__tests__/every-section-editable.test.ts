@@ -25,14 +25,24 @@ const formSource = await readFile('src/components/review-form.tsx', 'utf8')
  * would recreate exactly the bug: a second list to forget to update. Scoped to the `Resume` object so
  * the arrays inside `WorkItem` and friends do not count as sections.
  */
+/**
+ * Lists that hold no content and therefore need no editor.
+ *
+ * Exactly one so far, and it should stay a short list — every name here is a hole in the guard. This
+ * one earns it: `sectionOrder` holds tokens describing where the other lists go, so it is edited by
+ * moving a section rather than by typing into a field, and it is *the* thing this guard exists to make
+ * unnecessary to think about.
+ */
+const NOT_CONTENT = new Set(['sectionOrder'])
+
 function schemaLists(): Array<string> {
   const block = /export const Resume = z\.object\(\{([\s\S]*?)^\}\)/m.exec(
     schemaSource,
   )
   expect(block, 'could not find the Resume object in the schema').not.toBeNull()
-  return [...(block?.[1] ?? '').matchAll(/^\s{2}(\w+): z\.array\(/gm)].map(
-    (match) => match[1],
-  )
+  return [...(block?.[1] ?? '').matchAll(/^\s{2}(\w+): z\.array\(/gm)]
+    .map((match) => match[1])
+    .filter((key) => !NOT_CONTENT.has(key))
 }
 
 describe('every list in the schema has somewhere to be edited', () => {

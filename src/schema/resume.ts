@@ -173,6 +173,14 @@ export const LanguageItem = z.object({
  * a section that failed to parse.
  */
 export const CustomSection = z.object({
+  /**
+   * A stable handle, so `sectionOrder` can name this section rather than its position.
+   *
+   * Optional, and absent on every document written before ordering existed. A section without one is
+   * simply unnamed in the order and falls to the tail — the behaviour it had already. The interface
+   * assigns ids the first time somebody reorders anything, which is the first moment they matter.
+   */
+  id: z.string().optional(),
   title: z.string(),
   items: z.array(z.string()).default([]),
   /**
@@ -210,6 +218,19 @@ export const Resume = z.object({
   publications: z.array(CustomSection).default([]),
   volunteer: z.array(WorkItem).default([]),
   custom: z.array(CustomSection).default([]),
+  /**
+   * The order the person put their sections in, as tokens — `work`, `languages`, `custom:<id>`.
+   *
+   * Empty means "the design decides", which is what every document said until now and still says
+   * unless somebody moves something. Unknown tokens are ignored and unmentioned sections fall to the
+   * tail in the design's own order, so this can never hide a section: the worst a stale token can do
+   * is nothing. See `src/render/sections.tsx`.
+   *
+   * `basics` is deliberately not a token. The name and contact details are the one block whose place
+   * is not a matter of taste — a CV whose reader meets the phone number after the job history is a
+   * CV with a bug, and every ATS heuristic assumes the header is the header.
+   */
+  sectionOrder: z.array(z.string()).default([]),
 })
 
 export type Resume = z.infer<typeof Resume>
