@@ -153,21 +153,58 @@ function anthropic(): Provider | undefined {
 }
 
 /**
- * The named ones, for `HR_PROVIDER`.
+ * The named ones.
  *
- * A name that resolves to nothing returns `undefined` rather than falling back, which is deliberate:
- * asking for DeepSeek and silently getting MiniMax is exactly how a comparison produces a confident
- * wrong answer. `/api/processing` reports the provider, so a misconfiguration is visible on screen.
+ * A name that resolves to nothing returns `undefined` rather than falling back, which is deliberate
+ * twice over. For `HR_PROVIDER` it is because asking for DeepSeek and silently getting MiniMax is how
+ * a comparison produces a confident wrong answer. For a **person's** choice it is far more serious:
+ * consent under docs/07 is consent to a *named company*, so sending their CV to a different one than
+ * the one they picked is the transfer they did not agree to.
  */
-const BY_NAME: Record<string, () => Provider | undefined> = {
+const BY_ID: Record<string, () => Provider | undefined> = {
   deepseek,
   minimax,
   anthropic,
 }
 
+export type ProviderId = keyof typeof BY_ID
+
+/** The name a person would recognise. Not derived from the host, so a new one is named on purpose. */
+const NAMES: Record<string, string> = {
+  deepseek: 'DeepSeek',
+  minimax: 'MiniMax',
+  anthropic: 'Anthropic',
+}
+
+export interface ProviderChoice {
+  id: string
+  /** What the consent gate calls it. This is the string somebody is agreeing to. */
+  name: string
+}
+
+/**
+ * Every third-party model this deployment could use — the list the person chooses from.
+ *
+ * It used to be one: whichever the resolution order landed on, offered as "send it" or "do not". Two
+ * are configured now and the choice is the person's, so the gate names each and the answer records
+ * which. `HR_PROVIDER`, when set, pins the deployment to one and this list narrows to it — a
+ * deployment that has decided is not asking.
+ */
+export function availableProviders(): Array<ProviderChoice> {
+  const pinned = value('HR_PROVIDER')?.toLowerCase()
+  const ids = pinned === undefined ? Object.keys(BY_ID) : [pinned]
+  return ids
+    .filter((id) => BY_ID[id]?.() !== undefined)
+    .map((id) => ({ id, name: NAMES[id] ?? id }))
+}
+
+export function providerById(id: string): Provider | undefined {
+  return BY_ID[id.toLowerCase()]?.()
+}
+
 export function resolveProvider(): Provider | undefined {
   const chosen = value('HR_PROVIDER')?.toLowerCase()
-  if (chosen !== undefined) return BY_NAME[chosen]?.()
+  if (chosen !== undefined) return BY_ID[chosen]?.()
 
   // 1. Explicit project configuration.
   const ownToken = value('HUNTERREADY_LLM_TOKEN')

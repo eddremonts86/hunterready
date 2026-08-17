@@ -16,7 +16,7 @@ import { applyHeuristics } from './heuristics'
 import { buildUserPrompt, PROMPT_VERSION, SYSTEM_PROMPT } from './prompt'
 import { extractByRules } from './fallback'
 import { detectLocale } from './detect-locale'
-import { resolveLocalProvider, resolveProvider } from './provider'
+import { providerById, resolveLocalProvider, resolveProvider } from './provider'
 import { recoverMissingHighlights } from './recover'
 import { errorEvent } from '@/lib/log'
 import { findPhone, redactForLlm, reinstateDeep } from './redact'
@@ -63,6 +63,17 @@ export interface ExtractOptions {
    * does extraction fall back to rules.
    */
   useProvider?: boolean
+  /**
+   * Which named company the person chose, when they chose one.
+   *
+   * Consent under docs/07 is consent to a *named* provider, so once more than one is on offer the
+   * choice has to travel with the work rather than be re-derived from the environment. Absent, the
+   * deployment's own resolution order applies — which is every caller that predates the choice.
+   *
+   * An id that resolves to nothing falls to the local model rather than to another company. That is
+   * the only safe direction: the alternative is sending somebody's CV to a business they did not name.
+   */
+  providerId?: string
 }
 
 export interface ExtractSuccess {
@@ -182,7 +193,10 @@ export async function extractResume(
     }
   }
 
-  const provider = resolveProvider()
+  const provider =
+    options.providerId === undefined
+      ? resolveProvider()
+      : providerById(options.providerId)
 
   // Nothing available at all: rules rather than failing. The promise in every error message here is
   // "you can still build your CV", and that promise has to be true.

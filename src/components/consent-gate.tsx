@@ -33,18 +33,49 @@ import { useEffect, useState } from 'react'
 
 const STORAGE_KEY = 'hunterready.processing-consent.v1'
 
-export type ConsentChoice = 'granted' | 'declined'
+/**
+ * Which model reads this CV: one of the named companies, or our own machine.
+ *
+ * It used to be `'granted' | 'declined'`, which was the right shape while there was exactly one
+ * company to grant anything to. There are two now, and the difference is not cosmetic: docs/07's rule
+ * is consent to a **named provider**, so "granted" no longer identifies what was agreed to. Sending a
+ * CV to DeepSeek on the strength of a yes given about MiniMax is precisely the transfer nobody agreed
+ * to, and a two-state flag cannot tell the two apart.
+ */
+export type ConsentChoice = 'local' | (string & {})
+
+/** The one that means "nothing leaves this machine". Not a provider id, and never will be one. */
+export const LOCAL: ConsentChoice = 'local'
 
 interface StoredConsent {
+  /** `local`, or the id of the provider that was named at the time. */
   choice: ConsentChoice
-  /** Who was named at the time. If the provider changes, the old answer no longer applies. */
-  provider: string
+  /**
+   * Every provider on offer when the answer was given, joined.
+   *
+   * Not just the chosen one. If the deployment gains a company, the person was never shown that name
+   * and their old answer cannot speak for it — the honest thing is to ask again rather than to treat
+   * an answer about a shorter list as an answer about a longer one.
+   */
+  offered: string
   at: string
+}
+
+/** The providers a stored answer was given against, in a stable order for comparison. */
+function fingerprint(providers: ReadonlyArray<{ id: string }>): string {
+  return providers
+    .map((p) => p.id)
+    .sort()
+    .join(',')
 }
 
 export interface ConsentState {
   /** Undefined while we are still asking the server who processes CVs. */
   provider?: string | null
+  /** Every model this visitor may choose between. Empty when none is available to them. */
+  providers: Array<{ id: string; name: string }>
+  /** The name of the chosen one, for the chip and the copy. Undefined when the choice is local. */
+  chosenName?: string
   /**
    * Whether this installation encrypts stored CVs (ADR-021). Undefined until the server has answered.
    *
@@ -80,7 +111,7 @@ function read(): StoredConsent | undefined {
       typeof parsed === 'object' &&
       parsed !== null &&
       'choice' in parsed &&
-      'provider' in parsed
+      'offered' in parsed
     ) {
       return parsed as StoredConsent
     }
@@ -93,6 +124,9 @@ function read(): StoredConsent | undefined {
 
 export function useProcessingConsent(): ConsentState {
   const [provider, setProvider] = useState<string | null | undefined>(undefined)
+  const [providers, setProviders] = useState<
+    Array<{ id: string; name: string }>
+  >([])
   /** Whether this installation encrypts stored CVs. `undefined` until asked — see `/api/processing`. */
   const [encryptsAtRest, setEncryptsAtRest] = useState<boolean | undefined>(
     undefined,
@@ -109,6 +143,7 @@ export function useProcessingConsent(): ConsentState {
         (response) =>
           response.json() as Promise<{
             provider: string | null
+            providers?: Array<{ id: string; name: string }>
             encryptsAtRest?: boolean
             paidDesigns?: boolean
             plan?: string
@@ -117,6 +152,8 @@ export function useProcessingConsent(): ConsentState {
       .then((data) => {
         if (cancelled) return
         setProvider(data.provider)
+        const offered = Array.isArray(data.providers) ? data.providers : []
+        setProviders(offered)
         setEncryptsAtRest(data.encryptsAtRest === true)
         setPaidDesigns(data.paidDesigns === true)
         setPlan(typeof data.plan === 'string' ? data.plan : undefined)
@@ -126,7 +163,7 @@ export function useProcessingConsent(): ConsentState {
          * from one company to another, the person consented to a transfer that is no longer the one
          * being made, and they are asked again.
          */
-        if (stored !== undefined && stored.provider === data.provider) {
+        if (stored !== undefined && stored.offered === fingerprint(offered)) {
           setChoice(stored.choice)
         }
       })
@@ -147,7 +184,7 @@ export function useProcessingConsent(): ConsentState {
         STORAGE_KEY,
         JSON.stringify({
           choice: next,
-          provider: provider ?? '',
+          offered: fingerprint(providers),
           at: new Date().toISOString(),
         } satisfies StoredConsent),
       )
@@ -165,16 +202,22 @@ export function useProcessingConsent(): ConsentState {
     }
   }
 
-  return { provider, encryptsAtRest, paidDesigns, plan, choice, decide, reset }
+  return {
+    provider,
+    providers,
+    chosenName: providers.find((p) => p.id === choice)?.name,
+    encryptsAtRest,
+    paidDesigns,
+    plan,
+    choice,
+    decide,
+    reset,
+  }
 }
 
 /** True when a decision is genuinely required: a provider exists and nobody has answered yet. */
 export function needsConsent(state: ConsentState): boolean {
-  return (
-    typeof state.provider === 'string' &&
-    state.provider !== '' &&
-    state.choice === undefined
-  )
+  return state.providers.length > 0 && state.choice === undefined
 }
 
 /**
@@ -231,10 +274,11 @@ function StaysIcon({ className }: { className?: string }) {
 }
 
 export function ConsentGate({
-  provider,
+  providers,
   onDecide,
 }: {
-  provider: string
+  /** Every company on offer, named. One card each — see the comment at the list below. */
+  providers: ReadonlyArray<{ id: string; name: string }>
   onDecide: (choice: ConsentChoice) => void
 }) {
   return (
@@ -254,8 +298,11 @@ export function ConsentGate({
             balanced four-line paragraph pulls into a narrow ragged column. `pretty` only fixes the
             orphan. */}
         <p className="text-lead mx-auto max-w-[34rem] text-pretty text-ink-soft">
-          Both options read your file and pull out the same details for you to
-          check. The one difference is whether the text leaves our machines.
+          {/* Counts the cards rather than asserting a number — the list is the deployment's, and
+              "Both options" survived on screen for exactly as long as there were two. */}
+          Every option reads your file and pulls out the same details for you to
+          check. The difference is whether the text leaves our machines, and
+          whose machine it goes to.
         </p>
       </div>
 
@@ -296,51 +343,52 @@ export function ConsentGate({
         className="rise flex flex-col gap-3"
         style={{ animationDelay: '120ms' }}
       >
-        <button
-          type="button"
-          onClick={() => onDecide('granted')}
-          className="choice"
-        >
-          <span className="flex items-start gap-3.5">
-            <LeavesIcon className="mt-0.5 h-5 w-5 shrink-0 text-ink-soft" />
-            <span className="flex flex-col gap-1">
-              <span className="text-title">Send it to {provider}</span>
-              <span className="text-[0.9375rem] leading-relaxed text-ink-soft">
-                The text of your CV goes to {provider}, the company whose larger
-                model we pay for. It goes nowhere else, and we keep no copy.
-              </span>
-              {/*
-                The second sentence is the one this screen owed people and did not say.
+        {/*
+          One card per company, each named, in the order the server gives them.
 
-                "We do not keep a copy" is a claim about *us*, and reads as though it settles the
-                question. It does not: docs/07-privacy.md still carries zero-retention terms as a
-                thing to confirm, so we cannot state what the provider does on their side. Saying
-                so plainly is both the honest option and the more informative one, and it is the
-                same discipline `fabrication.ts` enforces on the model — do not assert what
-                nothing backs.
-              */}
-              <span className="text-meta text-ink-soft">
-                The most accurate read, and the best chance with an unusual
-                layout. What happens to the text on their side is their terms,
-                not ours.
+          docs/07 requires consent to a *named provider*. With one on offer that was a yes-or-no; with
+          two it is this list, and choosing is the consent. Nothing marks a recommendation — no default,
+          no "faster" badge, no reordering by our preference — because a nudge towards one company is a
+          nudge about where somebody's employment history goes, and the cards are identical so the
+          comparison stays theirs.
+        */}
+        {providers.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => onDecide(p.id)}
+            className="choice"
+          >
+            <span className="flex items-start gap-3.5">
+              <LeavesIcon className="mt-0.5 h-5 w-5 shrink-0 text-ink-soft" />
+              <span className="flex flex-col gap-1">
+                <span className="text-title">Send it to {p.name}</span>
+                <span className="text-[0.9375rem] leading-relaxed text-ink-soft">
+                  The text of your CV goes to {p.name}, one of the companies
+                  whose larger model we pay for. It goes nowhere else, and we
+                  keep no copy.
+                </span>
+                {/*
+                  The second sentence is the one this screen owed people and did not say.
+
+                  "We do not keep a copy" is a claim about *us*, and reads as though it settles the
+                  question. It does not: docs/07 still carries zero-retention terms as a thing to
+                  confirm, so we cannot state what the provider does on their side. Saying so plainly
+                  is both the honest option and the more informative one, and it is the same
+                  discipline `fabrication.ts` enforces on the model — do not assert what nothing backs.
+                */}
+                <span className="text-meta text-ink-soft">
+                  The most accurate read, and the best chance with an unusual
+                  layout. We have not confirmed their retention terms.
+                </span>
               </span>
             </span>
-          </span>
-        </button>
+          </button>
+        ))}
 
-        {/*
-          Not a consolation prize, and it must not read like one. It is a real model on our own
-          hardware — smaller than the one above, so a very unusual layout may need more correcting,
-          and that is the whole of the trade. Overstating it would be dishonest; understating it
-          makes the private choice look like a penalty.
-
-          The title said "Keep it on **your** server" while its own body said "our own machines".
-          On the one screen whose entire subject is whose machine holds the file, that was the
-          wrong word in the loudest position.
-        */}
         <button
           type="button"
-          onClick={() => onDecide('declined')}
+          onClick={() => onDecide(LOCAL)}
           className="choice"
         >
           <span className="flex items-start gap-3.5">
@@ -421,13 +469,13 @@ export function ConsentGate({
  * that no longer has the plan reads as local here, because local is what will happen.
  */
 export function ProcessingChoice({
-  provider,
+  providers,
   choice,
   onDecide,
   Control,
 }: {
-  /** The third-party provider's name, or null/undefined when this visitor cannot reach it. */
-  provider?: string | null
+  /** Every model this visitor may choose. Empty when none is available to them. */
+  providers: ReadonlyArray<{ id: string; name: string }>
   choice?: ConsentChoice
   onDecide: (choice: ConsentChoice) => void
   /** The app's `Segmented`, injected so this component does not reach into the route. */
@@ -443,35 +491,59 @@ export function ProcessingChoice({
     onChange: (id: string) => void
   }) => React.ReactNode
 }) {
-  const entitled = typeof provider === 'string' && provider !== ''
-  const effective = entitled && choice === 'granted' ? 'provider' : 'local'
+  const entitled = providers.length > 0
+  /*
+    A stored answer naming a company that is no longer offered falls back to local rather than to the
+    first one on the list. Picking a substitute would be the app choosing who receives somebody's CV.
+  */
+  const effective =
+    choice !== undefined && providers.some((p) => p.id === choice)
+      ? choice
+      : LOCAL
 
   return (
     <div className="flex flex-col gap-2">
       <Control
         label="Who reads your CV"
         value={effective}
-        onChange={(id) => onDecide(id === 'provider' ? 'granted' : 'declined')}
+        onChange={onDecide}
         options={[
           {
-            id: 'local',
+            id: LOCAL,
             label: 'Our own server',
             hint: entitled
               ? 'Smaller and slower, and your CV never leaves this machine.'
               : undefined,
           },
-          {
-            id: 'provider',
-            label: entitled ? provider : 'A larger model',
-            disabled: !entitled,
-            hint: entitled
-              ? `The larger model. Its text goes to ${provider} and nowhere else; we keep no copy.`
-              : 'The larger model needs an account on the paid plan. Until then your CV is read here and never leaves this machine, which is the more private half of the deal, not the lesser one.',
-            /*
-              Both branches stay. `entitled` is the server's answer, so while ADR-030's suspension is
-              on nobody sees the second one — and when the switch goes off it is true again, unedited.
-            */
-          },
+          /*
+            One option per company, each named. docs/07 requires consent to a named provider, and with
+            more than one on offer that requirement is simply this list: choosing *is* the consent, and
+            it records which. A single "send it away" toggle could not say who to.
+
+            Nothing here is a recommendation. They are listed in the order the server gives them, with
+            no default marked and no "faster" badge, because a nudge towards one company is a nudge
+            about where somebody's employment history goes.
+          */
+          ...providers.map((p) => ({
+            id: p.id,
+            label: p.name,
+            hint: `The larger model. Its text goes to ${p.name} and nowhere else; we keep no copy.`,
+          })),
+          /*
+            Kept for the visitor who has no plan: a locked option that says what it would give them.
+            `entitled` is the server's answer, so while ADR-030's suspension is on this is the only
+            second option anyone sees — and when the switch goes off it disappears, unedited.
+          */
+          ...(entitled
+            ? []
+            : [
+                {
+                  id: 'locked',
+                  label: 'A larger model',
+                  disabled: true,
+                  hint: 'The larger model needs an account on the paid plan. Until then your CV is read here and never leaves this machine, which is the more private half of the deal, not the lesser one.',
+                },
+              ]),
         ]}
       />
     </div>

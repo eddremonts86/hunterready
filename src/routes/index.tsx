@@ -589,7 +589,7 @@ function SessionControls({
     <div className="flex items-center gap-2">
       <PlanChip plan={consent.plan} />
       <ModelMenu
-        provider={consent.provider}
+        providers={consent.providers}
         choice={consent.choice}
         onDecide={consent.decide}
       />
@@ -1258,10 +1258,7 @@ function HunterReady() {
          * the field is absent. Declining has to change what happens, not what is displayed — otherwise
          * the second button on the gate is decoration.
          */
-        body.append(
-          'processing',
-          consent.choice === 'granted' ? 'provider' : 'local',
-        )
+        body.append('processing', consent.choice ?? 'local')
         const response = await fetch('/api/ingest', { method: 'POST', body })
         const payload = (await response.json()) as Record<string, unknown>
 
@@ -1372,7 +1369,7 @@ function HunterReady() {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
               resume: loaded.resume,
-              processing: consent.choice === 'granted' ? 'provider' : 'local',
+              processing: consent.choice ?? 'local',
               answers,
               only: [
                 {
@@ -1535,7 +1532,7 @@ function HunterReady() {
           body: JSON.stringify({
             resume: { ...loaded.resume, locale },
             target: locale,
-            processing: consent.choice === 'granted' ? 'provider' : 'local',
+            processing: consent.choice ?? 'local',
             progress: progressIdRef.current,
           }),
         })
@@ -1608,7 +1605,7 @@ function HunterReady() {
           body: JSON.stringify({
             advert,
             resume: loaded.resume,
-            processing: consent.choice === 'granted' ? 'provider' : 'local',
+            processing: consent.choice ?? 'local',
             progress: progressIdRef.current,
           }),
         })
@@ -1707,7 +1704,7 @@ function HunterReady() {
           <StepBar />
           <div className="flex flex-1 items-center justify-center px-4 py-10 sm:px-6">
             <ConsentGate
-              provider={consent.provider as string}
+              providers={consent.providers}
               onDecide={consent.decide}
             />
           </div>
@@ -2614,10 +2611,7 @@ function HunterReady() {
                             roleTitle: reading.roleTitle,
                             company: reading.company,
                             progress: progressIdRef.current,
-                            processing:
-                              consent.choice === 'granted'
-                                ? 'provider'
-                                : 'local',
+                            processing: consent.choice ?? 'local',
                           }),
                         })
                         const payload = (await response.json()) as Record<
@@ -2656,10 +2650,7 @@ function HunterReady() {
                           body: JSON.stringify({
                             text,
                             target: resolveLocale(loaded.resume.locale),
-                            processing:
-                              consent.choice === 'granted'
-                                ? 'provider'
-                                : 'local',
+                            processing: consent.choice ?? 'local',
                           }),
                         })
                         if (!response.ok) return undefined
@@ -3420,7 +3411,7 @@ function HunterReady() {
                     where the answer lives afterwards, which is what makes the gate's promise true.
                   */}
                       <ProcessingChoice
-                        provider={consent.provider}
+                        providers={consent.providers}
                         choice={consent.choice}
                         onDecide={consent.decide}
                         Control={Segmented}

@@ -26,6 +26,7 @@ import { checkRateLimit, clientKey } from '@/lib/rate-limit'
 import { progressEnd, progressReporter } from '@/lib/progress'
 import { event, requestId } from '@/lib/log'
 import { mayUseThirdParty } from '@/lib/entitlements'
+import { consentedToTransfer } from '@/lib/chosen-provider'
 
 /** Defensive: the client sends back what `/api/target` gave it, and a shape can be lost in transit. */
 function readRequirements(value: unknown): JobRequirements {
@@ -126,7 +127,7 @@ export const Route = createFileRoute('/api/cover-letter')({
          */
         const mayUseProvider = await mayUseThirdParty(
           request,
-          payload.processing === 'provider',
+          consentedToTransfer(payload.processing),
         )
         if (
           (mayUseProvider ? resolveProvider() : resolveLocalProvider()) ===

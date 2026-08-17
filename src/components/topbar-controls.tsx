@@ -24,6 +24,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { SignIn } from '@/components/sign-in'
 import { signOut } from '@/lib/auth-client'
+import { LOCAL } from '@/components/consent-gate'
 import type { ConsentChoice } from '@/components/consent-gate'
 
 /** Shuts a popover on Escape and on a click outside it — the two things every popover must do. */
@@ -153,19 +154,19 @@ export function AccountMenu({
  * and "Read here" is the fact somebody actually wants confirmed at a glance.
  */
 export function ModelMenu({
-  provider,
+  providers,
   choice,
   onDecide,
 }: {
-  /** The third-party provider's name, or null/undefined when this visitor cannot reach it. */
-  provider?: string | null
+  /** Every model this visitor may choose between. Empty when none is available to them. */
+  providers: ReadonlyArray<{ id: string; name: string }>
   choice?: ConsentChoice
   onDecide: (choice: ConsentChoice) => void
 }) {
   const [open, setOpen] = useState(false)
   const ref = useDismiss(open, () => setOpen(false))
-  const entitled = typeof provider === 'string' && provider !== ''
-  const usingProvider = entitled && choice === 'granted'
+  const entitled = providers.length > 0
+  const chosen = providers.find((p) => p.id === choice)
 
   return (
     <div ref={ref} className="relative">
@@ -179,15 +180,14 @@ export function ModelMenu({
       >
         <span
           aria-hidden
-          className={`h-2 w-2 rounded-full ${usingProvider ? 'bg-signal' : 'bg-affirm'}`}
+          className={`h-2 w-2 rounded-full ${chosen === undefined ? 'bg-affirm' : 'bg-signal'}`}
         />
         {/*
           The label stays at every width. It used to be `hidden sm:inline`, which left a phone with a
           bare coloured dot in a pill: a control that says nothing about itself, on the one screen
-          where there is no hover to reveal it. The `aria-label` meant a screen reader was told what
-          it was and a sighted person was not, which is the wrong way round for an affordance.
+          where there is no hover to reveal it.
         */}
-        <span>{usingProvider ? provider : 'Read here'}</span>
+        <span>{chosen?.name ?? 'Read here'}</span>
       </button>
 
       {open && (
@@ -199,8 +199,8 @@ export function ModelMenu({
 
             <button
               type="button"
-              onClick={() => onDecide('declined')}
-              aria-pressed={!usingProvider}
+              onClick={() => onDecide(LOCAL)}
+              aria-pressed={chosen === undefined}
               className="choice flex-col items-start gap-1 px-3.5 py-3 text-left"
             >
               <span className="text-[14px] font-semibold">Our own server</span>
@@ -210,34 +210,50 @@ export function ModelMenu({
               </span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                if (entitled) onDecide('granted')
-              }}
-              aria-pressed={usingProvider}
-              /*
-                Not `disabled`. A disabled control tells somebody they cannot have a thing and nothing
-                about what the thing is; this one is pressable and answers the question underneath it.
-                The server still decides — `mayUseThirdParty` is plan AND consent — so a click here
-                cannot buy anything, which is exactly why it can be safely clickable.
-              */
-              className="choice flex-col items-start gap-1 px-3.5 py-3 text-left"
-            >
-              <span className="flex items-center gap-2 text-[14px] font-semibold">
-                {entitled ? provider : 'A larger model'}
-                {!entitled && (
+            {/*
+              One per company, named, and the choice records which — see `consent-gate.tsx`. This is
+              the same decision the gate asks on the first upload; this is where it is changed
+              afterwards, which is what makes the gate's promise true rather than a one-time formality.
+            */}
+            {providers.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => onDecide(p.id)}
+                aria-pressed={chosen?.id === p.id}
+                className="choice flex-col items-start gap-1 px-3.5 py-3 text-left"
+              >
+                <span className="text-[14px] font-semibold">{p.name}</span>
+                <span className="text-[12px] leading-relaxed text-ink-soft">
+                  {`Its text goes to ${p.name} and nowhere else; we keep no copy.`}
+                </span>
+              </button>
+            ))}
+
+            {!entitled && (
+              <button
+                type="button"
+                aria-pressed={false}
+                /*
+                  Not `disabled`. A disabled control tells somebody they cannot have a thing and
+                  nothing about what the thing is; this one is pressable and answers the question
+                  underneath it. The server still decides — `mayUseThirdParty` is plan AND consent —
+                  which is exactly why it can be safely clickable.
+                */
+                className="choice flex-col items-start gap-1 px-3.5 py-3 text-left"
+              >
+                <span className="flex items-center gap-2 text-[14px] font-semibold">
+                  A larger model
                   <span className="rounded-full bg-signal-wash px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.05em] text-signal">
                     Pro
                   </span>
-                )}
-              </span>
-              <span className="text-[12px] leading-relaxed text-ink-soft">
-                {entitled
-                  ? `Its text goes to ${provider} and nowhere else; we keep no copy.`
-                  : 'Faster, and it finds better wording on more of your lines. Its text would go to one named provider and nowhere else.'}
-              </span>
-            </button>
+                </span>
+                <span className="text-[12px] leading-relaxed text-ink-soft">
+                  Faster, and it finds better wording on more of your lines. Its
+                  text would go to one named provider and nowhere else.
+                </span>
+              </button>
+            )}
 
             {!entitled && <UpgradeNote />}
           </div>

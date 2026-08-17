@@ -14,6 +14,7 @@ import { resolveLocalProvider, resolveProvider } from '@/structure/provider'
 import { checkRateLimit, clientKey } from '@/lib/rate-limit'
 import { event, requestId } from '@/lib/log'
 import { mayUseThirdParty } from '@/lib/entitlements'
+import { consentedToTransfer } from '@/lib/chosen-provider'
 import { progressEnd, progressReporter } from '@/lib/progress'
 
 export const Route = createFileRoute('/api/translate')({
@@ -76,7 +77,7 @@ export const Route = createFileRoute('/api/translate')({
 
         const mayUseProvider = await mayUseThirdParty(
           request,
-          payload.processing === 'provider',
+          consentedToTransfer(payload.processing),
         )
         const provider = mayUseProvider
           ? resolveProvider()
