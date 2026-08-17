@@ -663,7 +663,7 @@ async function downloadDocument(
   resume: Resume,
   templateId: TemplateId,
   themeId: ThemeId,
-  format: 'pdf' | 'docx' = 'pdf',
+  format: DownloadFormat = 'pdf',
   axes: {
     fonts?: { body?: string; heading?: string }
     colours?: { accent?: string; paper?: string }
@@ -701,8 +701,11 @@ async function downloadDocument(
  * platform and not in every window — and the same button also serves the cold first render and a loaded
  * production box, where the wait is seconds. A brief flash is the cost of never being silent.
  */
+/** The three files this workspace can hand somebody. Named once so the menu and the hook agree. */
+export type DownloadFormat = 'pdf' | 'docx' | 'html'
+
 function useDownloads() {
-  const [format, setFormat] = useState<'pdf' | 'docx' | undefined>()
+  const [format, setFormat] = useState<DownloadFormat | undefined>()
   const [failure, setFailure] = useState<string | undefined>()
 
   const start = useCallback(
@@ -710,7 +713,7 @@ function useDownloads() {
       resume: Resume,
       templateId: TemplateId,
       themeId: ThemeId,
-      wanted: 'pdf' | 'docx' = 'pdf',
+      wanted: DownloadFormat = 'pdf',
       /* The reader's axes, so the file that lands matches the preview they were looking at. */
       axes: {
         fonts?: { body?: string; heading?: string }
@@ -2860,7 +2863,7 @@ function HunterReady() {
    * while `.docx` had one fixed layout and no axes to carry — but it is the kind of difference that
    * survives a refactor by accident, and the menu was about to add a third caller to copy it wrong.
    */
-  const download = (format: 'pdf' | 'docx') =>
+  const download = (format: DownloadFormat) =>
     downloads.start(loaded.resume, templateId, themeId, format, {
       fonts: customFonts,
       colours: customColours,
@@ -3665,6 +3668,24 @@ function HunterReady() {
                           <span className="text-[12px] leading-snug text-ink-soft">
                             For portals that ask for a Word file. One fixed
                             layout, not the design.
+                          </span>
+                        </DropdownMenuItem>
+                        {/*
+                          HTML says what it is *not*, because that is the surprising half. It carries
+                          the design faithfully — same template, same theme, fonts embedded — and it has
+                          no pages, which is the one thing somebody expecting "the PDF as a web page"
+                          would otherwise discover after sending it.
+                        */}
+                        <DropdownMenuItem
+                          onSelect={() => void download('html')}
+                          className="flex-col items-start gap-0.5"
+                        >
+                          <span className="text-[14px] font-semibold text-ink">
+                            Web page (.html)
+                          </span>
+                          <span className="text-[12px] leading-snug text-ink-soft">
+                            The same design, one continuous page, fonts
+                            included. Opens anywhere, offline.
                           </span>
                         </DropdownMenuItem>
                       </DropdownMenuContent>

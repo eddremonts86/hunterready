@@ -25,6 +25,8 @@ import { Fragment } from 'react'
 import { Document, Page } from '@/lib/pdf-primitives'
 import { PdfcnThemeProvider } from '@/components/pdf/theme-provider'
 import type { PdfcnTheme } from '@/components/pdf/theme-types'
+import { Spacer } from './spacer'
+import { isSpacer } from '@/schema/resume'
 import type { Resume } from '@/schema/resume'
 import {
   formatLocation,
@@ -350,11 +352,16 @@ function Body({ resume, theme }: { resume: Resume; theme: PdfcnTheme }) {
         </Section>
       )}
 
-      {resume.custom.map((section, index) => (
-        <Section key={index} title={section.title} theme={theme}>
-          <Bullets items={section.items} theme={theme} />
-        </Section>
-      ))}
+      {resume.custom.map((section, index) =>
+        /* A spacer draws room and no words at all — see templates/spacer.tsx. */
+        isSpacer(section) ? (
+          <Spacer key={index} space={section.space} />
+        ) : (
+          <Section key={index} title={section.title} theme={theme}>
+            <Bullets items={section.items} theme={theme} />
+          </Section>
+        ),
+      )}
     </div>
   )
 }

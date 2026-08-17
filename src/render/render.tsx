@@ -16,11 +16,12 @@ import { DEFAULT_THEME_ID, getTheme } from './themes'
 import { styleOf } from './themes/style'
 import type { ThemeId } from './themes'
 import { DEFAULT_TEMPLATE_ID, getTemplate } from './templates/registry'
+import { applyAxes } from './axes'
 import { SIDEBAR_WIDTH, SidebarBody, sidebarGround } from './templates/sidebar'
 import { Document, Page } from '@/lib/pdf-primitives'
 import { PdfcnThemeProvider } from '@/components/pdf/theme-provider'
 import type { TemplateId } from './templates/registry'
-import { quoteFamily, withColours } from './themes/custom'
+import { withColours } from './themes/custom'
 import type { ColourChoice } from './themes/custom'
 
 export interface RenderOptions {
@@ -72,38 +73,10 @@ export async function renderResume(
   const { render, measure } = await import('takumi-pdf')
 
   const base = getTheme(options.themeId ?? DEFAULT_THEME_ID)
-  /*
-    Quoted, always. takumi parses `fontFamily` as CSS, and CSS rejects an unquoted family name that
-    ends in a digit: "Source Sans 3" fails with `Unexpected token: 3`. Two of the sixty families in
-    the catalogue are named that way, and quoting every one is simpler than remembering which. The
-    loader strips quotes again on its side, so both forms reach the same files.
-  */
-  const quoted = quoteFamily
   const painted =
     options.colours === undefined ? base : withColours(base, options.colours)
-  const theme =
-    options.fonts === undefined
-      ? painted
-      : {
-          ...painted,
-          typography: {
-            ...painted.typography,
-            body: {
-              ...painted.typography.body,
-              fontFamily:
-                options.fonts.body === undefined
-                  ? painted.typography.body.fontFamily
-                  : quoted(options.fonts.body),
-            },
-            heading: {
-              ...painted.typography.heading,
-              fontFamily:
-                options.fonts.heading === undefined
-                  ? painted.typography.heading.fontFamily
-                  : quoted(options.fonts.heading),
-            },
-          },
-        }
+  const theme = applyAxes(painted, options.fonts)
+
   const meta = getTemplate(options.templateId ?? DEFAULT_TEMPLATE_ID)
   const { Component } = meta
   const { page } = theme.spacing

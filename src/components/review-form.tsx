@@ -19,8 +19,18 @@ import {
 } from '@/schema/provenance'
 import type { StructuralEdit } from '@/optimize/rewrite-shift'
 import type { FieldProvenance } from '@/schema/provenance'
+import { DEFAULT_SPACE, isSpacer } from '@/schema/resume'
 import type { Resume } from '@/schema/resume'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { formatRange } from '@/render/format'
+
+/** Matches the schema's ceiling. A gap taller than this is a blank page nobody meant to send. */
+const MAX_SPACE = 240
 
 /** Provenance is keyed by dot path; look up the closest entry covering a field. */
 function useProvenanceIndex(provenance: Array<FieldProvenance>) {
@@ -277,6 +287,22 @@ function HeaderIcon({ shape }: { shape: 'up' | 'down' | 'bin' }) {
   )
 }
 
+/**
+ * A header control, and the sentence that says what it does.
+ *
+ * `title` was doing this job and doing it badly. The browser's own tooltip waits a second or more,
+ * appears in the OS's font at the pointer rather than beside the control, and never shows at all on a
+ * touch screen — and these three buttons are 28px icons with no text, which is exactly the case where
+ * the reader most needs telling. Edd: *"estos botones necesitan ser mas descriptivos, incluso con
+ * tooltips de ser necesario."*
+ *
+ * So the label is a full sentence about the **consequence** ("Move Referencer above References") rather
+ * than a name for the control ("Up"), it is the accessible name as well as the tooltip, and it is drawn
+ * by the same `Tooltip` the design gallery uses so there is one tooltip in the product.
+ *
+ * A disabled trigger fires no pointer events, so its tooltip would never open — the wrapper is on a
+ * `span` for that reason, which stays live when the button inside it does not.
+ */
 function HeaderButton({
   label,
   onClick,
@@ -289,16 +315,79 @@ function HeaderButton({
   children: React.ReactNode
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      title={label}
-      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-ink-faint transition-colors hover:bg-ground hover:text-ink disabled:pointer-events-none disabled:opacity-25"
-    >
-      {children}
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex">
+          <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            aria-label={label}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-ink-faint transition-colors hover:bg-ground hover:text-ink disabled:pointer-events-none disabled:opacity-25"
+          >
+            {children}
+          </button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+/**
+ * A spacer, as it appears in the panel: a rule with a number on it.
+ *
+ * Drawn as the thing it produces rather than described in words. A row reading "Spacer — 25px" would
+ * be a label for an effect nobody can see from the form; a dashed rule with room around it is a
+ * picture of the gap, at roughly the proportion the document will have. The number is editable in
+ * place because that is the only property it has.
+ *
+ * The input is a `number` field and not a slider: people arriving here have a specific gap in mind —
+ * they are matching the space above another section — and a slider makes an exact value the hardest
+ * thing to reach.
+ */
+function SpacerRow({
+  space,
+  onChange,
+  actions,
+}: {
+  space: number
+  onChange: (space: number) => void
+  actions: React.ReactNode
+}) {
+  return (
+    <div className="card flex items-center gap-3 px-4 py-3">
+      <span className="flex min-w-0 flex-1 items-center gap-3">
+        <span className="text-[15px] font-semibold text-ink">Space</span>
+        <span
+          aria-hidden
+          className="h-px min-w-6 flex-1 border-t border-dashed border-hairline-strong"
+        />
+      </span>
+      <label className="flex shrink-0 items-center gap-1.5">
+        <span className="sr-only">Space above and below, in pixels</span>
+        <input
+          type="number"
+          min={0}
+          max={MAX_SPACE}
+          step={5}
+          value={space}
+          onChange={(event) => {
+            const next = Number(event.target.value)
+            // A cleared field reads as NaN. Treat it as 0 rather than writing NaN into the document,
+            // which would fail the schema on the next render and lose the section.
+            onChange(
+              Number.isFinite(next)
+                ? Math.min(MAX_SPACE, Math.max(0, Math.round(next)))
+                : 0,
+            )
+          }}
+          className="field w-[4.5rem] py-1 text-center text-[13px]"
+        />
+        <span className="text-[13px] text-ink-soft">px</span>
+      </label>
+      {actions}
+    </div>
   )
 }
 
@@ -583,6 +672,57 @@ export function ReviewForm({
    * The document follows immediately: every template renders `resume.custom` in array order, so this
    * is the order on the page rather than a preference about the form.
    */
+  /**
+   * The three header controls, built once for both kinds of entry.
+   *
+   * `what` is the name the sentences use, so the tooltips read "Move Referencer down, below Skills"
+   * rather than "Move down" — the consequence, named, which is the whole point of putting a tooltip on
+   * an icon. The neighbour is named too where there is one: "down" is a direction, "below Skills" is a
+   * result, and the second is what somebody is actually deciding about.
+   */
+  const sectionActions = (at: number, what: string) => {
+    const nameOf = (index: number) => {
+      const neighbour = resume.custom[index]
+      if (neighbour === undefined) return undefined
+      if (isSpacer(neighbour)) return 'the space'
+      return neighbour.title === '' ? 'the untitled section' : neighbour.title
+    }
+    const above = nameOf(at - 1)
+    const below = nameOf(at + 1)
+    return (
+      <>
+        <HeaderButton
+          label={
+            above === undefined
+              ? `${what} is already first`
+              : `Move ${what} up, above ${above}`
+          }
+          disabled={at === 0}
+          onClick={() => moveCustomSection(at, -1)}
+        >
+          <HeaderIcon shape="up" />
+        </HeaderButton>
+        <HeaderButton
+          label={
+            below === undefined
+              ? `${what} is already last`
+              : `Move ${what} down, below ${below}`
+          }
+          disabled={at === resume.custom.length - 1}
+          onClick={() => moveCustomSection(at, 1)}
+        >
+          <HeaderIcon shape="down" />
+        </HeaderButton>
+        <HeaderButton
+          label={`Remove ${what} from the CV`}
+          onClick={() => removeCustomSection(at)}
+        >
+          <HeaderIcon shape="bin" />
+        </HeaderButton>
+      </>
+    )
+  }
+
   const moveCustomSection = (at: number, by: -1 | 1) => {
     const to = at + by
     if (to < 0 || to >= resume.custom.length) return
@@ -715,78 +855,88 @@ export function ReviewForm({
   ].filter(Boolean).length
 
   return (
-    <div className="flex flex-col gap-3">
-      {/**
-       * Honest counter: real remaining work, never a padded total (docs/11-flow.md rule 5).
-       *
-       * A scan gets no count at all, and that is the point. Confidence scores describe how sure the
-       * *extraction* was about text it was given — they say nothing about whether the text was read
-       * off the page correctly. Printing "8 of 33" next to a banner that says "please check every
-       * field" tells the user two different things, and the smaller number is the one they act on.
-       *
-       * The number is set in the accent at display size because it is the one figure on this screen
-       * worth reading from across a desk. It is the accent's only numeric use in the app.
-       */}
-      <div
-        className={[
-          'flex items-center gap-3.5 rounded-card border p-4',
-          authoring
-            ? 'border-signal-edge bg-signal-wash'
-            : unsure
-              ? 'border-caution/25 bg-caution-wash'
-              : 'border-signal-edge bg-signal-wash',
-        ].join(' ')}
-      >
-        <span
+    /*
+      One provider around the whole form. The three header controls are the only tooltips in here, but
+      they repeat per section — a provider each would be a dozen of them coordinating hover delays with
+      each other, which is how a tooltip ends up flickering as the pointer crosses two buttons.
+    */
+    <TooltipProvider delayDuration={250}>
+      <div className="flex flex-col gap-3">
+        {/**
+         * Honest counter: real remaining work, never a padded total (docs/11-flow.md rule 5).
+         *
+         * A scan gets no count at all, and that is the point. Confidence scores describe how sure the
+         * *extraction* was about text it was given — they say nothing about whether the text was read
+         * off the page correctly. Printing "8 of 33" next to a banner that says "please check every
+         * field" tells the user two different things, and the smaller number is the one they act on.
+         *
+         * The number is set in the accent at display size because it is the one figure on this screen
+         * worth reading from across a desk. It is the accent's only numeric use in the app.
+         */}
+        <div
           className={[
-            'tally text-[34px] font-extrabold leading-none tracking-[-0.03em]',
-            authoring ? 'text-signal' : unsure ? 'text-caution' : 'text-signal',
+            'flex items-center gap-3.5 rounded-card border p-4',
+            authoring
+              ? 'border-signal-edge bg-signal-wash'
+              : unsure
+                ? 'border-caution/25 bg-caution-wash'
+                : 'border-signal-edge bg-signal-wash',
           ].join(' ')}
         >
-          {authoring ? written : unsure ? '?' : flaggedCount}
-        </span>
-        <span className="flex flex-col">
-          <span className="text-[14px] font-semibold text-ink">
-            {authoring
-              ? 'Sections filled in'
-              : unsure
-                ? 'Check everything'
-                : 'To check'}
+          <span
+            className={[
+              'tally text-[34px] font-extrabold leading-none tracking-[-0.03em]',
+              authoring
+                ? 'text-signal'
+                : unsure
+                  ? 'text-caution'
+                  : 'text-signal',
+            ].join(' ')}
+          >
+            {authoring ? written : unsure ? '?' : flaggedCount}
           </span>
-          <span className="text-[13px] leading-snug text-ink-soft">
-            {authoring
-              ? 'of 5, none of them compulsory'
-              : ocr
-                ? 'read from a picture'
-                : total === 0
-                  ? 'we could not tell which fields'
-                  : `of ${total} fields we read`}
+          <span className="flex flex-col">
+            <span className="text-[14px] font-semibold text-ink">
+              {authoring
+                ? 'Sections filled in'
+                : unsure
+                  ? 'Check everything'
+                  : 'To check'}
+            </span>
+            <span className="text-[13px] leading-snug text-ink-soft">
+              {authoring
+                ? 'of 5, none of them compulsory'
+                : ocr
+                  ? 'read from a picture'
+                  : total === 0
+                    ? 'we could not tell which fields'
+                    : `of ${total} fields we read`}
+            </span>
           </span>
-        </span>
-      </div>
+        </div>
 
-      {ocr && (
-        <p className="text-[13px] leading-relaxed text-ink-soft">
-          We know how sure we were about the words we found, but not about
-          whether we read them off the page correctly, so the whole thing needs
-          your eyes, not just the parts we flagged.
-        </p>
-      )}
+        {ocr && (
+          <p className="text-[13px] leading-relaxed text-ink-soft">
+            We know how sure we were about the words we found, but not about
+            whether we read them off the page correctly, so the whole thing
+            needs your eyes, not just the parts we flagged.
+          </p>
+        )}
 
-      {/**
-       * An empty provenance list must never read as "nothing to check". It means the extraction
-       * did not report which fields it was unsure about, so we know *less* than usual — and
-       * saying "0 to check" there would be the opposite of the truth.
-       */}
-      {authoring && (
-        <p className="text-[13px] leading-relaxed text-ink-soft">
-          Nothing here is required except your name. Add what you have, in any
-          order. The document beside the form updates as you type, and you can
-          download it at any point.
-        </p>
-      )}
+        {/**
+         * An empty provenance list must never read as "nothing to check". It means the extraction
+         * did not report which fields it was unsure about, so we know *less* than usual — and
+         * saying "0 to check" there would be the opposite of the truth.
+         */}
+        {authoring && (
+          <p className="text-[13px] leading-relaxed text-ink-soft">
+            Nothing here is required except your name. Add what you have, in any
+            order. The document beside the form updates as you type, and you can
+            download it at any point.
+          </p>
+        )}
 
-      {/*
+        {/*
         Deliberately no paragraph for the `total === 0` case, and this is the removal rather than an
         omission.
 
@@ -802,15 +952,15 @@ export function ReviewForm({
         uncertain in the other.
       */}
 
-      {!authoring && !ocr && flaggedCount === 0 && total > 0 && (
-        <p className="text-[13px] leading-relaxed text-ink-soft">
-          Nothing looked uncertain. Still worth a glance at your dates and job
-          titles, because those are the ones that cost you an interview if they
-          are wrong.
-        </p>
-      )}
+        {!authoring && !ocr && flaggedCount === 0 && total > 0 && (
+          <p className="text-[13px] leading-relaxed text-ink-soft">
+            Nothing looked uncertain. Still worth a glance at your dates and job
+            titles, because those are the ones that cost you an interview if
+            they are wrong.
+          </p>
+        )}
 
-      {/*
+        {/*
         The undo, and it is the reason none of the Remove buttons is red or asks "are you sure?".
 
         CLAUDE.md: nothing here is irreversible, and nothing warns that it is. A confirmation dialog on
@@ -822,309 +972,312 @@ export function ReviewForm({
         section it came from — and a strip that appears where a row just vanished shifts the layout
         under the cursor that is still moving.
       */}
-      {removed !== undefined && (
-        <div
-          role="status"
-          className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-card border border-hairline-strong bg-band px-3.5 py-2.5"
-        >
-          <span className="text-[13px] leading-snug text-ink">
-            Removed <span className="font-semibold">{removed.label}</span>.
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={undoRemove}
-              className="btn btn-quiet bg-ground px-3.5 py-1.5 text-[13px]"
-            >
-              Undo
-            </button>
-            <button
-              type="button"
-              onClick={() => setRemoved(undefined)}
-              aria-label="Dismiss"
-              className="rounded-full px-2 py-1.5 text-[13px] text-ink-soft transition-colors hover:text-ink"
-            >
-              Dismiss
-            </button>
+        {removed !== undefined && (
+          <div
+            role="status"
+            className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-card border border-hairline-strong bg-band px-3.5 py-2.5"
+          >
+            <span className="text-[13px] leading-snug text-ink">
+              Removed <span className="font-semibold">{removed.label}</span>.
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={undoRemove}
+                className="btn btn-quiet bg-ground px-3.5 py-1.5 text-[13px]"
+              >
+                Undo
+              </button>
+              <button
+                type="button"
+                onClick={() => setRemoved(undefined)}
+                aria-label="Dismiss"
+                className="rounded-full px-2 py-1.5 text-[13px] text-ink-soft transition-colors hover:text-ink"
+              >
+                Dismiss
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <Section title="You" flagged={sectionFlagged('basics')} defaultOpen>
-        <Field
-          label="Full name"
-          value={resume.basics.fullName}
-          onChange={(fullName) => setBasics({ fullName })}
-          provenance={index.get('basics.fullName')}
-        />
-        <Field
-          label="What you do"
-          value={resume.basics.headline ?? ''}
-          onChange={(headline) =>
-            setBasics({ headline: headline || undefined })
-          }
-          provenance={index.get('basics.headline')}
-        />
-        <div className="grid gap-4 sm:grid-cols-2">
+        <Section title="You" flagged={sectionFlagged('basics')} defaultOpen>
           <Field
-            label="Email"
-            value={resume.basics.email ?? ''}
-            onChange={(email) => setBasics({ email: email || undefined })}
-            provenance={index.get('basics.email')}
+            label="Full name"
+            value={resume.basics.fullName}
+            onChange={(fullName) => setBasics({ fullName })}
+            provenance={index.get('basics.fullName')}
           />
           <Field
-            label="Phone"
-            value={resume.basics.phone ?? ''}
-            onChange={(phone) => setBasics({ phone: phone || undefined })}
-            provenance={index.get('basics.phone')}
+            label="What you do"
+            value={resume.basics.headline ?? ''}
+            onChange={(headline) =>
+              setBasics({ headline: headline || undefined })
+            }
+            provenance={index.get('basics.headline')}
           />
-        </div>
-        <Field
-          label="Summary"
-          multiline
-          value={resume.basics.summary ?? ''}
-          onChange={(summary) => setBasics({ summary: summary || undefined })}
-          provenance={index.get('basics.summary')}
-        />
-        {/*
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Email"
+              value={resume.basics.email ?? ''}
+              onChange={(email) => setBasics({ email: email || undefined })}
+              provenance={index.get('basics.email')}
+            />
+            <Field
+              label="Phone"
+              value={resume.basics.phone ?? ''}
+              onChange={(phone) => setBasics({ phone: phone || undefined })}
+              provenance={index.get('basics.phone')}
+            />
+          </div>
+          <Field
+            label="Summary"
+            multiline
+            value={resume.basics.summary ?? ''}
+            onChange={(summary) => setBasics({ summary: summary || undefined })}
+            provenance={index.get('basics.summary')}
+          />
+          {/*
           Last in "You", because it is the least load-bearing thing on the screen and the only optional
           one. A photo above the name would suggest the picture matters more than what the CV says.
         */}
-        <PhotoField
-          value={resume.basics.photoUrl}
-          onChange={(photoUrl) => setBasics({ photoUrl })}
-          shown={photoShown}
-          {...(onUseEuropeanLayout === undefined
-            ? {}
-            : { onUseEuropeanLayout })}
-        />
-      </Section>
+          <PhotoField
+            value={resume.basics.photoUrl}
+            onChange={(photoUrl) => setBasics({ photoUrl })}
+            shown={photoShown}
+            {...(onUseEuropeanLayout === undefined
+              ? {}
+              : { onUseEuropeanLayout })}
+          />
+        </Section>
 
-      <Section
-        title="Experience"
-        count={resume.work.length}
-        flagged={sectionFlagged('work')}
-        defaultOpen={authoring || sectionFlagged('work') > 0}
-      >
-        {resume.work.length === 0 && (
-          <p className="text-[13px] leading-relaxed text-ink-soft">
-            {authoring
-              ? 'One entry per job, the most recent first. A job you left, a placement, an apprenticeship or self-employment all count.'
-              : 'We did not find any jobs. That is usually a sign the file was hard to read. check the original, or add them here.'}
-          </p>
-        )}
-        {resume.work.map((item, i) => (
-          <div
-            key={i}
-            className="flex flex-col gap-3 border-l-2 border-l-hairline pl-3.5"
-          >
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field
-                label="Job title"
-                value={item.role}
-                onChange={(role) => setWork(i, { role })}
-                provenance={index.get(`work.${i}.role`)}
-              />
-              <Field
-                label="Employer"
-                value={item.company}
-                onChange={(company) => setWork(i, { company })}
-                provenance={index.get(`work.${i}.company`)}
-              />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {/*
+        <Section
+          title="Experience"
+          count={resume.work.length}
+          flagged={sectionFlagged('work')}
+          defaultOpen={authoring || sectionFlagged('work') > 0}
+        >
+          {resume.work.length === 0 && (
+            <p className="text-[13px] leading-relaxed text-ink-soft">
+              {authoring
+                ? 'One entry per job, the most recent first. A job you left, a placement, an apprenticeship or self-employment all count.'
+                : 'We did not find any jobs. That is usually a sign the file was hard to read. check the original, or add them here.'}
+            </p>
+          )}
+          {resume.work.map((item, i) => (
+            <div
+              key={i}
+              className="flex flex-col gap-3 border-l-2 border-l-hairline pl-3.5"
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field
+                  label="Job title"
+                  value={item.role}
+                  onChange={(role) => setWork(i, { role })}
+                  provenance={index.get(`work.${i}.role`)}
+                />
+                <Field
+                  label="Employer"
+                  value={item.company}
+                  onChange={(company) => setWork(i, { company })}
+                  provenance={index.get(`work.${i}.company`)}
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {/*
                 Picked, not typed as a format. The label no longer teaches ISO-8601 — "Started" is the
                 question, and `DateField` handles the shape.
               */}
-              <DateField
-                label="Started"
-                value={item.startDate ?? ''}
-                onChange={(startDate) =>
-                  setWork(i, { startDate: startDate || undefined })
-                }
-                provenance={index.get(`work.${i}.startDate`)}
-              />
-              <DateField
-                label="Ended"
-                value={item.endDate ?? ''}
-                onChange={(endDate) => setWork(i, { endDate: endDate || null })}
-                provenance={index.get(`work.${i}.endDate`)}
-                openEndedLabel="Still here"
-              />
-            </div>
-            <p className="text-meta text-ink-soft">
-              Reads as: {formatRange(item.startDate, item.endDate) || '—'}
-            </p>
+                <DateField
+                  label="Started"
+                  value={item.startDate ?? ''}
+                  onChange={(startDate) =>
+                    setWork(i, { startDate: startDate || undefined })
+                  }
+                  provenance={index.get(`work.${i}.startDate`)}
+                />
+                <DateField
+                  label="Ended"
+                  value={item.endDate ?? ''}
+                  onChange={(endDate) =>
+                    setWork(i, { endDate: endDate || null })
+                  }
+                  provenance={index.get(`work.${i}.endDate`)}
+                  openEndedLabel="Still here"
+                />
+              </div>
+              <p className="text-meta text-ink-soft">
+                Reads as: {formatRange(item.startDate, item.endDate) || '—'}
+              </p>
 
-            {/*
+              {/*
               The bullets, editable. They used to be a count — "4 bullets" — which meant the lines a
               recruiter actually reads were the one part of the CV the person could not touch, unless
               they accepted a machine's rewrite of them. That inverted the product: the wording pass is
               a suggestion, and typing your own sentence should not be the harder path.
             */}
-            <div className="flex flex-col gap-2">
-              <span className="text-[13px] font-semibold text-ink">
-                What you did here
-              </span>
-              {item.highlights.length === 0 && (
-                <p className="text-meta leading-relaxed text-ink-soft">
-                  Nothing here yet. One line per thing you did: what you were
-                  responsible for, and the size of it.
-                </p>
-              )}
-              {item.highlights.map((text, b) => (
-                <LineBubble
-                  key={b}
-                  removeLabel={`Remove bullet ${b + 1}`}
-                  onRemove={() => removeBullet(i, b)}
-                >
-                  <AutoTextarea
-                    value={text}
-                    ariaLabel={`Bullet ${b + 1} for ${item.role || 'this job'}`}
-                    onChange={(next) =>
-                      setHighlights(
-                        i,
-                        item.highlights.map((line, at) =>
-                          at === b ? next : line,
-                        ),
-                      )
-                    }
-                    className={fieldClass(`work.${i}.highlights.${b}`)}
-                  />
-                </LineBubble>
-              ))}
-              <AddRow label="Add a line" onClick={() => addBullet(i)} />
+              <div className="flex flex-col gap-2">
+                <span className="text-[13px] font-semibold text-ink">
+                  What you did here
+                </span>
+                {item.highlights.length === 0 && (
+                  <p className="text-meta leading-relaxed text-ink-soft">
+                    Nothing here yet. One line per thing you did: what you were
+                    responsible for, and the size of it.
+                  </p>
+                )}
+                {item.highlights.map((text, b) => (
+                  <LineBubble
+                    key={b}
+                    removeLabel={`Remove bullet ${b + 1}`}
+                    onRemove={() => removeBullet(i, b)}
+                  >
+                    <AutoTextarea
+                      value={text}
+                      ariaLabel={`Bullet ${b + 1} for ${item.role || 'this job'}`}
+                      onChange={(next) =>
+                        setHighlights(
+                          i,
+                          item.highlights.map((line, at) =>
+                            at === b ? next : line,
+                          ),
+                        )
+                      }
+                      className={fieldClass(`work.${i}.highlights.${b}`)}
+                    />
+                  </LineBubble>
+                ))}
+                <AddRow label="Add a line" onClick={() => addBullet(i)} />
+              </div>
+
+              <RemoveRow
+                label={`Remove ${item.role || 'this job'}`}
+                onClick={() =>
+                  removeRow(
+                    'work',
+                    i,
+                    [item.role, item.company].filter(Boolean).join(', ') ||
+                      'that job',
+                  )
+                }
+              />
             </div>
+          ))}
+          <AddRow
+            label="Add a job"
+            onClick={() =>
+              addRow('work', {
+                company: '',
+                role: '',
+                endDate: null,
+                highlights: [],
+                tech: [],
+              })
+            }
+          />
+        </Section>
 
-            <RemoveRow
-              label={`Remove ${item.role || 'this job'}`}
-              onClick={() =>
-                removeRow(
-                  'work',
-                  i,
-                  [item.role, item.company].filter(Boolean).join(', ') ||
-                    'that job',
-                )
-              }
-            />
-          </div>
-        ))}
-        <AddRow
-          label="Add a job"
-          onClick={() =>
-            addRow('work', {
-              company: '',
-              role: '',
-              endDate: null,
-              highlights: [],
-              tech: [],
-            })
-          }
-        />
-      </Section>
-
-      <Section
-        title="Education"
-        count={resume.education.length}
-        flagged={sectionFlagged('education')}
-        defaultOpen={authoring}
-      >
-        {/*
+        <Section
+          title="Education"
+          count={resume.education.length}
+          flagged={sectionFlagged('education')}
+          defaultOpen={authoring}
+        >
+          {/*
           These were four read-only paragraphs. Somebody whose institution came out of a two-column PDF
           as "Kø benhavns Professionshøjskole" could see the mistake, could see the flag telling them to
           check it, and had nowhere to fix it — which turns the honesty mechanism into a taunt.
         */}
-        {resume.education.length === 0 && (
-          <p className="text-[13px] leading-relaxed text-ink-soft">
-            {authoring
-              ? 'Whatever you have. A course or a certificate counts, and so does an apprenticeship. Leave it empty if there is nothing to put here.'
-              : 'We did not find any. Add what you have: a course or a certificate counts, and so does an apprenticeship.'}
-          </p>
-        )}
-        {resume.education.map((item, i) => (
-          <div
-            key={i}
-            className="flex flex-col gap-3 border-l-2 border-l-hairline pl-3.5"
-          >
-            <Field
-              label="School, college or provider"
-              value={item.institution}
-              onChange={(institution) => setEducation(i, { institution })}
-              provenance={index.get(`education.${i}.institution`)}
-            />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field
-                label="Qualification"
-                value={item.degree ?? ''}
-                onChange={(degree) =>
-                  setEducation(i, { degree: degree || undefined })
-                }
-                provenance={index.get(`education.${i}.degree`)}
-              />
-              <Field
-                label="Subject"
-                value={item.field ?? ''}
-                onChange={(field) =>
-                  setEducation(i, { field: field || undefined })
-                }
-                provenance={index.get(`education.${i}.field`)}
-              />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <DateField
-                label="Started"
-                value={item.startDate ?? ''}
-                onChange={(startDate) =>
-                  setEducation(i, { startDate: startDate || undefined })
-                }
-                provenance={index.get(`education.${i}.startDate`)}
-              />
-              <DateField
-                label="Finished"
-                value={item.endDate ?? ''}
-                onChange={(endDate) =>
-                  setEducation(i, { endDate: endDate || null })
-                }
-                provenance={index.get(`education.${i}.endDate`)}
-                openEndedLabel="Still studying"
-              />
-            </div>
-            <p className="text-meta text-ink-soft">
-              Reads as: {formatRange(item.startDate, item.endDate) || '—'}
+          {resume.education.length === 0 && (
+            <p className="text-[13px] leading-relaxed text-ink-soft">
+              {authoring
+                ? 'Whatever you have. A course or a certificate counts, and so does an apprenticeship. Leave it empty if there is nothing to put here.'
+                : 'We did not find any. Add what you have: a course or a certificate counts, and so does an apprenticeship.'}
             </p>
-            <RemoveRow
-              label={`Remove ${item.institution || 'this entry'}`}
-              onClick={() =>
-                removeRow(
-                  'education',
-                  i,
-                  [item.degree, item.institution].filter(Boolean).join(', ') ||
-                    'that entry',
-                )
-              }
-            />
-          </div>
-        ))}
-        <AddRow
-          label="Add a qualification"
-          onClick={() =>
-            addRow('education', {
-              institution: '',
-              endDate: null,
-              highlights: [],
-            })
-          }
-        />
-      </Section>
+          )}
+          {resume.education.map((item, i) => (
+            <div
+              key={i}
+              className="flex flex-col gap-3 border-l-2 border-l-hairline pl-3.5"
+            >
+              <Field
+                label="School, college or provider"
+                value={item.institution}
+                onChange={(institution) => setEducation(i, { institution })}
+                provenance={index.get(`education.${i}.institution`)}
+              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field
+                  label="Qualification"
+                  value={item.degree ?? ''}
+                  onChange={(degree) =>
+                    setEducation(i, { degree: degree || undefined })
+                  }
+                  provenance={index.get(`education.${i}.degree`)}
+                />
+                <Field
+                  label="Subject"
+                  value={item.field ?? ''}
+                  onChange={(field) =>
+                    setEducation(i, { field: field || undefined })
+                  }
+                  provenance={index.get(`education.${i}.field`)}
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <DateField
+                  label="Started"
+                  value={item.startDate ?? ''}
+                  onChange={(startDate) =>
+                    setEducation(i, { startDate: startDate || undefined })
+                  }
+                  provenance={index.get(`education.${i}.startDate`)}
+                />
+                <DateField
+                  label="Finished"
+                  value={item.endDate ?? ''}
+                  onChange={(endDate) =>
+                    setEducation(i, { endDate: endDate || null })
+                  }
+                  provenance={index.get(`education.${i}.endDate`)}
+                  openEndedLabel="Still studying"
+                />
+              </div>
+              <p className="text-meta text-ink-soft">
+                Reads as: {formatRange(item.startDate, item.endDate) || '—'}
+              </p>
+              <RemoveRow
+                label={`Remove ${item.institution || 'this entry'}`}
+                onClick={() =>
+                  removeRow(
+                    'education',
+                    i,
+                    [item.degree, item.institution]
+                      .filter(Boolean)
+                      .join(', ') || 'that entry',
+                  )
+                }
+              />
+            </div>
+          ))}
+          <AddRow
+            label="Add a qualification"
+            onClick={() =>
+              addRow('education', {
+                institution: '',
+                endDate: null,
+                highlights: [],
+              })
+            }
+          />
+        </Section>
 
-      <Section
-        title="Skills"
-        count={resume.skills.reduce((n, g) => n + g.items.length, 0)}
-        flagged={sectionFlagged('skills')}
-        defaultOpen={authoring}
-      >
-        {/*
+        <Section
+          title="Skills"
+          count={resume.skills.reduce((n, g) => n + g.items.length, 0)}
+          flagged={sectionFlagged('skills')}
+          defaultOpen={authoring}
+        >
+          {/*
           Comma-separated, one field per group, rather than a chip editor.
 
           Chips look better and are worse here: adding one means click, type, press Enter, and getting a
@@ -1135,60 +1288,60 @@ export function ReviewForm({
           Splitting happens on the way in, so the field never fights the person typing: a lone comma
           mid-sentence would otherwise vanish an item as they went.
         */}
-        {resume.skills.length === 0 && (
-          <p className="text-[13px] leading-relaxed text-ink-soft">
-            {authoring
-              ? 'Group them however your trade does. The headings are yours, not a fixed list. "Clinical", "Machines I have run", "Languages".'
-              : 'We did not find any. Group them however your trade does. The headings are yours, not a fixed list.'}
-          </p>
-        )}
-        {resume.skills.map((group, i) => (
-          <div
-            key={i}
-            className="flex flex-col gap-3 border-l-2 border-l-hairline pl-3.5"
-          >
-            <Field
-              label="Heading"
-              value={group.category}
-              onChange={(category) => setSkillGroup(i, { category })}
-              provenance={index.get(`skills.${i}.category`)}
-            />
-            <label className="flex flex-col gap-1.5">
-              <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
-                What goes under it
-                <Flag entry={index.get(`skills.${i}.items`)} />
-              </span>
-              <AutoTextarea
-                value={group.items.join(', ')}
-                onChange={(next) =>
-                  setSkillGroup(i, {
-                    items: next
-                      .split(',')
-                      .map((item) => item.trim())
-                      .filter((item) => item !== ''),
-                  })
-                }
-                className={fieldClass(`skills.${i}.items`)}
+          {resume.skills.length === 0 && (
+            <p className="text-[13px] leading-relaxed text-ink-soft">
+              {authoring
+                ? 'Group them however your trade does. The headings are yours, not a fixed list. "Clinical", "Machines I have run", "Languages".'
+                : 'We did not find any. Group them however your trade does. The headings are yours, not a fixed list.'}
+            </p>
+          )}
+          {resume.skills.map((group, i) => (
+            <div
+              key={i}
+              className="flex flex-col gap-3 border-l-2 border-l-hairline pl-3.5"
+            >
+              <Field
+                label="Heading"
+                value={group.category}
+                onChange={(category) => setSkillGroup(i, { category })}
+                provenance={index.get(`skills.${i}.category`)}
               />
-              <span className="text-meta text-ink-soft">
-                Separated by commas.
-              </span>
-            </label>
-            <RemoveRow
-              label={`Remove the ${group.category || 'unnamed'} group`}
-              onClick={() =>
-                removeRow('skills', i, group.category || 'that group')
-              }
-            />
-          </div>
-        ))}
-        <AddRow
-          label="Add a group"
-          onClick={() => addRow('skills', { category: '', items: [] })}
-        />
-      </Section>
+              <label className="flex flex-col gap-1.5">
+                <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
+                  What goes under it
+                  <Flag entry={index.get(`skills.${i}.items`)} />
+                </span>
+                <AutoTextarea
+                  value={group.items.join(', ')}
+                  onChange={(next) =>
+                    setSkillGroup(i, {
+                      items: next
+                        .split(',')
+                        .map((item) => item.trim())
+                        .filter((item) => item !== ''),
+                    })
+                  }
+                  className={fieldClass(`skills.${i}.items`)}
+                />
+                <span className="text-meta text-ink-soft">
+                  Separated by commas.
+                </span>
+              </label>
+              <RemoveRow
+                label={`Remove the ${group.category || 'unnamed'} group`}
+                onClick={() =>
+                  removeRow('skills', i, group.category || 'that group')
+                }
+              />
+            </div>
+          ))}
+          <AddRow
+            label="Add a group"
+            onClick={() => addRow('skills', { category: '', items: [] })}
+          />
+        </Section>
 
-      {/*
+        {/*
         The dynamic sections — whatever this CV carries that the fixed groups do not.
 
         A Danish CV arrives with KURSER and REFERENCER; others bring volunteering, awards, memberships,
@@ -1201,109 +1354,136 @@ export function ReviewForm({
         list of "allowed" section kinds — the headings are the candidate's, not ours, exactly like the
         skills groups above.
       */}
-      {resume.custom.map((section, i) => (
-        <Section
-          key={i}
-          title={section.title === '' ? 'Untitled section' : section.title}
-          count={section.items.length}
-          flagged={sectionFlagged(`custom.${i}`)}
-          defaultOpen={false}
+        {resume.custom.map((section, i) =>
           /*
+          A spacer is not a section with nothing in it — it has no heading, no lines, and nothing to
+          check — so it gets a row of its own rather than a `Section` with its innards suppressed. It
+          keeps the same three header controls, because the reason to move or remove one is the same.
+        */
+          isSpacer(section) ? (
+            <SpacerRow
+              key={i}
+              space={section.space}
+              onChange={(space) => setCustomSection(i, { space })}
+              actions={sectionActions(i, 'this space')}
+            />
+          ) : (
+            <Section
+              key={i}
+              title={section.title === '' ? 'Untitled section' : section.title}
+              count={section.items.length}
+              flagged={sectionFlagged(`custom.${i}`)}
+              defaultOpen={false}
+              /*
             Reorder and remove, reachable without opening the section — Edd's ask, and the reason is
             the same one behind the count beside the title: a decision about a section should not cost
             an expand, a scroll to the bottom, and a collapse. The removal here does exactly what the
             "Remove the … section" row inside does; it is the same action at the place you are already
             looking when you decide to take it.
           */
-          actions={
-            <>
-              <HeaderButton
-                label={`Move ${section.title || 'this section'} up`}
-                disabled={i === 0}
-                onClick={() => moveCustomSection(i, -1)}
-              >
-                <HeaderIcon shape="up" />
-              </HeaderButton>
-              <HeaderButton
-                label={`Move ${section.title || 'this section'} down`}
-                disabled={i === resume.custom.length - 1}
-                onClick={() => moveCustomSection(i, 1)}
-              >
-                <HeaderIcon shape="down" />
-              </HeaderButton>
-              <HeaderButton
-                label={`Remove the ${section.title || 'untitled'} section`}
-                onClick={() => removeCustomSection(i)}
-              >
-                <HeaderIcon shape="bin" />
-              </HeaderButton>
-            </>
-          }
-        >
-          <Field
-            label="Section heading"
-            value={section.title}
-            onChange={(title) => setCustomSection(i, { title })}
-            provenance={index.get(`custom.${i}.title`)}
-          />
-          {/*
+              actions={sectionActions(i, section.title || 'this section')}
+            >
+              <Field
+                label="Section heading"
+                value={section.title}
+                onChange={(title) => setCustomSection(i, { title })}
+                provenance={index.get(`custom.${i}.title`)}
+              />
+              {/*
             The remove control here was a bare "✕" character where every other one in the form is the
             same drawn bin — two icon families for one action, and the odd one out was the one sitting
             closest to the text. Same bubble, same button, same place: learned once, true everywhere.
           */}
-          {section.items.map((item, j) => (
-            <LineBubble
-              key={j}
-              removeLabel={`Remove line ${j + 1} of ${section.title || 'this section'}`}
-              onRemove={() => removeCustomItem(i, j)}
-            >
-              <label className="flex flex-col gap-1.5">
-                <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
-                  Line {j + 1}
-                  <Flag entry={index.get(`custom.${i}.items.${j}`)} />
-                </span>
-                <AutoTextarea
-                  value={item}
-                  onChange={(next) => setCustomItem(i, j, next)}
-                  className={fieldClass(`custom.${i}.items.${j}`)}
-                />
-              </label>
-            </LineBubble>
-          ))}
-          <AddRow label="Add a line" onClick={() => addCustomItem(i)} />
-          <RemoveRow
-            label={`Remove the ${section.title || 'untitled'} section`}
-            onClick={() => removeCustomSection(i)}
-          />
-        </Section>
-      ))}
+              {section.items.map((item, j) => (
+                <LineBubble
+                  key={j}
+                  removeLabel={`Remove line ${j + 1} of ${section.title || 'this section'}`}
+                  onRemove={() => removeCustomItem(i, j)}
+                >
+                  <label className="flex flex-col gap-1.5">
+                    <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
+                      Line {j + 1}
+                      <Flag entry={index.get(`custom.${i}.items.${j}`)} />
+                    </span>
+                    <AutoTextarea
+                      value={item}
+                      onChange={(next) => setCustomItem(i, j, next)}
+                      className={fieldClass(`custom.${i}.items.${j}`)}
+                    />
+                  </label>
+                </LineBubble>
+              ))}
+              <AddRow label="Add a line" onClick={() => addCustomItem(i)} />
+              <RemoveRow
+                label={`Remove the ${section.title || 'untitled'} section`}
+                onClick={() => removeCustomSection(i)}
+              />
+            </Section>
+          ),
+        )}
 
-      {/*
+        {/*
         And a way to add a section that was never in the file at all — the person is the source of
         truth about their own life, and "Volunteering" missing from the upload is not a reason it
         cannot be on the document (docs/06: their own facts are not fabrication).
       */}
-      <button
-        type="button"
-        onClick={() =>
-          onChange({
-            ...resume,
-            custom: [...resume.custom, { title: '', items: [''] }],
-          })
-        }
-        className="card flex w-full items-center justify-center gap-2 px-4 py-3 text-[14px] font-semibold text-signal transition-colors hover:bg-signal-wash"
-      >
-        + Add a section
-        <span className="text-[12px] font-normal text-ink-soft">
-          courses, volunteering, awards, references…
-        </span>
-      </button>
+        {/*
+        Stacked, not side by side. They were a row, and the row was wrong for the place it lives: this
+        panel is resizable and its usual width is around 400px, where two buttons carrying a label and
+        a description each wrap "+ Add a section" onto three lines. A media query cannot see a panel's
+        width, only the window's, so the row looked right at every breakpoint and broken in the app.
+      */}
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              onChange({
+                ...resume,
+                custom: [...resume.custom, { title: '', items: [''] }],
+              })
+            }
+            className="card flex w-full items-center justify-center gap-2 px-4 py-3 text-[14px] font-semibold text-signal transition-colors hover:bg-signal-wash"
+          >
+            + Add a section
+            <span className="text-[12px] font-normal text-ink-soft">
+              courses, volunteering, awards…
+            </span>
+          </button>
+          {/*
+          Room, as a thing you add rather than a setting you find.
 
-      <p className="text-meta text-ink-soft">
-        Marked <span className="font-semibold text-caution">check</span> means
-        we were under {Math.round(CONFIDENCE_REVIEW_THRESHOLD * 100)}% sure we
-        read it correctly. Hover one to see the line it came from.
-      </p>
-    </div>
+          It goes on the end and is then moved into place, which is the same gesture as adding a
+          section — the alternative was a "space above" control on every section, and that is eleven
+          new fields to express what one movable object expresses once. `items` stays an empty array
+          rather than being absent: the schema gives it a default, and a spacer that later loses its
+          `space` should degrade into an empty section, not an invalid one.
+        */}
+          <button
+            type="button"
+            onClick={() =>
+              onChange({
+                ...resume,
+                custom: [
+                  ...resume.custom,
+                  { title: '', items: [], space: DEFAULT_SPACE },
+                ],
+              })
+            }
+            className="card flex w-full items-center justify-center gap-2 px-4 py-3 text-[14px] font-semibold text-signal transition-colors hover:bg-signal-wash"
+          >
+            + Add space
+            <span className="text-[12px] font-normal text-ink-soft">
+              between two sections
+            </span>
+          </button>
+        </div>
+
+        <p className="text-meta text-ink-soft">
+          Marked <span className="font-semibold text-caution">check</span> means
+          we were under {Math.round(CONFIDENCE_REVIEW_THRESHOLD * 100)}% sure we
+          read it correctly. Hover one to see the line it came from.
+        </p>
+      </div>
+    </TooltipProvider>
   )
 }

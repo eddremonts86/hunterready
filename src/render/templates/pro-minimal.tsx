@@ -12,6 +12,8 @@ import { Fragment } from 'react'
 import { Document, Image, Page } from '@/lib/pdf-primitives'
 import { PdfcnThemeProvider } from '@/components/pdf/theme-provider'
 import type { PdfcnTheme } from '@/components/pdf/theme-types'
+import { Spacer } from './spacer'
+import { isSpacer } from '@/schema/resume'
 import type { Resume, WorkItem } from '@/schema/resume'
 import {
   formatLocation,
@@ -680,37 +682,42 @@ function ProMinimalBody({
         </>
       )}
 
-      {resume.custom.map((section, i) => (
-        <Fragment key={i}>
-          <ProMinHeading
-            title={section.title}
-            theme={theme}
-            variant={variant}
-          />
-          {section.items.map((item, j) => (
-            <div
-              key={j}
-              style={{
-                display: 'flex',
-                flexDirection: 'row',
-                gap: 6,
-                marginTop: 2,
-              }}
-            >
+      {resume.custom.map((section, i) =>
+        /* A spacer draws room and no words at all — see templates/spacer.tsx. */
+        isSpacer(section) ? (
+          <Spacer key={i} space={section.space} />
+        ) : (
+          <Fragment key={i}>
+            <ProMinHeading
+              title={section.title}
+              theme={theme}
+              variant={variant}
+            />
+            {section.items.map((item, j) => (
               <div
+                key={j}
                 style={{
-                  color: style.bulletsInAccent
-                    ? accent
-                    : theme.colors.mutedForeground,
+                  display: 'flex',
+                  flexDirection: 'row',
+                  gap: 6,
+                  marginTop: 2,
                 }}
               >
-                •
+                <div
+                  style={{
+                    color: style.bulletsInAccent
+                      ? accent
+                      : theme.colors.mutedForeground,
+                  }}
+                >
+                  •
+                </div>
+                <div style={{ flexGrow: 1 }}>{item}</div>
               </div>
-              <div style={{ flexGrow: 1 }}>{item}</div>
-            </div>
-          ))}
-        </Fragment>
-      ))}
+            ))}
+          </Fragment>
+        ),
+      )}
     </div>
   )
 }

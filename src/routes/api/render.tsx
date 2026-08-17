@@ -20,6 +20,7 @@ import { errorEvent } from '@/lib/log'
 import { DEFAULT_DESIGN_ID, findDesign, tierOf } from '@/render/designs'
 import { Resume } from '@/schema/resume'
 import { renderResume } from '@/render/render'
+import { renderResumeHtml } from '@/render/html'
 import { REGISTERED_FAMILIES } from '@/render/fonts'
 import { normalizeHex } from '@/render/themes/custom'
 import { docxFilename, renderDocx } from '@/render/docx/docx'
@@ -181,8 +182,32 @@ function docxResponse(bytes: Uint8Array, filename: string) {
 }
 
 /** Unknown values fall back to PDF, for the same reason an unknown template does. */
-function wantsDocx(url: URL): boolean {
-  return url.searchParams.get('format') === 'docx'
+/**
+ * Which of the three files was asked for. Anything unrecognised is a PDF, which is the default the
+ * whole product is built around and the safe answer to a query string somebody mistyped.
+ */
+type Format = 'pdf' | 'docx' | 'html'
+
+function wantsFormat(url: URL): Format {
+  const asked = url.searchParams.get('format')
+  return asked === 'docx' || asked === 'html' ? asked : 'pdf'
+}
+
+/**
+ * The HTML export is a whole document rather than a fragment, so it is served as one.
+ *
+ * `content-disposition: attachment` even though a browser could display it: the person pressed
+ * Download, and a CV that opens in the current tab has replaced the workspace they were editing it in.
+ * Same `no-store` as the other two — a CV is personal data and no intermediary should hold a copy.
+ */
+function htmlResponse(html: string, filename: string, download: boolean) {
+  return new Response(html, {
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'content-disposition': `${download ? 'attachment' : 'inline'}; filename="${filename}"`,
+      'cache-control': 'no-store, no-cache, must-revalidate, private',
+    },
+  })
 }
 
 export const Route = createFileRoute('/api/render')({
@@ -211,8 +236,17 @@ export const Route = createFileRoute('/api/render')({
         const refusal = await refuseUnlessEntitled(request, selection)
         if (refusal !== undefined) return refusal
 
-        if (wantsDocx(url)) {
+        const format = wantsFormat(url)
+        if (format === 'docx') {
           return docxResponse(renderDocx(resume), docxFilename(resume))
+        }
+        if (format === 'html') {
+          const page = await renderResumeHtml(resume, selection)
+          return htmlResponse(
+            page.html,
+            page.filename,
+            url.searchParams.get('download') === '1',
+          )
         }
 
         const { bytes, filename } = await renderResume(resume, selection)
@@ -282,11 +316,16 @@ export const Route = createFileRoute('/api/render')({
          * response, log or error.
          */
         try {
-          if (wantsDocx(url)) {
+          const format = wantsFormat(url)
+          if (format === 'docx') {
             return docxResponse(
               renderDocx(parsed.data),
               docxFilename(parsed.data),
             )
+          }
+          if (format === 'html') {
+            const page = await renderResumeHtml(parsed.data, selection)
+            return htmlResponse(page.html, page.filename, true)
           }
 
           const { bytes, filename } = await renderResume(parsed.data, selection)
@@ -303,7 +342,7 @@ export const Route = createFileRoute('/api/render')({
            * and `code` is on the log's allowlist for exactly this kind of value.
            */
           errorEvent('render.failed', {
-            format: wantsDocx(url) ? 'docx' : 'pdf',
+            format: wantsFormat(url),
             code: error instanceof Error ? error.constructor.name : 'unknown',
           })
           return Response.json(

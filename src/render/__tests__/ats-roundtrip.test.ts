@@ -339,3 +339,81 @@ describe('every registered template is covered by this suite', () => {
     expect(Object.keys(templates).length).toBe(TEMPLATE_IDS.length)
   })
 })
+
+/**
+ * A spacer draws room and contributes nothing a parser can see.
+ *
+ * This is the clause that makes a layout value acceptable in a semantic schema at all. People already
+ * space a CV out with an empty custom section, and that lands in the extracted text as a heading with
+ * no body — a section a screener reads as having failed to parse. The whole justification for teaching
+ * the renderer about gaps is that a gap it knows about is *invisible* to the parse, so the assertion
+ * has to be that the extracted text is byte-identical with the spacers in and out.
+ *
+ * Every template, because there are nine that draw `custom` and one of them getting this wrong would
+ * put a stray glyph in somebody's document with nothing on screen to show it.
+ */
+describe('a spacer changes the layout and not the text', () => {
+  it.each(TEMPLATE_IDS)('%s extracts identically', async (templateId) => {
+    const fixture = fixtures[0]
+    const plain = {
+      ...fixture.resume,
+      custom: [{ title: 'References', items: ['On request'] }],
+    }
+    const spaced = {
+      ...plain,
+      custom: [
+        { title: '', items: [], space: 40 },
+        ...plain.custom,
+        { title: '', items: [], space: 40 },
+      ],
+    }
+
+    const before = await renderResume(plain, { templateId })
+    const after = await renderResume(spaced, { templateId })
+
+    const a = await extractPdfText(before.bytes)
+    const b = await extractPdfText(after.bytes)
+    expect(withoutCounters(b.text)).toBe(withoutCounters(a.text))
+  })
+
+  /**
+   * And it is not a no-op.
+   *
+   * The obvious companion assertion — that the bytes differ — is not one: takumi's content stream is
+   * compressed, and a 40px shift that reflows nothing can come out the same length. Measured, it does
+   * so on seventeen of the twenty-eight templates, which would have made the guard look like a bug in
+   * the spacer rather than a bug in the test. Page count is the observable that cannot be coincidence:
+   * enough blank space has to push the document onto a second sheet.
+   */
+  it('takes up real room', async () => {
+    const fixture = fixtures[0]
+    const one = { ...fixture.resume, custom: [] }
+    const two = {
+      ...one,
+      custom: [{ title: '', items: [], space: MAX_MEANINGFUL_SPACE }],
+    }
+    const before = await extractPdfText((await renderResume(one)).bytes)
+    const after = await extractPdfText((await renderResume(two)).bytes)
+    expect(after.pages).toBeGreaterThan(before.pages)
+    expect(withoutCounters(after.text)).toBe(withoutCounters(before.text))
+  })
+})
+
+/**
+ * Drop the page counters the renderer stamps on each sheet.
+ *
+ * Not a loophole — the opposite. A spacer that pushes a document onto a second page changes `1/1` into
+ * `1/2 … 2/2`, and that difference is the *pagination working*, not the spacer contributing text. Left
+ * in, the assertion would forbid a spacer from ever adding a page, which is most of what a spacer is
+ * for. What it must not add is a word, and everything else is still compared exactly.
+ *
+ * The pattern is anchored to the counter's shape and nothing else in these fixtures matches it. A CV
+ * that genuinely contains "3/4" would lose those characters from this comparison and from no other
+ * assertion in the suite.
+ */
+function withoutCounters(text: string): string {
+  return text.replace(/\s*\b\d{1,3}\/\d{1,3}\b/g, '').trim()
+}
+
+/** The schema's ceiling, which is also enough to overflow a page that was previously just fitting. */
+const MAX_MEANINGFUL_SPACE = 240

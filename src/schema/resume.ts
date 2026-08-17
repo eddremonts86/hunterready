@@ -149,11 +149,51 @@ export const LanguageItem = z.object({
   raw: z.string().optional(),
 })
 
-/** The escape hatch. Real CVs have "Speaking", "Patents", "Military service". */
+/**
+ * The escape hatch. Real CVs have "Speaking", "Patents", "Military service".
+ *
+ * `space` makes one of these a **spacer** instead: blank room between two sections, and nothing else.
+ * It sits here rather than in a structure of its own because the thing being asked for is positional —
+ * "leave a gap *here*" — and `custom` is already the ordered list the person arranges. A parallel list
+ * of gaps addressed by index would be a second ordering to keep in step with the first.
+ *
+ * ## Why this is not a schemaVersion bump
+ *
+ * CLAUDE.md requires one for a change to the contract, and this is not one: the field is optional, so
+ * every document ever written still parses, unchanged, into the same value it did before. Nothing to
+ * migrate — there is no old shape, only a shape that says less. A bump would signal a break to every
+ * reader of `schemaVersion` and there is nothing for them to do about it.
+ *
+ * ## And why a layout value is allowed in a semantic schema
+ *
+ * It is the one exception and it should stay the one. Everything else here is a fact about the person;
+ * this is a fact about the page. The justification is that the alternative is worse: people space a CV
+ * out with empty custom sections titled " " today, and that lands in the ATS text as a blank heading.
+ * A spacer that the renderer knows about draws nothing, extracts as nothing, and cannot be mistaken for
+ * a section that failed to parse.
+ */
 export const CustomSection = z.object({
   title: z.string(),
   items: z.array(z.string()).default([]),
+  /**
+   * Blank space above and below, in pixels, when this entry is a spacer rather than a section.
+   *
+   * Present means spacer. 25 each side by default, which is the gap Edd asked for; 0 is legal and
+   * means "a spacer the reader has closed up" rather than "not a spacer", which is what `undefined`
+   * says. Capped because a 900px gap is a blank page nobody meant to send.
+   */
+  space: z.number().int().min(0).max(240).optional(),
 })
+
+/** Spacers draw room, never words. One predicate, so nine templates cannot each decide differently. */
+export function isSpacer(section: {
+  space?: number
+}): section is { space: number } {
+  return typeof section.space === 'number'
+}
+
+/** What a new spacer starts at — 25px above and below (Edd's number). */
+export const DEFAULT_SPACE = 25
 
 export const Resume = z.object({
   schemaVersion: z.literal('1.0'),

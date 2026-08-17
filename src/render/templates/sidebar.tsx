@@ -32,6 +32,8 @@ import { Fragment } from 'react'
 import { Document, Image, Page } from '@/lib/pdf-primitives'
 import { PdfcnThemeProvider } from '@/components/pdf/theme-provider'
 import type { PdfcnTheme } from '@/components/pdf/theme-types'
+import { Spacer } from './spacer'
+import { isSpacer } from '@/schema/resume'
 import type { Resume, WorkItem } from '@/schema/resume'
 import {
   formatLocation,
@@ -379,14 +381,19 @@ export function SidebarBody({
           </>
         )}
 
-        {resume.custom.map((section, i) => (
-          <Fragment key={i}>
-            <MainHeading title={section.title} theme={theme} />
-            {section.items.map((item, j) => (
-              <Bullet key={j} text={item} theme={theme} />
-            ))}
-          </Fragment>
-        ))}
+        {resume.custom.map((section, i) =>
+          /* A spacer draws room and no words at all — see templates/spacer.tsx. */
+          isSpacer(section) ? (
+            <Spacer key={i} space={section.space} />
+          ) : (
+            <Fragment key={i}>
+              <MainHeading title={section.title} theme={theme} />
+              {section.items.map((item, j) => (
+                <Bullet key={j} text={item} theme={theme} />
+              ))}
+            </Fragment>
+          ),
+        )}
       </div>
 
       {/* ── The colored column: identity and scannables. Last in DOM, left on the page ── */}
