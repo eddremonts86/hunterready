@@ -699,6 +699,63 @@ body {
     position: relative;
     z-index: 1;
   }
+
+  /**
+   * Two grounds that give the page a rhythm without giving it a second hue.
+   *
+   * The page had four grounds and used two of them for four of its sections, so the middle of the
+   * scroll was white, grey, white, grey — a beat with no accent in it. **One Accent still holds**:
+   * everything below is Signal or a neutral, and no new brand colour enters. Where actual colour
+   * belongs is the design catalogue, and that colour is the documents' own ink.
+   *
+   * `.band-fade` is the flat Band section with somewhere to go: it starts on Band and resolves to
+   * Ground, so a section hands off to the next one instead of butting against it.
+   */
+  .band-fade {
+    background: linear-gradient(
+      180deg,
+      var(--color-band) 0%,
+      var(--color-band) 62%,
+      var(--color-ground) 100%
+    );
+  }
+
+  /**
+   * `.band-tint` is the stage for the catalogue, and the only ground besides the hero and the dark
+   * band that carries atmosphere. One blob rather than the hero's two, and weaker: the section it
+   * sits behind is a wall of seventeen coloured specimens, and a background competing with those
+   * would be the page arguing with its own product.
+   */
+  .band-tint {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(
+      165deg,
+      var(--color-signal-wash) 0%,
+      var(--color-band) 55%,
+      var(--color-ground) 100%
+    );
+  }
+
+  .band-tint::before {
+    content: '';
+    position: absolute;
+    top: -18rem;
+    left: -6rem;
+    width: 40rem;
+    height: 40rem;
+    border-radius: 999px;
+    background: rgb(27 59 216 / 7%);
+    filter: blur(90px);
+    pointer-events: none;
+    z-index: 0;
+    animation: drift 28s ease-in-out infinite alternate;
+  }
+
+  .band-tint > * {
+    position: relative;
+    z-index: 1;
+  }
 }
 
 @keyframes rise {

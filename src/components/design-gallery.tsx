@@ -63,7 +63,14 @@ const SPECIMEN_LINE: Record<string, string> = {
   Study: 'BSc Nursing, Københavns Professionshøjskole',
 }
 
-function Specimen({ design }: { design: Design }) {
+/**
+ * Exported for the landing page, which shows one of these per theme.
+ *
+ * It draws in the document's own colours, which is the whole reason the marketing page may use it:
+ * a catalogue sold with invented swatches would be selling a design nobody can download. The same
+ * component in both places means the page cannot flatter a theme the PDF will not match.
+ */
+export function Specimen({ design }: { design: Design }) {
   const theme = getTheme(design.theme)
   const style = styleOf(theme)
   const { heading, body } = theme.typography

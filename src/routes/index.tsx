@@ -38,7 +38,10 @@ import { SavedCvs } from '@/components/saved-cvs'
 import { keyOf, RewriteReview } from '@/components/rewrite-review'
 import { AdvertForm, TargetPanel } from '@/components/target-panel'
 import { BeforeAfter } from '@/components/before-after'
-import { DesignGallery } from '@/components/design-gallery'
+import {
+  DesignGallery,
+  Specimen as DesignSpecimen,
+} from '@/components/design-gallery'
 import { ButtonLabel, Spinner } from '@/components/working'
 import { ModelNotes } from '@/components/model-notes'
 import type { ModelNote } from '@/components/model-notes'
@@ -340,6 +343,41 @@ function StartFromScratch({
 }
 
 /**
+ * One design per voice, for the strip on the landing page.
+ *
+ * Seventeen, not a hundred and three. The catalogue multiplies twenty-eight structures by seventeen
+ * voices, and the structures are an ordering decision somebody makes about their own history; the
+ * voices are the part that can be *seen* at swatch size. Showing one of each is the honest sample:
+ * every ink in the catalogue appears exactly once, and nothing is drawn that does not exist.
+ *
+ * Free first, then the rest in catalogue order. Not a ranking — the four free voices are the ones a
+ * visitor can have today, and burying them behind thirteen they cannot yet buy would be a strip that
+ * advertises a plan instead of a product.
+ *
+ * Derived from `DESIGNS` rather than listed, so a new theme joins the strip by existing.
+ */
+const VOICES = (() => {
+  const pick = new Map<string, (typeof DESIGNS)[number]>()
+  for (const design of DESIGNS) {
+    const held = pick.get(design.theme)
+    // A free pairing wins the slot: it is the one a reader can actually reach.
+    if (
+      held === undefined ||
+      (held.tier === 'paid' && design.tier === 'free')
+    ) {
+      pick.set(design.theme, design)
+    }
+  }
+  const all = [...pick.values()]
+  return [
+    ...all.filter((d) => d.tier === 'free'),
+    ...all.filter((d) => d.tier === 'paid'),
+  ]
+})()
+
+const FREE_VOICES = VOICES.filter((d) => d.tier === 'free').length
+
+/**
  * The comparison, and the rule it follows: **the left column is not a strawman.**
  *
  * Every competitor's version of this section makes the reader's current situation sound pathetic
@@ -391,7 +429,9 @@ const FAQ = [
   },
   {
     q: 'Do I have to pay?',
-    a: 'No. Upload, correct, and download without an account and without paying. A paid plan adds the larger model, all sixty designs, and CVs remembered between visits. It is not open yet.',
+    // "All sixty designs" was true of a catalogue that has since grown to 103, and the page now has
+    // a section that counts them out loud. Two numbers for one fact is the page arguing with itself.
+    a: 'No. Upload, correct, and download without an account and without paying. A paid plan adds the larger model, all 103 designs, and CVs remembered between visits. It is not open yet.',
   },
   {
     q: 'What does "a CV that screening software can read" mean?',
@@ -2181,7 +2221,7 @@ function HunterReady() {
             The heading holds the left column and stays put while the steps scroll past it, which is
             what a heading is for when its list is long enough to leave it behind.
           */}
-          <section className="border-b border-hairline bg-band">
+          <section className="band-fade border-b border-hairline">
             <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20 lg:px-8 lg:py-16">
               <Reveal>
                 <div className="flex flex-col gap-4 lg:sticky lg:top-24">
@@ -2307,7 +2347,7 @@ function HunterReady() {
             want a source reference. It is the one place on the page where saying HOW is more
             persuasive than saying WHAT.
           */}
-          <section className="border-b border-hairline bg-band">
+          <section className="band-fade border-b border-hairline">
             <div className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
               <Reveal>
                 <span className="eyebrow">Evidence</span>
@@ -2435,6 +2475,109 @@ function HunterReady() {
                     file, not about our test suite.
                   </p>
                 </div>
+              </Reveal>
+            </div>
+          </section>
+
+          {/*
+            The catalogue of designs, and the page's one moment of real colour.
+
+            **This is where colour is allowed in, and the reason is that it is not ours.** DESIGN.md's
+            One Accent rule holds everywhere on this page: Signal is the only chrome hue and nothing
+            below introduces a second one. What is coloured here are the specimens, and each one is
+            drawn in the ink of the document it represents — teal, navy, rust, forest, maroon, rose,
+            plum, bronze, coral, steel, umber. Selling a catalogue of designs on a grey page would be
+            selling it with the one thing removed that a person is choosing between.
+
+            `Specimen` is the gallery's own component, so a swatch cannot flatter a theme the PDF will
+            not match. That is the same argument as the block specimens one section up, and it is the
+            only reason a marketing page may draw a product at all.
+
+            A scroll-snap strip, which is a family this page uses nowhere else, and readable in a way
+            an auto-scrolling marquee is not. These are choices somebody makes; a design sliding past
+            on a timer cannot be chosen. The strip communicates breadth by being cut off at the edge.
+          */}
+          <section className="band-tint border-b border-hairline">
+            <div className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
+              <Reveal>
+                <div className="flex max-w-2xl flex-col gap-4">
+                  <h2 className="text-section text-balance text-ink">
+                    A hundred and three ways it can look
+                    <span className="text-signal">.</span>
+                  </h2>
+                  <p className="text-lead text-ink-soft">
+                    Twenty-eight ways to order a life, and seventeen voices to
+                    set it in. Every one of them renders the same details and
+                    passes the same parse test, so the choice is only ever about
+                    what suits you.
+                  </p>
+                </div>
+              </Reveal>
+
+              <Reveal delay={80}>
+                {/*
+                  `-mx-4 px-4` so the strip bleeds to the edge of a phone: a row that stops inside the
+                  page gutter looks like it ended, and this one has not.
+                */}
+                <ul className="scrollbar-none -mx-4 mt-9 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+                  {VOICES.map((design) => (
+                    <li
+                      key={design.id}
+                      className="flex w-[13.5rem] shrink-0 snap-start flex-col gap-2"
+                    >
+                      {/*
+                        The ink on the top edge, because at swatch size the treatment that carries it
+                        is a 3px bar inside a pale card and the strip read as seventeen grey tiles.
+                        This is that design's own accent and nothing else: `minimal` and `editorial`
+                        come out near-black here, which is correct, because that is what they are.
+                      */}
+                      <span
+                        aria-hidden
+                        className="h-[3px] w-full rounded-full"
+                        style={{
+                          backgroundColor: styleOf(getTheme(design.theme))
+                            .accent,
+                        }}
+                      />
+                      <DesignSpecimen design={design} />
+                      {/*
+                        Left-aligned and adjacent, not `justify-between`. Pushed apart, each card's
+                        "Free" sat against the next card's name and read as belonging to it.
+                      */}
+                      <span className="flex items-center gap-2 px-0.5">
+                        <span className="text-[13px] font-semibold text-ink">
+                          {design.label.split(' · ')[1] ?? design.label}
+                        </span>
+                        {/*
+                          Signal, not Affirm. Affirm is a fixed meaning in this system, "verified",
+                          and DESIGN.md forbids spending a semantic colour on decoration. A price is
+                          not a verification. Signal is the accent and may carry interface emphasis.
+                        */}
+                        {design.tier === 'free' ? (
+                          <span className="rounded-full bg-signal-wash px-1.5 py-px text-[11px] font-semibold text-signal">
+                            Free
+                          </span>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Reveal>
+
+              {/*
+                The honest half again, and it has to say two separate things: which voices are free
+                today, and that the plan the rest sit behind cannot be bought yet. The FAQ already
+                says the second one, and a catalogue section that implies otherwise would be the page
+                contradicting its own answers four sections later.
+              */}
+              <Reveal delay={140}>
+                <p className="mt-7 max-w-[68ch] border-t border-hairline pt-6 text-[14px] leading-relaxed text-ink-soft">
+                  {FREE_VOICES} of the voices are free today, across three
+                  structures. The rest belong to a paid plan that is not open
+                  yet, so nothing here is behind a payment you can make. Every
+                  free design renders the same document as every paid one, and
+                  the same test checks all of them.
+                </p>
               </Reveal>
             </div>
           </section>
