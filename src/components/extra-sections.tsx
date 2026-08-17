@@ -217,11 +217,17 @@ export function ExtraSections({
   onChange,
   authoring,
   chrome,
+  only,
+  actionsFor,
 }: {
   resume: Resume
   onChange: (next: Resume) => void
   authoring: boolean
   chrome: ExtraChrome
+  /** Render just this one. The panel lists sections in the document's order, one slot at a time. */
+  only?: ExtraKey
+  /** The move/remove controls for a section's header, built by the form that knows the whole order. */
+  actionsFor?: (key: ExtraKey, title: string) => React.ReactNode
 }) {
   const {
     index,
@@ -237,7 +243,9 @@ export function ExtraSections({
 
   return (
     <>
-      {EXTRA_SECTIONS.map((spec) => {
+      {EXTRA_SECTIONS.filter(
+        (spec) => only === undefined || spec.key === only,
+      ).map((spec) => {
         const items = resume[spec.key] as Array<Record<string, unknown>>
 
         /*
@@ -264,6 +272,9 @@ export function ExtraSections({
             count={items.length}
             flagged={sectionFlagged(spec.key)}
             defaultOpen={authoring || sectionFlagged(spec.key) > 0}
+            {...(actionsFor === undefined
+              ? {}
+              : { actions: actionsFor(spec.key, spec.title) })}
           >
             {items.length === 0 && (
               <p className="text-[13px] leading-relaxed text-ink-soft">

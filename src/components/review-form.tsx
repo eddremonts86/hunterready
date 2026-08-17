@@ -9,7 +9,7 @@
  * the questions to come from provenance rather than from a script (ADR-011). This is the form
  * underneath it: sections collapsed by default, uncertain ones open.
  */
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { DateField } from '@/components/date-field'
 import { PhotoField } from '@/components/photo-field'
 import {
@@ -29,6 +29,21 @@ import {
 } from '@/components/ui/tooltip'
 import { formatRange } from '@/render/format'
 import { ExtraSections } from '@/components/extra-sections'
+import { orderedSections, tokenFor } from '@/render/sections'
+import type { SectionName } from '@/render/sections'
+
+/** What each named section is called on screen, for the tooltips that name a neighbour. */
+const SECTION_TITLES: Record<SectionName, string> = {
+  work: 'Experience',
+  education: 'Education',
+  skills: 'Skills',
+  projects: 'Projects',
+  certifications: 'Certifications',
+  languages: 'Languages',
+  awards: 'Awards',
+  publications: 'Publications',
+  volunteer: 'Volunteering',
+}
 
 /** Matches the schema's ceiling. A gap taller than this is a blank page nobody meant to send. */
 const MAX_SPACE = 240
@@ -674,19 +689,69 @@ export function ReviewForm({
    * is the order on the page rather than a preference about the form.
    */
   /**
-   * The three header controls, built once for both kinds of entry.
+   * The document's own order, which is also the order this panel lists them in.
    *
-   * `what` is the name the sentences use, so the tooltips read "Move Referencer down, below Skills"
-   * rather than "Move down" — the consequence, named, which is the whole point of putting a tooltip on
-   * an icon. The neighbour is named too where there is one: "down" is a direction, "below Skills" is a
-   * result, and the second is what somebody is actually deciding about.
+   * Filtered to the sections that are actually *there*. The resolver returns every slot a design could
+   * place, including the empty ones, and leaving them in made both halves of the control lie: "Move
+   * Skills down, below Projects" named a section nobody could see, and pressing it swapped Skills with
+   * nothing, which reads as a broken button. Experience, Education and Skills stay whatever their
+   * contents, because the panel draws those three even when empty — that is where the "we did not find
+   * any" copy lives.
+   */
+  const ALWAYS_SHOWN = new Set<SectionName>(['work', 'education', 'skills'])
+  /**
+   * Used by the list *and* by the move, and that is the point of it being a function.
+   *
+   * They were two expressions for a moment and it was immediately wrong: the header numbered its
+   * buttons against the filtered list while the move indexed the unfiltered one, so pressing "up" on
+   * Languages swapped two empty sections three rows away and looked like a dead button. Same list,
+   * same indices, one definition.
+   */
+  const visibleSlots = (of: Resume) =>
+    orderedSections(of).filter(
+      (slot) =>
+        slot.kind === 'custom' ||
+        ALWAYS_SHOWN.has(slot.name) ||
+        authoring ||
+        of[slot.name].length > 0,
+    )
+  const ordered = visibleSlots(resume)
+
+  /**
+   * The form's own chrome, handed to the table-driven sections so they cannot drift from these.
+   *
+   * Passed rather than imported because the components live here: `extra-sections.tsx` describes six
+   * lists and draws none of the furniture itself, which is what keeps one styling change from having
+   * to be made twice.
+   */
+  const chrome = {
+    index,
+    fieldClass,
+    sectionFlagged,
+    Section,
+    Field,
+    AddRow,
+    RemoveRow,
+    LineBubble,
+    AutoTextarea,
+  }
+
+  /**
+   * The controls on every section header except You.
+   *
+   * `at` is the position in the *document's* order, not in this file, which is what makes "up" mean
+   * the same thing here and on the page. You has none of these on purpose: a CV whose reader meets the
+   * phone number after the job history is a CV with a bug, and every ATS heuristic assumes the header
+   * is the header (src/render/sections.tsx).
    */
   const sectionActions = (at: number, what: string) => {
-    const nameOf = (index: number) => {
-      const neighbour = resume.custom[index]
-      if (neighbour === undefined) return undefined
-      if (isSpacer(neighbour)) return 'the space'
-      return neighbour.title === '' ? 'the untitled section' : neighbour.title
+    const nameOf = (position: number) => {
+      const slot = ordered[position]
+      if (slot === undefined) return undefined
+      if (slot.kind === 'named') return SECTION_TITLES[slot.name]
+      const section = resume.custom[slot.index]
+      if (isSpacer(section)) return 'the space'
+      return section.title === '' ? 'the untitled section' : section.title
     }
     const above = nameOf(at - 1)
     const below = nameOf(at + 1)
@@ -699,7 +764,7 @@ export function ReviewForm({
               : `Move ${what} up, above ${above}`
           }
           disabled={at === 0}
-          onClick={() => moveCustomSection(at, -1)}
+          onClick={() => moveSection(at, -1)}
         >
           <HeaderIcon shape="up" />
         </HeaderButton>
@@ -709,48 +774,78 @@ export function ReviewForm({
               ? `${what} is already last`
               : `Move ${what} down, below ${below}`
           }
-          disabled={at === resume.custom.length - 1}
-          onClick={() => moveCustomSection(at, 1)}
+          disabled={at === ordered.length - 1}
+          onClick={() => moveSection(at, 1)}
         >
           <HeaderIcon shape="down" />
         </HeaderButton>
-        <HeaderButton
-          label={`Remove ${what} from the CV`}
-          onClick={() => removeCustomSection(at)}
-        >
-          <HeaderIcon shape="bin" />
-        </HeaderButton>
+        {slotIsCustom(at) && (
+          <HeaderButton
+            label={`Remove ${what} from the CV`}
+            onClick={() => removeSlot(at)}
+          >
+            <HeaderIcon shape="bin" />
+          </HeaderButton>
+        )}
       </>
     )
   }
 
-  const moveCustomSection = (at: number, by: -1 | 1) => {
+  /**
+   * Move a section, by rewriting the document's order rather than its content.
+   *
+   * Nothing in `resume` moves — only `sectionOrder`, a list of tokens. That is why this needs no
+   * provenance surgery where the old custom-only version did: the paths are positional and no position
+   * changes, so every "check this" marker stays on the field it was about.
+   *
+   * Ids are assigned here, at the first moment they matter. A document that has never been reordered
+   * carries none, renders in the design's order, and is untouched by any of this.
+   */
+  const moveSection = (at: number, by: -1 | 1) => {
     const to = at + by
-    if (to < 0 || to >= resume.custom.length) return
+    if (to < 0 || to >= ordered.length) return
 
-    const custom = [...resume.custom]
-    const moved = custom[at]
-    const displaced = custom[to]
-    if (moved === undefined || displaced === undefined) return
-    custom[at] = displaced
-    custom[to] = moved
-
-    const swap = (path: string) => {
-      for (const [from, into] of [
-        [at, to],
-        [to, at],
-      ] as const) {
-        const prefix = `custom.${from}`
-        if (path === prefix || path.startsWith(`${prefix}.`)) {
-          return `custom.${into}${path.slice(prefix.length)}`
-        }
-      }
-      return path
-    }
-    onChange(
-      { ...resume, custom },
-      provenance.map((entry) => ({ ...entry, path: swap(entry.path) })),
+    const used = new Set(
+      resume.custom
+        .map((s) => s.id)
+        .filter((id): id is string => id !== undefined),
     )
+    let n = 0
+    const custom = resume.custom.map((section) => {
+      if (section.id !== undefined) return section
+      let id = `s${++n}`
+      while (used.has(id)) id = `s${++n}`
+      used.add(id)
+      return { ...section, id }
+    })
+    const named = { ...resume, custom }
+
+    const shown = visibleSlots(named)
+    const moved = shown[at]
+    const displaced = shown[to]
+    if (moved === undefined || displaced === undefined) return
+    shown[at] = displaced
+    shown[to] = moved
+
+    /*
+      The written order is the *visible* sequence followed by everything else, so an empty section
+      keeps its place in the design's tail instead of being dragged to the front by a swap it was not
+      part of. `orderedSections` puts unmentioned slots back in the design's order anyway; listing the
+      hidden ones explicitly is what stops them jumping when they later gain content.
+    */
+    const tokens = [...shown, ...orderedSections(named)]
+      .map((slot) => tokenFor(slot, named))
+      .filter((token): token is string => token !== undefined)
+
+    onChange({ ...named, sectionOrder: [...new Set(tokens)] })
+  }
+
+  const slotIsCustom = (at: number) => ordered[at]?.kind === 'custom'
+
+  const removeSlot = (at: number) => {
+    const slot = ordered[at]
+    if (slot === undefined || slot.kind !== 'custom') return
+    removeCustomSection(slot.index)
   }
 
   const removeRow = (
@@ -854,6 +949,367 @@ export function ReviewForm({
     resume.education.length > 0,
     resume.skills.length > 0,
   ].filter(Boolean).length
+
+  const blocks: Partial<Record<SectionName, (at: number) => React.ReactNode>> =
+    {
+      work: (at) => (
+        <Section
+          title="Experience"
+          count={resume.work.length}
+          flagged={sectionFlagged('work')}
+          actions={sectionActions(at, 'Experience')}
+          defaultOpen={authoring || sectionFlagged('work') > 0}
+        >
+          {resume.work.length === 0 && (
+            <p className="text-[13px] leading-relaxed text-ink-soft">
+              {authoring
+                ? 'One entry per job, the most recent first. A job you left, a placement, an apprenticeship or self-employment all count.'
+                : 'We did not find any jobs. That is usually a sign the file was hard to read. check the original, or add them here.'}
+            </p>
+          )}
+          {resume.work.map((item, i) => (
+            <div
+              key={i}
+              className="flex flex-col gap-3 border-l-2 border-l-hairline pl-3.5"
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field
+                  label="Job title"
+                  value={item.role}
+                  onChange={(role) => setWork(i, { role })}
+                  provenance={index.get(`work.${i}.role`)}
+                />
+                <Field
+                  label="Employer"
+                  value={item.company}
+                  onChange={(company) => setWork(i, { company })}
+                  provenance={index.get(`work.${i}.company`)}
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {/*
+                  Picked, not typed as a format. The label no longer teaches ISO-8601 — "Started" is the
+                  question, and `DateField` handles the shape.
+                */}
+                <DateField
+                  label="Started"
+                  value={item.startDate ?? ''}
+                  onChange={(startDate) =>
+                    setWork(i, { startDate: startDate || undefined })
+                  }
+                  provenance={index.get(`work.${i}.startDate`)}
+                />
+                <DateField
+                  label="Ended"
+                  value={item.endDate ?? ''}
+                  onChange={(endDate) =>
+                    setWork(i, { endDate: endDate || null })
+                  }
+                  provenance={index.get(`work.${i}.endDate`)}
+                  openEndedLabel="Still here"
+                />
+              </div>
+              <p className="text-meta text-ink-soft">
+                Reads as: {formatRange(item.startDate, item.endDate) || '—'}
+              </p>
+
+              {/*
+                The bullets, editable. They used to be a count — "4 bullets" — which meant the lines a
+                recruiter actually reads were the one part of the CV the person could not touch, unless
+                they accepted a machine's rewrite of them. That inverted the product: the wording pass is
+                a suggestion, and typing your own sentence should not be the harder path.
+              */}
+              <div className="flex flex-col gap-2">
+                <span className="text-[13px] font-semibold text-ink">
+                  What you did here
+                </span>
+                {item.highlights.length === 0 && (
+                  <p className="text-meta leading-relaxed text-ink-soft">
+                    Nothing here yet. One line per thing you did: what you were
+                    responsible for, and the size of it.
+                  </p>
+                )}
+                {item.highlights.map((text, b) => (
+                  <LineBubble
+                    key={b}
+                    removeLabel={`Remove bullet ${b + 1}`}
+                    onRemove={() => removeBullet(i, b)}
+                  >
+                    <AutoTextarea
+                      value={text}
+                      ariaLabel={`Bullet ${b + 1} for ${item.role || 'this job'}`}
+                      onChange={(next) =>
+                        setHighlights(
+                          i,
+                          item.highlights.map((line, at) =>
+                            at === b ? next : line,
+                          ),
+                        )
+                      }
+                      className={fieldClass(`work.${i}.highlights.${b}`)}
+                    />
+                  </LineBubble>
+                ))}
+                <AddRow label="Add a line" onClick={() => addBullet(i)} />
+              </div>
+
+              <RemoveRow
+                label={`Remove ${item.role || 'this job'}`}
+                onClick={() =>
+                  removeRow(
+                    'work',
+                    i,
+                    [item.role, item.company].filter(Boolean).join(', ') ||
+                      'that job',
+                  )
+                }
+              />
+            </div>
+          ))}
+          <AddRow
+            label="Add a job"
+            onClick={() =>
+              addRow('work', {
+                company: '',
+                role: '',
+                endDate: null,
+                highlights: [],
+                tech: [],
+              })
+            }
+          />
+        </Section>
+      ),
+      education: (at) => (
+        <Section
+          title="Education"
+          count={resume.education.length}
+          flagged={sectionFlagged('education')}
+          actions={sectionActions(at, 'Education')}
+          defaultOpen={authoring}
+        >
+          {/*
+            These were four read-only paragraphs. Somebody whose institution came out of a two-column PDF
+            as "Kø benhavns Professionshøjskole" could see the mistake, could see the flag telling them to
+            check it, and had nowhere to fix it — which turns the honesty mechanism into a taunt.
+          */}
+          {resume.education.length === 0 && (
+            <p className="text-[13px] leading-relaxed text-ink-soft">
+              {authoring
+                ? 'Whatever you have. A course or a certificate counts, and so does an apprenticeship. Leave it empty if there is nothing to put here.'
+                : 'We did not find any. Add what you have: a course or a certificate counts, and so does an apprenticeship.'}
+            </p>
+          )}
+          {resume.education.map((item, i) => (
+            <div
+              key={i}
+              className="flex flex-col gap-3 border-l-2 border-l-hairline pl-3.5"
+            >
+              <Field
+                label="School, college or provider"
+                value={item.institution}
+                onChange={(institution) => setEducation(i, { institution })}
+                provenance={index.get(`education.${i}.institution`)}
+              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field
+                  label="Qualification"
+                  value={item.degree ?? ''}
+                  onChange={(degree) =>
+                    setEducation(i, { degree: degree || undefined })
+                  }
+                  provenance={index.get(`education.${i}.degree`)}
+                />
+                <Field
+                  label="Subject"
+                  value={item.field ?? ''}
+                  onChange={(field) =>
+                    setEducation(i, { field: field || undefined })
+                  }
+                  provenance={index.get(`education.${i}.field`)}
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <DateField
+                  label="Started"
+                  value={item.startDate ?? ''}
+                  onChange={(startDate) =>
+                    setEducation(i, { startDate: startDate || undefined })
+                  }
+                  provenance={index.get(`education.${i}.startDate`)}
+                />
+                <DateField
+                  label="Finished"
+                  value={item.endDate ?? ''}
+                  onChange={(endDate) =>
+                    setEducation(i, { endDate: endDate || null })
+                  }
+                  provenance={index.get(`education.${i}.endDate`)}
+                  openEndedLabel="Still studying"
+                />
+              </div>
+              <p className="text-meta text-ink-soft">
+                Reads as: {formatRange(item.startDate, item.endDate) || '—'}
+              </p>
+              <RemoveRow
+                label={`Remove ${item.institution || 'this entry'}`}
+                onClick={() =>
+                  removeRow(
+                    'education',
+                    i,
+                    [item.degree, item.institution]
+                      .filter(Boolean)
+                      .join(', ') || 'that entry',
+                  )
+                }
+              />
+            </div>
+          ))}
+          <AddRow
+            label="Add a qualification"
+            onClick={() =>
+              addRow('education', {
+                institution: '',
+                endDate: null,
+                highlights: [],
+              })
+            }
+          />
+        </Section>
+      ),
+      skills: (at) => (
+        <Section
+          title="Skills"
+          count={resume.skills.reduce((n, g) => n + g.items.length, 0)}
+          flagged={sectionFlagged('skills')}
+          actions={sectionActions(at, 'Skills')}
+          defaultOpen={authoring}
+        >
+          {/*
+            Comma-separated, one field per group, rather than a chip editor.
+
+            Chips look better and are worse here: adding one means click, type, press Enter, and getting a
+            typo out of the middle of a list means finding the right little ✕. This is the shape the data
+            is already read *back* in — "Intensive care, Ventilator management, Triage" — so what somebody
+            sees on the page is what they edit, and pasting a list from an old CV works on the first try.
+
+            Splitting happens on the way in, so the field never fights the person typing: a lone comma
+            mid-sentence would otherwise vanish an item as they went.
+          */}
+          {resume.skills.length === 0 && (
+            <p className="text-[13px] leading-relaxed text-ink-soft">
+              {authoring
+                ? 'Group them however your trade does. The headings are yours, not a fixed list. "Clinical", "Machines I have run", "Languages".'
+                : 'We did not find any. Group them however your trade does. The headings are yours, not a fixed list.'}
+            </p>
+          )}
+          {resume.skills.map((group, i) => (
+            <div
+              key={i}
+              className="flex flex-col gap-3 border-l-2 border-l-hairline pl-3.5"
+            >
+              <Field
+                label="Heading"
+                value={group.category}
+                onChange={(category) => setSkillGroup(i, { category })}
+                provenance={index.get(`skills.${i}.category`)}
+              />
+              <label className="flex flex-col gap-1.5">
+                <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
+                  What goes under it
+                  <Flag entry={index.get(`skills.${i}.items`)} />
+                </span>
+                <AutoTextarea
+                  value={group.items.join(', ')}
+                  onChange={(next) =>
+                    setSkillGroup(i, {
+                      items: next
+                        .split(',')
+                        .map((item) => item.trim())
+                        .filter((item) => item !== ''),
+                    })
+                  }
+                  className={fieldClass(`skills.${i}.items`)}
+                />
+                <span className="text-meta text-ink-soft">
+                  Separated by commas.
+                </span>
+              </label>
+              <RemoveRow
+                label={`Remove the ${group.category || 'unnamed'} group`}
+                onClick={() =>
+                  removeRow('skills', i, group.category || 'that group')
+                }
+              />
+            </div>
+          ))}
+          <AddRow
+            label="Add a group"
+            onClick={() => addRow('skills', { category: '', items: [] })}
+          />
+        </Section>
+      ),
+      projects: (at) => (
+        <ExtraSections
+          resume={resume}
+          onChange={(next) => onChange(next)}
+          authoring={authoring}
+          only="projects"
+          actionsFor={(_, title) => sectionActions(at, title)}
+          chrome={chrome}
+        />
+      ),
+      certifications: (at) => (
+        <ExtraSections
+          resume={resume}
+          onChange={(next) => onChange(next)}
+          authoring={authoring}
+          only="certifications"
+          actionsFor={(_, title) => sectionActions(at, title)}
+          chrome={chrome}
+        />
+      ),
+      languages: (at) => (
+        <ExtraSections
+          resume={resume}
+          onChange={(next) => onChange(next)}
+          authoring={authoring}
+          only="languages"
+          actionsFor={(_, title) => sectionActions(at, title)}
+          chrome={chrome}
+        />
+      ),
+      awards: (at) => (
+        <ExtraSections
+          resume={resume}
+          onChange={(next) => onChange(next)}
+          authoring={authoring}
+          only="awards"
+          actionsFor={(_, title) => sectionActions(at, title)}
+          chrome={chrome}
+        />
+      ),
+      publications: (at) => (
+        <ExtraSections
+          resume={resume}
+          onChange={(next) => onChange(next)}
+          authoring={authoring}
+          only="publications"
+          actionsFor={(_, title) => sectionActions(at, title)}
+          chrome={chrome}
+        />
+      ),
+      volunteer: (at) => (
+        <ExtraSections
+          resume={resume}
+          onChange={(next) => onChange(next)}
+          authoring={authoring}
+          only="volunteer"
+          actionsFor={(_, title) => sectionActions(at, title)}
+          chrome={chrome}
+        />
+      ),
+    }
 
   return (
     /*
@@ -1051,400 +1507,96 @@ export function ReviewForm({
           />
         </Section>
 
-        <Section
-          title="Experience"
-          count={resume.work.length}
-          flagged={sectionFlagged('work')}
-          defaultOpen={authoring || sectionFlagged('work') > 0}
-        >
-          {resume.work.length === 0 && (
-            <p className="text-[13px] leading-relaxed text-ink-soft">
-              {authoring
-                ? 'One entry per job, the most recent first. A job you left, a placement, an apprenticeship or self-employment all count.'
-                : 'We did not find any jobs. That is usually a sign the file was hard to read. check the original, or add them here.'}
-            </p>
-          )}
-          {resume.work.map((item, i) => (
-            <div
-              key={i}
-              className="flex flex-col gap-3 border-l-2 border-l-hairline pl-3.5"
-            >
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field
-                  label="Job title"
-                  value={item.role}
-                  onChange={(role) => setWork(i, { role })}
-                  provenance={index.get(`work.${i}.role`)}
-                />
-                <Field
-                  label="Employer"
-                  value={item.company}
-                  onChange={(company) => setWork(i, { company })}
-                  provenance={index.get(`work.${i}.company`)}
-                />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {/*
-                Picked, not typed as a format. The label no longer teaches ISO-8601 — "Started" is the
-                question, and `DateField` handles the shape.
-              */}
-                <DateField
-                  label="Started"
-                  value={item.startDate ?? ''}
-                  onChange={(startDate) =>
-                    setWork(i, { startDate: startDate || undefined })
-                  }
-                  provenance={index.get(`work.${i}.startDate`)}
-                />
-                <DateField
-                  label="Ended"
-                  value={item.endDate ?? ''}
-                  onChange={(endDate) =>
-                    setWork(i, { endDate: endDate || null })
-                  }
-                  provenance={index.get(`work.${i}.endDate`)}
-                  openEndedLabel="Still here"
-                />
-              </div>
-              <p className="text-meta text-ink-soft">
-                Reads as: {formatRange(item.startDate, item.endDate) || '—'}
-              </p>
+        {/*
+          Every section below You, in the order the *document* asks for.
 
-              {/*
-              The bullets, editable. They used to be a count — "4 bullets" — which meant the lines a
-              recruiter actually reads were the one part of the CV the person could not touch, unless
-              they accepted a machine's rewrite of them. That inverted the product: the wording pass is
-              a suggestion, and typing your own sentence should not be the harder path.
-            */}
-              <div className="flex flex-col gap-2">
-                <span className="text-[13px] font-semibold text-ink">
-                  What you did here
-                </span>
-                {item.highlights.length === 0 && (
-                  <p className="text-meta leading-relaxed text-ink-soft">
-                    Nothing here yet. One line per thing you did: what you were
-                    responsible for, and the size of it.
-                  </p>
-                )}
-                {item.highlights.map((text, b) => (
-                  <LineBubble
-                    key={b}
-                    removeLabel={`Remove bullet ${b + 1}`}
-                    onRemove={() => removeBullet(i, b)}
-                  >
-                    <AutoTextarea
-                      value={text}
-                      ariaLabel={`Bullet ${b + 1} for ${item.role || 'this job'}`}
-                      onChange={(next) =>
-                        setHighlights(
-                          i,
-                          item.highlights.map((line, at) =>
-                            at === b ? next : line,
-                          ),
-                        )
+          The list used to be written out in sequence, which is why only the custom ones could move:
+          the others were positions in this file rather than entries in a list. `orderedSections` is
+          the same resolver the templates use, so what is on screen is what is on the page — a panel
+          that reordered itself and left the PDF alone would be worse than no arrows at all.
+        */}
+        {ordered.map((slot, at) => (
+          <Fragment key={tokenFor(slot, resume) ?? `custom-${at}`}>
+            {slot.kind === 'custom'
+              ? (() => {
+                  const section = resume.custom[slot.index]
+                  const i = slot.index
+                  return isSpacer(section) ? (
+                    <SpacerRow
+                      key={i}
+                      space={section.space}
+                      onChange={(space) => setCustomSection(i, { space })}
+                      actions={sectionActions(at, 'this space')}
+                    />
+                  ) : (
+                    <Section
+                      key={i}
+                      title={
+                        section.title === ''
+                          ? 'Untitled section'
+                          : section.title
                       }
-                      className={fieldClass(`work.${i}.highlights.${b}`)}
-                    />
-                  </LineBubble>
-                ))}
-                <AddRow label="Add a line" onClick={() => addBullet(i)} />
-              </div>
-
-              <RemoveRow
-                label={`Remove ${item.role || 'this job'}`}
-                onClick={() =>
-                  removeRow(
-                    'work',
-                    i,
-                    [item.role, item.company].filter(Boolean).join(', ') ||
-                      'that job',
+                      count={section.items.length}
+                      flagged={sectionFlagged(`custom.${i}`)}
+                      defaultOpen={false}
+                      /*
+                                Reorder and remove, reachable without opening the section — Edd's ask, and the reason is
+                                the same one behind the count beside the title: a decision about a section should not cost
+                                an expand, a scroll to the bottom, and a collapse. The removal here does exactly what the
+                                "Remove the … section" row inside does; it is the same action at the place you are already
+                                looking when you decide to take it.
+                              */
+                      actions={sectionActions(
+                        at,
+                        section.title || 'this section',
+                      )}
+                    >
+                      <Field
+                        label="Section heading"
+                        value={section.title}
+                        onChange={(title) => setCustomSection(i, { title })}
+                        provenance={index.get(`custom.${i}.title`)}
+                      />
+                      {/*
+                                The remove control here was a bare "✕" character where every other one in the form is the
+                                same drawn bin — two icon families for one action, and the odd one out was the one sitting
+                                closest to the text. Same bubble, same button, same place: learned once, true everywhere.
+                              */}
+                      {section.items.map((item, j) => (
+                        <LineBubble
+                          key={j}
+                          removeLabel={`Remove line ${j + 1} of ${section.title || 'this section'}`}
+                          onRemove={() => removeCustomItem(i, j)}
+                        >
+                          <label className="flex flex-col gap-1.5">
+                            <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
+                              Line {j + 1}
+                              <Flag
+                                entry={index.get(`custom.${i}.items.${j}`)}
+                              />
+                            </span>
+                            <AutoTextarea
+                              value={item}
+                              onChange={(next) => setCustomItem(i, j, next)}
+                              className={fieldClass(`custom.${i}.items.${j}`)}
+                            />
+                          </label>
+                        </LineBubble>
+                      ))}
+                      <AddRow
+                        label="Add a line"
+                        onClick={() => addCustomItem(i)}
+                      />
+                      <RemoveRow
+                        label={`Remove the ${section.title || 'untitled'} section`}
+                        onClick={() => removeCustomSection(i)}
+                      />
+                    </Section>
                   )
-                }
-              />
-            </div>
-          ))}
-          <AddRow
-            label="Add a job"
-            onClick={() =>
-              addRow('work', {
-                company: '',
-                role: '',
-                endDate: null,
-                highlights: [],
-                tech: [],
-              })
-            }
-          />
-        </Section>
-
-        <Section
-          title="Education"
-          count={resume.education.length}
-          flagged={sectionFlagged('education')}
-          defaultOpen={authoring}
-        >
-          {/*
-          These were four read-only paragraphs. Somebody whose institution came out of a two-column PDF
-          as "Kø benhavns Professionshøjskole" could see the mistake, could see the flag telling them to
-          check it, and had nowhere to fix it — which turns the honesty mechanism into a taunt.
-        */}
-          {resume.education.length === 0 && (
-            <p className="text-[13px] leading-relaxed text-ink-soft">
-              {authoring
-                ? 'Whatever you have. A course or a certificate counts, and so does an apprenticeship. Leave it empty if there is nothing to put here.'
-                : 'We did not find any. Add what you have: a course or a certificate counts, and so does an apprenticeship.'}
-            </p>
-          )}
-          {resume.education.map((item, i) => (
-            <div
-              key={i}
-              className="flex flex-col gap-3 border-l-2 border-l-hairline pl-3.5"
-            >
-              <Field
-                label="School, college or provider"
-                value={item.institution}
-                onChange={(institution) => setEducation(i, { institution })}
-                provenance={index.get(`education.${i}.institution`)}
-              />
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field
-                  label="Qualification"
-                  value={item.degree ?? ''}
-                  onChange={(degree) =>
-                    setEducation(i, { degree: degree || undefined })
-                  }
-                  provenance={index.get(`education.${i}.degree`)}
-                />
-                <Field
-                  label="Subject"
-                  value={item.field ?? ''}
-                  onChange={(field) =>
-                    setEducation(i, { field: field || undefined })
-                  }
-                  provenance={index.get(`education.${i}.field`)}
-                />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <DateField
-                  label="Started"
-                  value={item.startDate ?? ''}
-                  onChange={(startDate) =>
-                    setEducation(i, { startDate: startDate || undefined })
-                  }
-                  provenance={index.get(`education.${i}.startDate`)}
-                />
-                <DateField
-                  label="Finished"
-                  value={item.endDate ?? ''}
-                  onChange={(endDate) =>
-                    setEducation(i, { endDate: endDate || null })
-                  }
-                  provenance={index.get(`education.${i}.endDate`)}
-                  openEndedLabel="Still studying"
-                />
-              </div>
-              <p className="text-meta text-ink-soft">
-                Reads as: {formatRange(item.startDate, item.endDate) || '—'}
-              </p>
-              <RemoveRow
-                label={`Remove ${item.institution || 'this entry'}`}
-                onClick={() =>
-                  removeRow(
-                    'education',
-                    i,
-                    [item.degree, item.institution]
-                      .filter(Boolean)
-                      .join(', ') || 'that entry',
-                  )
-                }
-              />
-            </div>
-          ))}
-          <AddRow
-            label="Add a qualification"
-            onClick={() =>
-              addRow('education', {
-                institution: '',
-                endDate: null,
-                highlights: [],
-              })
-            }
-          />
-        </Section>
-
-        <Section
-          title="Skills"
-          count={resume.skills.reduce((n, g) => n + g.items.length, 0)}
-          flagged={sectionFlagged('skills')}
-          defaultOpen={authoring}
-        >
-          {/*
-          Comma-separated, one field per group, rather than a chip editor.
-
-          Chips look better and are worse here: adding one means click, type, press Enter, and getting a
-          typo out of the middle of a list means finding the right little ✕. This is the shape the data
-          is already read *back* in — "Intensive care, Ventilator management, Triage" — so what somebody
-          sees on the page is what they edit, and pasting a list from an old CV works on the first try.
-
-          Splitting happens on the way in, so the field never fights the person typing: a lone comma
-          mid-sentence would otherwise vanish an item as they went.
-        */}
-          {resume.skills.length === 0 && (
-            <p className="text-[13px] leading-relaxed text-ink-soft">
-              {authoring
-                ? 'Group them however your trade does. The headings are yours, not a fixed list. "Clinical", "Machines I have run", "Languages".'
-                : 'We did not find any. Group them however your trade does. The headings are yours, not a fixed list.'}
-            </p>
-          )}
-          {resume.skills.map((group, i) => (
-            <div
-              key={i}
-              className="flex flex-col gap-3 border-l-2 border-l-hairline pl-3.5"
-            >
-              <Field
-                label="Heading"
-                value={group.category}
-                onChange={(category) => setSkillGroup(i, { category })}
-                provenance={index.get(`skills.${i}.category`)}
-              />
-              <label className="flex flex-col gap-1.5">
-                <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
-                  What goes under it
-                  <Flag entry={index.get(`skills.${i}.items`)} />
-                </span>
-                <AutoTextarea
-                  value={group.items.join(', ')}
-                  onChange={(next) =>
-                    setSkillGroup(i, {
-                      items: next
-                        .split(',')
-                        .map((item) => item.trim())
-                        .filter((item) => item !== ''),
-                    })
-                  }
-                  className={fieldClass(`skills.${i}.items`)}
-                />
-                <span className="text-meta text-ink-soft">
-                  Separated by commas.
-                </span>
-              </label>
-              <RemoveRow
-                label={`Remove the ${group.category || 'unnamed'} group`}
-                onClick={() =>
-                  removeRow('skills', i, group.category || 'that group')
-                }
-              />
-            </div>
-          ))}
-          <AddRow
-            label="Add a group"
-            onClick={() => addRow('skills', { category: '', items: [] })}
-          />
-        </Section>
-
-        {/*
-        The six lists the document prints and this panel used to skip — certifications, languages,
-        projects, volunteering, awards, publications. Described in one table rather than written out
-        six times, because writing them out is how four got done and six got forgotten. See
-        `extra-sections.tsx`; the chrome is handed over so the two files cannot drift on styling.
-      */}
-        <ExtraSections
-          resume={resume}
-          onChange={(next) => onChange(next)}
-          authoring={authoring}
-          chrome={{
-            index,
-            fieldClass,
-            sectionFlagged,
-            Section,
-            Field,
-            AddRow,
-            RemoveRow,
-            LineBubble,
-            AutoTextarea,
-          }}
-        />
-
-        {/*
-        The dynamic sections — whatever this CV carries that the fixed groups do not.
-
-        A Danish CV arrives with KURSER and REFERENCER; others bring volunteering, awards, memberships,
-        publications, a driving licence, hobbies. `resume.custom` has always caught these and the
-        templates have always rendered them — but the Check panel silently skipped them, so the person
-        was shown "15 of 17 fields" while whole sections of their document had no place to be corrected
-        (Edd's screenshot: a red arrow from REFERENCER in the PDF to an empty spot in this panel).
-
-        One editor for all of them, because their shape is one shape: a title and its lines. No fixed
-        list of "allowed" section kinds — the headings are the candidate's, not ours, exactly like the
-        skills groups above.
-      */}
-        {resume.custom.map((section, i) =>
-          /*
-          A spacer is not a section with nothing in it — it has no heading, no lines, and nothing to
-          check — so it gets a row of its own rather than a `Section` with its innards suppressed. It
-          keeps the same three header controls, because the reason to move or remove one is the same.
-        */
-          isSpacer(section) ? (
-            <SpacerRow
-              key={i}
-              space={section.space}
-              onChange={(space) => setCustomSection(i, { space })}
-              actions={sectionActions(i, 'this space')}
-            />
-          ) : (
-            <Section
-              key={i}
-              title={section.title === '' ? 'Untitled section' : section.title}
-              count={section.items.length}
-              flagged={sectionFlagged(`custom.${i}`)}
-              defaultOpen={false}
-              /*
-            Reorder and remove, reachable without opening the section — Edd's ask, and the reason is
-            the same one behind the count beside the title: a decision about a section should not cost
-            an expand, a scroll to the bottom, and a collapse. The removal here does exactly what the
-            "Remove the … section" row inside does; it is the same action at the place you are already
-            looking when you decide to take it.
-          */
-              actions={sectionActions(i, section.title || 'this section')}
-            >
-              <Field
-                label="Section heading"
-                value={section.title}
-                onChange={(title) => setCustomSection(i, { title })}
-                provenance={index.get(`custom.${i}.title`)}
-              />
-              {/*
-            The remove control here was a bare "✕" character where every other one in the form is the
-            same drawn bin — two icon families for one action, and the odd one out was the one sitting
-            closest to the text. Same bubble, same button, same place: learned once, true everywhere.
-          */}
-              {section.items.map((item, j) => (
-                <LineBubble
-                  key={j}
-                  removeLabel={`Remove line ${j + 1} of ${section.title || 'this section'}`}
-                  onRemove={() => removeCustomItem(i, j)}
-                >
-                  <label className="flex flex-col gap-1.5">
-                    <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
-                      Line {j + 1}
-                      <Flag entry={index.get(`custom.${i}.items.${j}`)} />
-                    </span>
-                    <AutoTextarea
-                      value={item}
-                      onChange={(next) => setCustomItem(i, j, next)}
-                      className={fieldClass(`custom.${i}.items.${j}`)}
-                    />
-                  </label>
-                </LineBubble>
-              ))}
-              <AddRow label="Add a line" onClick={() => addCustomItem(i)} />
-              <RemoveRow
-                label={`Remove the ${section.title || 'untitled'} section`}
-                onClick={() => removeCustomSection(i)}
-              />
-            </Section>
-          ),
-        )}
+                })()
+              : blocks[slot.name]?.(at)}
+          </Fragment>
+        ))}
 
         {/*
         And a way to add a section that was never in the file at all — the person is the source of
