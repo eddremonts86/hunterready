@@ -53,20 +53,32 @@ export interface Axes {
   colours: { accent?: string; paper?: string }
 }
 
-/** The field styling DESIGN.md specifies, applied to a vendored trigger rather than edited into it. */
+/**
+ * The field styling DESIGN.md specifies, applied to a vendored trigger rather than edited into it.
+ *
+ * No `ring` on focus any more — `styles.css` zeroes those globally now, so leaving the class here would
+ * be a line that reads as styling and does nothing. The border going Signal is the focus state on a
+ * mouse, and the outline in `styles.css` is the one for a keyboard.
+ */
 const TRIGGER =
-  'w-full rounded-field border border-hairline-strong bg-ground px-3 py-2 text-[15px] text-ink focus:border-signal focus:ring-[3px] focus:ring-signal-wash'
+  'w-full rounded-field border border-hairline-strong bg-ground px-3 py-2 text-[15px] text-ink focus:border-signal'
 
 /**
- * A section that can be folded away.
+ * A section that can be folded away, and starts folded.
  *
- * Three of them, because this panel had grown to a picker, twelve included designs and ninety-one
- * paid ones in one column: whichever you came for, you scrolled past the other two.
+ * Four of them, because this panel had grown to a picker, twelve included designs and ninety-one paid
+ * ones in one column: whichever you came for, you scrolled past the other three.
+ *
+ * Closed is the default rather than open, which is the opposite of the usual advice and right here.
+ * The alternative was one section expanded and the rest not, and that is a guess about which of four
+ * things somebody opened the panel for — wrong three times out of four, and wrong in the expensive
+ * direction, because the guess costs a scroll past ninety-one cards. Closed, the panel is an index of
+ * what is available in four lines, and one click is cheaper than any amount of scrolling.
  */
 export function Section({
   title,
   count,
-  defaultOpen = true,
+  defaultOpen = false,
   children,
 }: {
   title: string
@@ -223,14 +235,59 @@ function ColourPicker({
   )
 }
 
+/**
+ * What the locked half says, and why it says anything at all.
+ *
+ * The alternative was to hide the section from anyone without a plan, and that is the mistake the
+ * topbar's model picker already corrected: somebody who cannot see what they would get has no reason
+ * to buy it. So the section stays in the list, keeps its name, and explains itself — with the same
+ * restraint the rest of this product uses about the paid tier. No disabled controls to tease with, no
+ * pressure, and the free path described accurately rather than diminished.
+ */
+function Locked() {
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-[13px] leading-relaxed text-ink-soft">
+        Sixty typefaces and any two colours you like, mixed across designs —
+        your own accent on somebody else&rsquo;s layout, your own paper under
+        it. The legibility floor is still checked for you, so a pairing a
+        recruiter could not read is refused rather than exported.
+      </p>
+      <p className="text-[13px] leading-relaxed text-ink-soft">
+        The twelve included designs already render the same document, checked by
+        the same parse test. This changes how it looks, never whether it can be
+        read.
+      </p>
+      {/*
+        Same sentence as the model upsell in `topbar-controls.tsx`, deliberately. There is no gateway
+        yet, and a section that opened a checkout which cannot take money would be worse than one that
+        says so. See docs/08-roadmap.md — it is the last piece before v1.0.
+      */}
+      <p className="text-[12px] font-medium text-ink">
+        Paid plans are not open yet. This is the last piece before v1.0.
+      </p>
+    </div>
+  )
+}
+
 export function DesignAxes({
   axes,
   defaults,
+  entitled,
   onChange,
 }: {
   axes: Axes
   /** What the chosen design uses, so the fallback option is an honest label rather than a blank. */
   defaults: { body: string; heading: string; accent: string; paper: string }
+  /**
+   * Whether this visitor's plan includes mixing the axes.
+   *
+   * The padlock here is drawing, not enforcement — `/api/render` refuses custom fonts and colours from
+   * a caller without the entitlement, which is the actual gate, for the same reason it is the actual
+   * gate on a paid design: this endpoint is public by design (ADR-004) and anybody can read a query
+   * string. Hiding the controls would only mean the interface agrees with the server.
+   */
+  entitled: boolean
   onChange: (next: Axes) => void
 }) {
   const accent = axes.colours.accent ?? defaults.accent
@@ -246,6 +303,22 @@ export function DesignAxes({
     const hex = normalizeHex(value)
     if (hex === undefined) return
     onChange({ ...axes, colours: { ...axes.colours, [key]: hex } })
+  }
+
+  /*
+    Not rendered and then hidden. A `hidden` attribute over a working colour picker is a control that
+    somebody's dev tools can hand back to them, and while the render endpoint would still refuse the
+    result, an interface that has to be rescued by the server is one that lied first.
+
+    Safe as an early return because this component holds no state of its own — the pickers below do,
+    and they are children rather than hooks here.
+  */
+  if (!entitled) {
+    return (
+      <Section title="Make it yours">
+        <Locked />
+      </Section>
+    )
   }
 
   return (

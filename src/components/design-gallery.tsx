@@ -464,15 +464,9 @@ export function DesignGallery({
           </div>
         </Section>
 
-        {/*
-        Folded shut by default, and that is a judgement rather than a default: ninety-one paid cards
-        under twelve included ones meant the included set was a strip at the top of a very long
-        column. Closed, the two sets are the same size on screen, which is what a comparison needs.
-      */}
         <Section
           title={entitled ? 'Also yours' : 'Paid plan'}
           count={paid.length}
-          defaultOpen={false}
         >
           <div className="flex flex-col gap-2">
             {!entitled && (

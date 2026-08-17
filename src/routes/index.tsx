@@ -3446,32 +3446,6 @@ function HunterReady() {
                         </button>
                       )}
 
-                      <DesignAxes
-                        axes={{ fonts: customFonts, colours: customColours }}
-                        defaults={{
-                          body: getTheme(
-                            themeId,
-                          ).typography.body.fontFamily.replace(
-                            /^["']|["']$/g,
-                            '',
-                          ),
-                          heading: getTheme(
-                            themeId,
-                          ).typography.heading.fontFamily.replace(
-                            /^["']|["']$/g,
-                            '',
-                          ),
-                          accent:
-                            styleOf(getTheme(themeId)).accent ??
-                            getTheme(themeId).colors.primary,
-                          paper: getTheme(themeId).colors.background,
-                        }}
-                        onChange={(next) => {
-                          setCustomFonts(next.fonts)
-                          setCustomColours(next.colours)
-                        }}
-                      />
-
                       <DesignGallery
                         templateId={templateId}
                         themeId={themeId}
@@ -3498,6 +3472,39 @@ function HunterReady() {
                           })
                           setTemplateId(design.structure)
                           setThemeId(design.theme)
+                        }}
+                      />
+
+                      <DesignAxes
+                        axes={{ fonts: customFonts, colours: customColours }}
+                        /*
+                      The same flag the gallery reads, and for the same reason it uses `=== true`: the
+                      field is `undefined` until the server answers, and an unknown entitlement has to
+                      draw as locked. Offering the pickers a moment early would offer something
+                      `/api/render` then refuses.
+                    */
+                        entitled={consent.paidDesigns === true}
+                        defaults={{
+                          body: getTheme(
+                            themeId,
+                          ).typography.body.fontFamily.replace(
+                            /^["']|["']$/g,
+                            '',
+                          ),
+                          heading: getTheme(
+                            themeId,
+                          ).typography.heading.fontFamily.replace(
+                            /^["']|["']$/g,
+                            '',
+                          ),
+                          accent:
+                            styleOf(getTheme(themeId)).accent ??
+                            getTheme(themeId).colors.primary,
+                          paper: getTheme(themeId).colors.background,
+                        }}
+                        onChange={(next) => {
+                          setCustomFonts(next.fonts)
+                          setCustomColours(next.colours)
                         }}
                       />
                     </div>

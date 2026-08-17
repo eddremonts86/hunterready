@@ -376,7 +376,18 @@ body {
     color: var(--color-signal);
   }
 
-  /** Inputs. A 3px wash ring instead of a heavy border on focus: visible, and it does not shift layout. */
+  /**
+   * Inputs. The border does the work on focus; the ring is gone.
+   *
+   * It used to add `0 0 0 3px` of Signal wash, which was the right answer while `:focus-visible` was
+   * the only other indicator on the page and they rarely met. They meet on every field in the review
+   * form: a focused input wore a 2px outline, a 3px halo at a different offset in a different colour,
+   * and a recoloured border — three things saying one thing, on a screen that is nothing but fields.
+   *
+   * So the border going Signal is the whole focus state here, and the outline in the block near the
+   * end of this file is the keyboard one. Nothing about focus became invisible; it stopped being said
+   * three times. (Edd: "baja el ring de todos los inputs a 0, globalmente".)
+   */
   .field {
     width: 100%;
     background: var(--color-ground);
@@ -400,7 +411,6 @@ body {
 
   .field:focus {
     border-color: var(--color-signal);
-    box-shadow: 0 0 0 3px var(--color-signal-wash);
   }
 
   /** A field the extraction was unsure about. Caution, never alert: we are asking, not accusing. */
@@ -409,9 +419,9 @@ body {
     background: var(--color-caution-wash);
   }
 
+  /* The flagged border stays Caution while focused — the question it is asking outranks the focus. */
   .field-flagged:focus {
     border-color: var(--color-caution);
-    box-shadow: 0 0 0 3px rgb(154 91 18 / 12%);
   }
 
   .chip {
@@ -753,6 +763,38 @@ body {
   outline: 2px solid var(--color-signal);
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+/**
+ * No rings, anywhere. The focus *outline* above stays, and that distinction is the whole rule.
+ *
+ * Two things were drawing focus at once. The outline above is ours and applies to everything; the
+ * shadcn components arrive with `focus-visible:ring-[3px] ring-ring/50` of their own, and a field that
+ * is focused wore both — a 2px outline with a 3px halo bleeding out of it, at two different offsets and
+ * in two different colours. On a form of stacked fields that reads as a rendering fault rather than as
+ * a focused input, which is Edd's "baja el ring de todos los inputs a 0, globalmente".
+ *
+ * It is done here rather than in the components because `src/components/ui/` is vendored and hand
+ * edits there destroy the ability to diff against upstream (CLAUDE.md). Zeroing the two variables the
+ * `ring-*` utilities compile into switches every one of them off — including the ones a future
+ * `shadcn add` brings with it — without touching a line of their source.
+ *
+ * `--tw-shadow` is deliberately untouched: that is DESIGN.md's two-layer elevation, which is a
+ * different thing wearing a similar name.
+ *
+ * ⚠️ This removes the only focus indicator on the handful of vendored components that also set
+ * `outline-hidden` — button, select, tabs, command, popover, dialog, resizable. Focus has to remain
+ * visible (WCAG 2.4.7), so the outline is given back to them below rather than lost with the ring.
+ */
+*,
+*::before,
+*::after {
+  --tw-ring-shadow: 0 0 #0000 !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+}
+
+:focus-visible {
+  outline-style: solid !important;
 }
 
 /**
