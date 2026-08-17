@@ -454,6 +454,169 @@ function PlainRow({
 }
 
 /**
+ * A heading with nothing under it. One field, because it has one property.
+ *
+ * Not the section editor with its lines hidden: that editor offers "Add a line", and a control that
+ * adds something the page will not draw is worse than no control.
+ */
+function HeadingRow({
+  title,
+  onChange,
+  actions,
+}: {
+  title: string
+  onChange: (title: string) => void
+  actions: React.ReactNode
+}) {
+  return (
+    <div className="card flex items-center gap-3 px-4 py-3">
+      <label className="flex min-w-0 flex-1 items-center gap-3">
+        <span className="shrink-0 text-[15px] font-semibold text-ink">
+          Heading
+        </span>
+        <input
+          type="text"
+          value={title}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="What the sections below it are"
+          className="field py-1 text-[14px]"
+        />
+      </label>
+      {actions}
+    </div>
+  )
+}
+
+/**
+ * Paragraphs belonging to no heading.
+ *
+ * The same `items` array a section uses, drawn as prose rather than as bullets — because that is what
+ * the renderer draws, and a form that shows a bullet where the page shows a sentence is a form telling
+ * a small lie about the document.
+ */
+function TextRow({
+  items,
+  onChange,
+  actions,
+  fieldClass,
+}: {
+  items: Array<string>
+  onChange: (items: Array<string>) => void
+  actions: React.ReactNode
+  fieldClass: string
+}) {
+  return (
+    <div className="card overflow-hidden">
+      <div className="flex items-center gap-1 px-4 py-3 pr-2">
+        <span className="flex-1 text-[15px] font-semibold text-ink">
+          Paragraph
+        </span>
+        {actions}
+      </div>
+      <div className="flex flex-col gap-3 border-t border-hairline p-4">
+        {items.map((item, i) => (
+          <LineBubble
+            key={i}
+            removeLabel={`Remove paragraph ${i + 1}`}
+            onRemove={() => onChange(items.filter((_, k) => k !== i))}
+          >
+            <AutoTextarea
+              value={item}
+              minRows={3}
+              ariaLabel={`Paragraph ${i + 1}`}
+              onChange={(next) =>
+                onChange(items.map((old, k) => (k === i ? next : old)))
+              }
+              className={fieldClass}
+            />
+          </LineBubble>
+        ))}
+        <AddRow
+          label="Add a paragraph"
+          onClick={() => onChange([...items, ''])}
+        />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * A definition list: driving licence, notice period, right to work.
+ *
+ * Two fields per row and not one with a colon in it, for the same reason the schema keeps `pairs`
+ * rather than encoding them into strings — CVs are full of colons, and one inside a value would
+ * otherwise become a formatting instruction.
+ */
+function PairsRow({
+  title,
+  pairs,
+  onTitle,
+  onPairs,
+  actions,
+}: {
+  title: string
+  pairs: Array<{ label: string; value: string }>
+  onTitle: (title: string) => void
+  onPairs: (pairs: Array<{ label: string; value: string }>) => void
+  actions: React.ReactNode
+}) {
+  const patch = (at: number, part: Partial<{ label: string; value: string }>) =>
+    onPairs(pairs.map((pair, i) => (i === at ? { ...pair, ...part } : pair)))
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="flex items-center gap-1 px-4 py-3 pr-2">
+        <span className="flex-1 text-[15px] font-semibold text-ink">
+          {title === '' ? 'Label and value' : title}
+        </span>
+        {actions}
+      </div>
+      <div className="flex flex-col gap-3 border-t border-hairline p-4">
+        <Field label="Heading (optional)" value={title} onChange={onTitle} />
+        {pairs.map((pair, i) => (
+          <LineBubble
+            key={i}
+            removeLabel={`Remove ${pair.label === '' ? `pair ${i + 1}` : pair.label}`}
+            onRemove={() => onPairs(pairs.filter((_, k) => k !== i))}
+          >
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[13px] font-semibold text-ink">
+                  Label
+                </span>
+                <input
+                  type="text"
+                  value={pair.label}
+                  onChange={(event) => patch(i, { label: event.target.value })}
+                  placeholder="Driving licence"
+                  className="field"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[13px] font-semibold text-ink">
+                  Value
+                </span>
+                <input
+                  type="text"
+                  value={pair.value}
+                  onChange={(event) => patch(i, { value: event.target.value })}
+                  placeholder="B, clean"
+                  className="field"
+                />
+              </label>
+            </div>
+          </LineBubble>
+        ))}
+        <AddRow
+          label="Add a pair"
+          onClick={() => onPairs([...pairs, { label: '', value: '' }])}
+        />
+      </div>
+    </div>
+  )
+}
+
+/**
  * What a person can add to their CV, and the one place the list lives.
  *
  * ## Why a table and not two buttons
@@ -1742,6 +1905,45 @@ export function ReviewForm({
                         actions={sectionActions(
                           at,
                           kind === 'space' ? 'this space' : 'this line',
+                        )}
+                      />
+                    )
+                  }
+                  if (kind === 'heading') {
+                    return (
+                      <HeadingRow
+                        key={i}
+                        title={section.title}
+                        onChange={(title) => setCustomSection(i, { title })}
+                        actions={sectionActions(
+                          at,
+                          section.title === '' ? 'this heading' : section.title,
+                        )}
+                      />
+                    )
+                  }
+                  if (kind === 'text') {
+                    return (
+                      <TextRow
+                        key={i}
+                        items={section.items}
+                        onChange={(items) => setCustomSection(i, { items })}
+                        fieldClass={fieldClass(`custom.${i}.items.0`)}
+                        actions={sectionActions(at, 'this paragraph')}
+                      />
+                    )
+                  }
+                  if (kind === 'keyValue') {
+                    return (
+                      <PairsRow
+                        key={i}
+                        title={section.title}
+                        pairs={section.pairs ?? []}
+                        onTitle={(title) => setCustomSection(i, { title })}
+                        onPairs={(pairs) => setCustomSection(i, { pairs })}
+                        actions={sectionActions(
+                          at,
+                          section.title === '' ? 'these pairs' : section.title,
                         )}
                       />
                     )
