@@ -164,13 +164,23 @@ export function DesignPreviewDialog({
       ref={ref}
       aria-labelledby="design-preview-heading"
       /*
-        Sized to the sheet, not to a round number. An A4 preview is 794px wide and cannot stretch, so
-        a 900px dialog left 53px of centring space on each side of the document while the header
-        started at 20px: three different left edges in one box. 794 + two 24px gutters is 842.
+        One fixed size, always: 90% of the viewport in both axes.
+
+        It used to be sheet-width with `max-h`, which meant the shell measured its own contents — and
+        the contents change constantly. A one-page CV, a two-page one, the loading skeleton and the
+        side-by-side comparison are four different heights, so every one of those switches resized the
+        dialog under the reader's cursor. A window that moves while you are reading it is worse than
+        one that is occasionally larger than it needs to be.
+
+        The cost, stated because it undoes something deliberate: the earlier version was 842px so the
+        header's left edge lined up with the sheet's. At 90vw the sheet cannot fill the width and
+        centres instead, so the header spans and the document floats in the middle of it. That is the
+        ordinary arrangement for a document viewer, and it is the price of the shell holding still.
+        Comparison gets the width it always wanted in exchange.
       */
-      className="m-auto w-[min(96vw,842px)] rounded-card border border-hairline bg-ground p-0 backdrop:bg-ink/40"
+      className="m-auto h-[90vh] w-[90vw] rounded-card border border-hairline bg-ground p-0 backdrop:bg-ink/40"
     >
-      <div className="flex max-h-[92vh] flex-col">
+      <div className="flex h-full min-h-0 flex-col">
         {/*
           Two rows, because they answer different questions.
 
