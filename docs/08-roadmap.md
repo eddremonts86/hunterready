@@ -545,10 +545,12 @@ is the argument for the verification step and not against the plan.
 
 ### Needs one sentence from Edd
 
-9. **Does the private Spanish CV have a formal education section at all?** Measured, not assumed: of
-   103 extracted lines, **zero** contain `formacion`, `educacion`, `estudios` or `academic` in any
-   form, and its headings read like a portfolio-shaped profile. So either extraction loses the region
-   entirely or there is nothing to find. Nobody should hunt this further until it is answered.
+9. ~~**Does the private Spanish CV have a formal education section at all?**~~ **Closed 2026-08-18:
+   it does not.** Edd confirmed that `fixtures/private/edd.pdf` is the file, and that it carries no
+   education section. So extraction loses nothing: fourteen education stems searched
+   accent-insensitively return zero, page 2 is twelve jobs back to 2007 followed by skills, and the
+   only image is a 320x213 photograph. A senior engineer with eighteen years of employment leaving
+   education off a targeted CV is an ordinary choice. **No bug. Nobody should look again.**
 
 ### Stated but unbuilt, so it has to be decided
 
