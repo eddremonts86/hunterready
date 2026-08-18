@@ -17,17 +17,17 @@
  */
 import { createFileRoute } from '@tanstack/react-router'
 
+import { enterV1 } from '@/lib/v1'
+
 import { ingest } from '@/ingest'
 import { extractResume } from '@/structure/extract'
-import { apiCaller, unauthorized } from '@/lib/api-caller'
 import {
   consentOn,
   consentedToTransfer,
   providerIdFrom,
 } from '@/lib/chosen-provider'
 import { mayUseThirdParty } from '@/lib/entitlements'
-import { errorEvent, event, requestId } from '@/lib/log'
-import { checkRateLimit } from '@/lib/rate-limit'
+import { errorEvent, event } from '@/lib/log'
 
 /** The same ceiling the browser upload has. A partner is not a reason to accept a 40 MB scan. */
 const MAX_BYTES = 10 * 1024 * 1024
@@ -36,22 +36,9 @@ export const Route = createFileRoute('/v1/cv')({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const id = requestId()
-        const caller = await apiCaller(request)
-        if (caller === undefined) return unauthorized(id)
-
-        const limit = checkRateLimit(`key:${caller.keyId}`)
-        if (!limit.allowed) {
-          event('v1.cv.rate_limited', { requestId: id })
-          return Response.json(
-            {
-              error: 'rate_limited',
-              message: 'Too many requests. Try again shortly.',
-              requestId: id,
-            },
-            { status: 429, headers: { 'retry-after': '60' } },
-          )
-        }
+        const entry = await enterV1(request, 'cv')
+        if ('refusal' in entry) return entry.refusal
+        const { id } = entry.ok
 
         let file: File | undefined
         let asked: unknown

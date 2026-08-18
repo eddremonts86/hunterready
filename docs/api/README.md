@@ -157,6 +157,60 @@ order on every build. A design that loses a field does not ship. That check is t
 
 ---
 
+## The rest of the surface
+
+Everything below takes JSON, needs the same key, and reads the same `X-HunterReady-Consent` header.
+They all operate on a `resume` object — the one `/v1/cv` gave you, corrected by your user.
+
+| Endpoint                 | Body                                          | Returns                                                               |
+| ------------------------ | --------------------------------------------- | --------------------------------------------------------------------- |
+| `POST /v1/rewrite`       | `resume`, optional `only`, optional `answers` | `rewrites[]`: the original line, a rationale, and a suggestion        |
+| `POST /v1/target`        | `resume`, `advert`                            | `requirements` split into what the advert asks for, plus `invented[]` |
+| `POST /v1/cover-letter`  | `resume`, `advert`, optional `requirements`   | A draft letter                                                        |
+| `POST /v1/translate`     | `resume`, `target` (`en` `es` `da`)           | The whole document in that language                                   |
+| `POST /v1/render-letter` | a letter                                      | `application/pdf`                                                     |
+| `GET /v1/capabilities`   | —                                             | What this key may do, before it tries                                 |
+
+**`invented[]` from `/v1/target` is the one to read.** It lists claims the model produced that are not
+in the CV, and they are refused rather than returned as suggestions. Nothing this API returns will
+add a number, an employer, a date or an outcome that the document did not already contain. That is
+enforced in code, not in a prompt.
+
+**`only` on `/v1/rewrite`** takes `{workIndex, highlightIndex}` pairs. Send one job per request if a
+person is watching, because a whole CV is a lot of model calls in one wait.
+
+### `GET /v1/capabilities`
+
+Ask before you assume. A machine cannot read a consent gate or see a locked design, so this answers
+the three questions a client would otherwise discover through a `402` in the middle of a user's flow:
+
+```json
+{
+  "providers": [{ "id": "minimax", "name": "MiniMax" }],
+  "paidDesigns": true,
+  "encryptsAtRest": true,
+  "rateLimit": { "requests": 12, "windowMinutes": 10 },
+  "version": "v1"
+}
+```
+
+An empty `providers` means the third-party model is not reachable for this key and every CV will be
+read on our hardware whatever header you send. It tells you nothing else about the account.
+
+### What is deliberately not here
+
+Saved CVs, the library, and share links are **not** in `/v1`, and it is not an oversight.
+
+Those operate on documents stored against _our_ account holder. Your key belongs to one of those
+accounts, so wrapping them would let an integration read and write the CVs of the person who owns the
+key — which is right if you are automating your own account, and wrong in every way if your users are
+not that person. Getting that distinction wrong is how an integration reads somebody else's CV.
+
+It needs per-key scopes and a decision about whose documents a partner is acting on. Ask, and it gets
+designed rather than guessed.
+
+---
+
 ## Errors
 
 Every error is JSON with `error`, `message` and `requestId`. **Quote the `requestId`** when

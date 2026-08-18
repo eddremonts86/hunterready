@@ -17,16 +17,32 @@ const files = readdirSync(V1)
 
 const textOf = (name: string) => files.find((f) => f.name === name)?.text ?? ''
 
-describe('every /v1 route authenticates and limits per key', () => {
-  it.each(files.map((f) => f.name))('%s asks for a key first', (name) => {
-    expect(textOf(name)).toContain('apiCaller(request)')
-    expect(textOf(name)).toContain('unauthorized(id)')
+describe('every /v1 route enters through the same door', () => {
+  /*
+    `enterV1` is authentication, the per-key rate-limit bucket and the request id, in one function.
+    Asserting the call rather than its three effects is the point: when a route uses it, all three
+    hold, and when a new route forgets it, this fails on the first run rather than on the first
+    incident. It was extracted at the third endpoint, which is about when a pattern stops being a
+    coincidence.
+  */
+  it.each(files.map((f) => f.name))('%s calls enterV1', (name) => {
+    expect(textOf(name)).toContain('await enterV1(request,')
   })
 
-  it.each(files.map((f) => f.name))('%s buckets by key, not by IP', (name) => {
-    // Two partners behind one NAT must not share a bucket, and one partner must not escape by
-    // moving hosts.
-    expect(textOf(name)).toContain('checkRateLimit(`key:${caller.keyId}`)')
+  it.each(files.map((f) => f.name))('%s returns the refusal', (name) => {
+    // Reading the entry and continuing anyway would authenticate and then serve regardless.
+    expect(textOf(name)).toContain(
+      "if ('refusal' in entry) return entry.refusal",
+    )
+  })
+
+  it('and enterV1 is the only place the bucket is chosen', () => {
+    // One decision about what a rate-limit key is, not eight that can drift apart.
+    for (const { name, text } of files) {
+      expect(text, `${name} must not bucket on its own`).not.toContain(
+        'checkRateLimit(',
+      )
+    }
   })
 })
 
@@ -60,9 +76,17 @@ describe('/v1 reuses the rules rather than restating them', () => {
 })
 
 describe('every response carries a request id', () => {
-  it.each(files.map((f) => f.name))('%s sets x-request-id', (name) => {
-    // The only thread between a partner reporting a failure and a log line, given that the log has
-    // no content in it by design.
-    expect(textOf(name)).toContain("'x-request-id': id")
+  it.each(files.map((f) => f.name))('%s threads the id through', (name) => {
+    /*
+      The only link between a partner saying "this failed at 14:02" and a log line, given that the
+      log deliberately holds no CV content. Either the route sets the header itself, or it hands the
+      id to a helper that does.
+    */
+    const text = textOf(name)
+    const threaded =
+      text.includes("'x-request-id': id") ||
+      text.includes('entry.ok.id') ||
+      text.includes('v1Json(entry.ok.id')
+    expect(threaded, `${name} loses the request id`).toBe(true)
   })
 })

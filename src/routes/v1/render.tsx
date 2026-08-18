@@ -17,6 +17,8 @@
  */
 import { createFileRoute } from '@tanstack/react-router'
 
+import { enterV1 } from '@/lib/v1'
+
 import { Resume } from '@/schema/resume'
 import { renderResume } from '@/render/render'
 import {
@@ -24,30 +26,15 @@ import {
   readSelection,
   refuseUnlessEntitled,
 } from '@/routes/api/render'
-import { apiCaller, unauthorized } from '@/lib/api-caller'
-import { errorEvent, event, requestId } from '@/lib/log'
-import { checkRateLimit } from '@/lib/rate-limit'
+import { errorEvent, event } from '@/lib/log'
 
 export const Route = createFileRoute('/v1/render')({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const id = requestId()
-        const caller = await apiCaller(request)
-        if (caller === undefined) return unauthorized(id)
-
-        const limit = checkRateLimit(`key:${caller.keyId}`)
-        if (!limit.allowed) {
-          event('v1.render.rate_limited', { requestId: id })
-          return Response.json(
-            {
-              error: 'rate_limited',
-              message: 'Too many requests. Try again shortly.',
-              requestId: id,
-            },
-            { status: 429, headers: { 'retry-after': '60' } },
-          )
-        }
+        const entry = await enterV1(request, 'render')
+        if ('refusal' in entry) return entry.refusal
+        const { id } = entry.ok
 
         let body: unknown
         try {
