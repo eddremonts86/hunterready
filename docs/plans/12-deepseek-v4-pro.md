@@ -1,6 +1,6 @@
 # 12 — DeepSeek v4-pro returns an empty tool input
 
-- **Date:** 2026-08-18 · **Status:** draft (blocked on the vendor) · **Blocks:** 2 · **Author:** Edd
+- **Date:** 2026-08-18 · **Status:** draft (blocked on the vendor) · **Blocks:** 3 · **Author:** Edd
 
 ## Objective
 
@@ -17,8 +17,24 @@ Two things were found getting that far and both are worth keeping. v4-pro reject
 exists. And `deepseek-chat` and `deepseek-reasoner` are both accepted with 200 and served as
 `deepseek-v4-flash`, so a wrong model name does not error — it silently runs a different model.
 
-Flash shipped. `src/structure/__tests__/deepseek-schema.test.ts` exists to go red when the vendor
-fixes pro, which is the notification rather than a reminder to check.
+Flash shipped. `src/structure/__tests__/deepseek-schema.test.ts` holds the finding.
+
+**Re-verified 2026-08-18, 15:23: still true.** Both assertions pass — pro returns an empty input, flash
+fills the schema — in 4.7s.
+
+⚠️ **And running it exposed a claim in this plan that was wrong.** It said the test "is the
+notification rather than a reminder to check". It is not. It spends money, so it skips itself without
+a credential, which means `pnpm test` reports `2 skipped` and CI never runs it. An opt-in test nobody
+runs _is_ a reminder to check. The skip is honest — vitest prints `skipped`, never a false green — but
+nothing will tell anybody the day this changes.
+
+So the instrument is this command, and somebody has to type it:
+
+```bash
+set -a; . ./.env; set +a; pnpm vitest run deepseek-schema
+```
+
+Whether that is good enough is block 3's question, added below.
 
 ## Acceptance criteria
 
@@ -28,6 +44,8 @@ fixes pro, which is the notification rather than a reminder to check.
 
 ## Non-goals
 
+- Putting a paid API call in `pnpm test`. It would spend money on every run and go red when DeepSeek
+  is merely down, which trains people to ignore it.
 - Working around the vendor. A retry loop against a model that returns `{}` spends money to produce
   nothing, and hides the fault.
 - Polling DeepSeek's changelog. The test is the instrument.
@@ -45,6 +63,14 @@ fixes pro, which is the notification rather than a reminder to check.
 - [ ] Run `OLLAMA_BASE_URL=… pnpm test:measure` against pro and flash on the same fixtures.
 - [ ] Compare cost per CV and the silence rate, and append an ADR with both numbers.
 - [ ] **Verify:** ingest one real CV through the chosen model end to end and read the field table.
+
+### Block 3: decide whether a manual check is enough (20 min)
+
+- [ ] Three options, in ascending cost: leave it manual and re-run when it matters; add it to the
+      monthly-ish rhythm something else already has; or run it on a schedule that reports only when
+      the answer _changes_, which is the only version that is genuinely a notification.
+- [ ] **Verify:** whichever is chosen, the date of the last real run is written in this file. That
+      date is the actual state of the knowledge, and it is the thing that goes stale.
 
 ## Risks
 
