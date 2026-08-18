@@ -69,6 +69,30 @@ export function needsReview(p: FieldProvenance): boolean {
  *      because nothing extracted it. A field the user typed is not a field we are unsure about, and
  *      inheriting a neighbour's confidence score would be inventing a measurement.
  */
+/**
+ * One path format, whoever produced the path.
+ *
+ * **The contract is dotted: `work.0.company`.** Everything that consumes a path assumes it —
+ * `shiftProvenance` below splits on `.` and reads the next segment as an index, and the review form
+ * filters rows with `` `${list}.${at}.` ``.
+ *
+ * The rule engine emits that form. **The model does not**, because the model writes these strings
+ * itself and reaches for the JSON-path style it has seen everywhere: `work[0].company`. Neither
+ * consumer matches that, so every flag from the model survived a row deletion pointing at the old
+ * index — which is precisely the failure the note above calls worse than having no flags at all, and
+ * it was live for everyone, since ADR-030 puts every visitor on the model path.
+ *
+ * Normalising here rather than in the prompt is deliberate: a prompt is a request, and this is a
+ * contract. A model that ignores the instruction once would put it straight back.
+ *
+ * Found on 2026-08-18 by following `docs/api/README.md` as a stranger would, which is what block 7
+ * of plan 16 asked for and the reason that verification step is worth its cost.
+ */
+export function normalizePath(path: string): string {
+  // `work[0].company` → `work.0.company`; `skills[1]` → `skills.1`; already-dotted is left alone.
+  return path.replace(/\[(\d+)\]/g, '.$1').replace(/\.\./g, '.')
+}
+
 export function shiftProvenance(
   provenance: Array<FieldProvenance>,
   listPath: string,
