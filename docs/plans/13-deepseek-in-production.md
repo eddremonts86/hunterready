@@ -2,6 +2,8 @@
 
 - **Date:** 2026-08-18 · **Status:** draft · **Blocks:** 2 · **Author:** Edd
 
+> **2026-08-18: Block 2 done. Block 1 is Edd's: the three variables in Coolify.** See the commit for what changed and how it was verified.
+
 ## Objective
 
 Make DeepSeek appear in production's provider list, and make its absence loud instead of silent.

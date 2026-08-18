@@ -2,6 +2,8 @@
 
 - **Date:** 2026-08-18 · **Status:** draft · **Blocks:** 1 · **Author:** Edd
 
+> **2026-08-18: Done.** See the commit for what changed and how it was verified.
+
 ## Objective
 
 Make `displayName` recognise MiniMax's `.chat` host so the legacy `provider` field says `MiniMax`.

@@ -34,6 +34,22 @@ const STRING_ALLOWLIST = new Set([
    * name on it can carry one of a handful of known words and nothing else.
    */
   'summaryOutcome',
+  /**
+   * Provider ids, and only ever provider ids.
+   *
+   * `providersConfigured` / `providersSkipped` / `providerPinned` carry a comma-joined subset of the
+   * keys of `BY_ID` in `structure/provider.ts` — `deepseek`, `minimax`, `anthropic` — or the literal
+   * `none`. A closed vocabulary that lives in code, never a value from a request and never anything
+   * derived from a credential.
+   *
+   * Prefixed rather than named `configured` / `skipped` / `pinned`, for the reason `summaryOutcome`
+   * gives above: a bare `skipped` is the kind of generic key somebody later hangs a filename on, and
+   * this allowlist is only worth as much as the promise that every name on it can carry a handful of
+   * known words and nothing else.
+   */
+  'providersConfigured',
+  'providersSkipped',
+  'providerPinned',
 ])
 
 function scrub(fields: Record<string, Primitive>): Record<string, Primitive> {

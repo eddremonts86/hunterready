@@ -2,6 +2,8 @@
 
 - **Date:** 2026-08-18 · **Status:** draft · **Blocks:** 4 · **Author:** Edd
 
+> **2026-08-18: Blocks 1 to 3 done. Block 4 (whether to adopt an error reporter) is still open and is deliberately a separate decision.** See the commit for what changed and how it was verified.
+
 ## Objective
 
 Give the one hard rule with no automated proof behind it an instrument, or replace the check with one

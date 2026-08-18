@@ -2,6 +2,8 @@
 
 - **Date:** 2026-08-18 · **Status:** draft · **Blocks:** 2 · **Author:** Edd
 
+> **2026-08-18: Block 2 done. Block 1 needs Coolify to pass HR_COMMIT, which the deploy workflow cannot do for it.** See the commit for what changed and how it was verified.
+
 ## Objective
 
 Make `/api/health` on production report the deployed commit, so `pnpm stale` works against the site
