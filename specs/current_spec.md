@@ -13,7 +13,13 @@ confidence and the wrong answer.
 maintained list. Everything above that section in the roadmap is the record of a shipped release, kept
 for its reasoning, not a queue.
 
-The short version, as of 2026-08-16: **pricing and payments** is the only thing between here and v1.0.
+**[docs/plans/](../docs/plans/)** holds one plan per open item, numbered to match. They are plans, not
+a queue either: nothing there is started, and this file is where one goes when it becomes the active
+Spec.
+
+The short version, as of 2026-08-18: **pricing and payments** is still the only thing between here and
+v1.0, and sixteen items are open. Four of them were found by verifying the 2026-08-18 deploy rather
+than by planning it, and one is new work Edd asked for: an API another application can call.
 
 ## Starting the next one
 

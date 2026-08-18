@@ -501,21 +501,32 @@ off the blocking path, not a faster engine).
 
 ## What is actually open
 
-Checked against the code on 2026-08-16, not against the lists above. **This is the maintained list**;
+Checked against the code on 2026-08-18, not against the lists above. **This is the maintained list**;
 everything higher in this file is the record of a release. When an item here closes, close it here.
+
+The 2026-08-18 pass added items 11 to 16, all of them born in the release of that day and none of them
+found by reading this file. Four came out of verifying a deploy rather than out of planning it, which
+is the argument for the verification step and not against the plan.
 
 ### Blocking v1.0
 
 1. **Pricing and payments.** Numbers, provider, and an endpoint that sets `plan`. See v1.0 above and
    docs/09 question 7 — the shape is decided, so this is now work plus two numbers, not a design
    question.
-2. **Name and domain** (docs/09 question 8). `.dev`/`.app`/`.com` availability and trademark never
+2. **The exit from `HR_BETA_PAID_FREE`.** Beta hands every Pro capability to everyone: the larger
+   model, all 103 designs, the mixed axes, saved CVs. It defaults on, so production is running it, and
+   `HR_BETA_PAID_FREE=false` ends it. Not a separate decision from item 1 — it is the same switch seen
+   from the other side, and the day pricing opens it flips. Listed separately because it lives in a
+   different file from the checkout and would otherwise be found by a user rather than by us.
+   `entitlements.test.ts` and `production-parity.parity.test.ts` both prove the off state still works,
+   which is the part that would rot silently.
+3. **Name and domain** (docs/09 question 8). `.dev`/`.app`/`.com` availability and trademark never
    checked, and it was always marked "needed by v1.0". Cheap, and it gets more expensive the later it
    is asked.
 
 ### Costing money today
 
-3. **The exit from ADR-030.** `HR_THIRD_PARTY_FOR_ALL=true` means every anonymous visitor spends
+4. **The exit from ADR-030.** `HR_THIRD_PARTY_FOR_ALL=true` means every anonymous visitor spends
    third-party tokens. The switch flips back when the local model can read an advert in seconds, and
    ADR-027 already named the lever: **take the model call off the blocking path**, not a faster engine.
    The concern that ADR remained worried about — "`/api/rewrite` already rate-limits; ingestion does
@@ -524,28 +535,57 @@ everything higher in this file is the record of a release. When an item here clo
 
 ### Ingestion quality — all three are missing inputs, not missing code
 
-4. **A real Canva/Enhancv export** with genuinely _overlapping_ column spans. Interleaved ordering is
+5. **A real Canva/Enhancv export** with genuinely _overlapping_ column spans. Interleaved ordering is
    covered by `two-column-interleaved.pdf`; overlap defeats a different rule.
-5. **A real photographed CV** — perspective skew, uneven lighting, shadow. `scanned.pdf` is a clean
+6. **A real photographed CV** — perspective skew, uneven lighting, shadow. `scanned.pdf` is a clean
    rasterization and cannot fake any of it.
-6. **A genuine multi-page CV**, still owed to Block 4's page-break verifier.
-7. **MiniMax sometimes returns no provenance**, which costs the review step its "where did this come
+7. **A genuine multi-page CV**, still owed to Block 4's page-break verifier.
+8. **MiniMax sometimes returns no provenance**, which costs the review step its "where did this come
    from" answer on the affected fields.
 
 ### Needs one sentence from Edd
 
-8. **Does the private Spanish CV have a formal education section at all?** Measured, not assumed: of
+9. **Does the private Spanish CV have a formal education section at all?** Measured, not assumed: of
    103 extracted lines, **zero** contain `formacion`, `educacion`, `estudios` or `academic` in any
    form, and its headings read like a portfolio-shaped profile. So either extraction loses the region
    entirely or there is nothing to find. Nobody should hunt this further until it is answered.
 
 ### Stated but unbuilt, so it has to be decided
 
-9. **Model routing (docs/06).** Implement the per-task table or retire it. See v0.3.
-10. **Verifier 5 has no instrument.** The v0.1 spec's privacy check assumed an error reporter that was
+10. **Model routing (docs/06).** Implement the per-task table or retire it. See v0.3.
+11. **Verifier 5 has no instrument.** The v0.1 spec's privacy check assumed an error reporter that was
     never wired — there is no Sentry in the repo. Either add one and keep the check, or replace the
     check with one that runs against what exists. The rule it protects (no CV content in logs, errors or
     telemetry) is the one rule in CLAUDE.md with no automated proof behind it.
+
+### Found while deploying 2026-08-18, not while planning
+
+12. **DeepSeek v4-pro returns an empty tool input.** Asked for, and it does not work: against the real
+    7,303-character schema v4-pro calls the tool with `{}` while `deepseek-v4-flash` fills it in 1.8s.
+    Both were measured on the same prompt through the same Anthropic-compatible endpoint, with
+    `thinking: {type: 'disabled'}` (v4-pro rejects a forced `tool_choice` otherwise). Flash ships.
+    `deepseek-schema.test.ts` goes red the day the vendor fixes it, which is the notification.
+    **Decide, once it is fixed:** pro by default, or leave flash and keep pro as a choice.
+13. **DeepSeek is configured nowhere in production.** `deepseek()` returns `undefined` without
+    `DEEPSEEK_API_KEY`, so the app starts clean and the model is simply absent from
+    `/api/processing`'s list — no error, no log line. Coolify needs `DEEPSEEK_API_KEY`,
+    `DEEPSEEK_BASE_URL` and `DEEPSEEK_MODEL`; `docker-compose.yml` already passes all three. Verified
+    absent on the 2026-08-18 deploy: `providers` came back with MiniMax alone.
+14. **`/api/processing` reports `provider: "api.minimaxi.chat"`.** `displayName` maps `minimax.io` and
+    `minimaxi.com` to "MiniMax" and production is configured against a `.chat` host, so the hostname
+    falls through. **Not user-visible** — every name on screen comes from `providers[].name`, which is
+    correct — so it is one line and no hurry. Worth fixing before something starts reading that field.
+15. **Production reports `build: "unknown"`.** Coolify does not pass `HR_COMMIT`, so `/api/health`
+    cannot say which commit it is serving and `pnpm stale` is useless against the deployed site. The
+    local half of this was solved the same day; the half that matters was not. Three times in one
+    session locally, "why don't I see the change" turned out to be a stale image, and production has
+    no such answer available at all.
+16. **A machine cannot use any of this.** Fifteen routes already cover the whole product — ingest,
+    render, rewrite, target, translate, cover letter, share, library — and every one authenticates by
+    session cookie. There are no API keys anywhere in the repo. So "build an API" is mostly not
+    endpoint work: it is machine authentication, a contract somebody can depend on, quotas, and an
+    answer to the question ADR-023 raises, which is **who consents when the caller is not a person**.
+    See the plan in [docs/plans/](plans/).
 
 ### Not open, despite appearances
 
