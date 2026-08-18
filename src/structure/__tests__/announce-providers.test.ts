@@ -16,8 +16,17 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-/** Distinctive enough that a substring search cannot match it by accident. */
-const SECRET = 'sk-zzq7-NOTAREALKEY-4417-vv'
+/**
+ * Distinctive enough that a substring search cannot match it by accident, and **deliberately not
+ * shaped like a real credential**.
+ *
+ * The first version wore a well-known vendor key prefix, chosen to look like the thing being
+ * protected. It looked like it to GitGuardian too, which failed the release PR over a string with
+ * `NOTAREALKEY` written in the middle of it. A test fixture that trips a secret scanner is a false alarm on every future pull request that
+ * touches this file, and the fifth one gets waved through without reading — which is the failure a
+ * scanner exists to prevent.
+ */
+const SECRET = 'zzq7-provider-credential-fixture-4417-vv'
 
 async function boot(env: Record<string, string | undefined>) {
   vi.resetModules()
