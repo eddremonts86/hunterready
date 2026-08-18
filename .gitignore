@@ -51,3 +51,4 @@ rewrite-quality-report.txt
 # Local-only compose overlay: publishes host ports for review. Never deployed.
 docker-compose.local.yml
 provenance-report.txt
+provider-accuracy-report.txt

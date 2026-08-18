@@ -59,6 +59,39 @@ label for "Check everything / we could not tell which fields". It was written fo
 covers this one exactly. Nothing was holding that boolean in place, so
 `no-provenance-is-honest.test.ts` now does.
 
+## And the question it raised: is MiniMax simply the better provider?
+
+Edd, reading the table above: _"entonces es mejor usar minimax que deepseek"_. On provenance, yes,
+and it is not close. So the obvious follow-up was scored rather than assumed, with the same scorer
+`accuracy-report.txt` uses, three passes each (`provider-accuracy-report.txt`):
+
+```
+  who        fixture              overall   passes
+  rules      plain.txt             100%     (deterministic)
+  DeepSeek   plain.txt            100-100%  100 100 100
+  MiniMax    plain.txt            100-100%  100 100 100
+  rules      nurse-senior.pdf      100%     (deterministic)
+  DeepSeek   nurse-senior.pdf     100-100%  100 100 100
+  MiniMax    nurse-senior.pdf     100-100%  100 100 100
+```
+
+**This does not say the providers are equal. It says the instrument cannot tell.** Plain regular
+expressions score 100 on the same inputs, and CLAUDE.md already records why: every fixture is
+synthesised from the expected result it is scored against, so the synthetic set is easier than
+reality by construction. A test that cannot separate a regex from a model cannot separate two models.
+
+So where that leaves the choice, honestly:
+
+- **Provenance: MiniMax, decisively.** 86-100% against 0% on the larger document, three passes each.
+- **Accuracy: unknown.** Not "equal" — unmeasurable on what we have.
+- **Schema filling: flash works, v4-pro does not** (item 12), which is a DeepSeek-specific fault.
+- **Latency and cost per CV: never measured between them.**
+
+MiniMax is the right default on the evidence, and the evidence is one dimension wide. The thing that
+would widen it is **roadmap items 05, 06 and 07** — the three real CVs nobody has supplied. They are
+listed as ingestion-quality gaps; this is a second reason they matter, and a sharper one, because
+without them there is no way to tell whether a model change helped.
+
 ## Acceptance criteria
 
 - [ ] A measured rate: how many fields lack provenance, across the fixture set, per provider.
