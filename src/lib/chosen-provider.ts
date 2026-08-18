@@ -58,3 +58,46 @@ export function providerIdFrom(value: unknown): string | undefined {
   const id = chosenProvider(value)
   return id === undefined || id === 'default' ? undefined : id
 }
+
+/**
+ * The same answer, asserted by a machine on a header (ADR-032).
+ *
+ * A browser sends the person's own click in the request body. An API caller has no person at the
+ * keyboard, so it states on each request that its user consented, and names the company:
+ *
+ *     X-HunterReady-Consent: minimax
+ *
+ * **Per request, never per key.** A key is not a standing permission to send anybody's CV anywhere;
+ * the consent belongs to one person and one document, and a header that has to be set each time is
+ * the shape of that. It also means a caller that forgets it gets the local model rather than an
+ * accidental transfer.
+ *
+ * Read through `chosenProvider` deliberately, rather than parsed here. The whole reason that function
+ * exists is that five endpoints once had five copies of this rule and four were wrong. A sixth copy
+ * for the API would be the same mistake with a better excuse.
+ */
+export const CONSENT_HEADER = 'x-hunterready-consent'
+
+/**
+ * Returns the **raw** header value, not a normalised id, so it drops in exactly where a body field
+ * does and is read by the same two functions afterwards.
+ *
+ * Returning the normalised id here was the first version and it was wrong in a way worth recording:
+ * `chosenProvider` maps the legacy value `provider` to `default`, and feeding `default` back into
+ * `providerIdFrom` produces `undefined`, because `default` is not a company. A caller asserting
+ * consent would have silently got the local model. One normalisation, at the end, once.
+ */
+export function assertedConsent(request: Request): string | null {
+  return request.headers.get(CONSENT_HEADER)
+}
+
+/**
+ * The consent on this request, from the body if a browser sent one, otherwise from the header.
+ *
+ * Body first because a browser's own field is the person's actual click, and a header on the same
+ * request would be a machine overriding it.
+ */
+export function consentOn(request: Request, fromBody: unknown): unknown {
+  const body = typeof fromBody === 'string' ? fromBody.trim() : ''
+  return body !== '' ? fromBody : assertedConsent(request)
+}

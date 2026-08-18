@@ -1,6 +1,12 @@
 # 16 — An API a machine can use
 
-- **Date:** 2026-08-18 · **Status:** draft · **Blocks:** 8 · **Author:** Edd
+- **Date:** 2026-08-18 · **Status:** blocks 1-7 done · **Blocks:** 8 · **Author:** Edd
+
+> **2026-08-18: blocks 1 to 7 done.** Block 8 is Edd's — pointing his other application at it. The
+> walkthrough in `docs/api/README.md` was followed end to end against a booted build, and doing so
+> found a contract bug that had been live in production: the model and the rule engine emitted two
+> different provenance path formats, and neither the review form nor `shiftProvenance` matched the
+> model's. Fixed at the boundary, tested, documented.
 
 ## Objective
 

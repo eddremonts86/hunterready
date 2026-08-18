@@ -1,6 +1,6 @@
 # 01 — Pricing and payments
 
-- **Date:** 2026-08-18 · **Status:** draft · **Blocks:** 6 · **Author:** Edd
+- **Date:** 2026-08-18 · **Status:** price range decided, exact figure open · **Blocks:** 6 · **Author:** Edd
 
 ## Objective
 
@@ -38,8 +38,13 @@ the pricing page.
 
 ### Block 1: the two numbers (30 min, Edd)
 
-- [ ] Decide the monthly price and currency. Decide whether the free tier keeps all twelve designs.
-- [ ] **Verify:** both are written into this file. Everything below is blocked until they are.
+- [x] **2026-08-18: EUR 10-19 per month.** Edd's range, chosen as professional-tool rather than
+      consumption pricing, which sets an expectation about what the plan has to include.
+- [ ] Pick the exact figure inside that range. A range is enough to write the plan; a pricing page
+      needs one number.
+- [ ] Decide whether the free tier keeps all twelve designs. Currently it does, and the catalogue
+      section on the landing page says so out loud, so changing it is a copy change too.
+- [ ] **Verify:** the exact price is written into this file, and the free-tier answer with it.
 
 ### Block 2: choose the provider (30 min)
 

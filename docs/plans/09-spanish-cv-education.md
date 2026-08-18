@@ -1,6 +1,9 @@
 # 09 — Does the private Spanish CV have an education section at all?
 
-- **Date:** 2026-08-18 · **Status:** block 1 done, and it contradicts the answer · **Blocks:** 2
+- **Date:** 2026-08-18 · **Status:** CLOSED, no bug · **Blocks:** 2
+
+> **2026-08-18: CLOSED.** Edd confirmed the file and confirmed it has no education section.
+> The evidence below stands and no bug follows from it. This plan is kept for the reasoning, not as work.
 
 ## Objective
 

@@ -12,6 +12,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { Resume } from '@/schema/resume'
 import type { FieldProvenance } from '@/schema/provenance'
+import { normalizePath } from '@/schema/provenance'
 import { applyHeuristics } from './heuristics'
 import { buildUserPrompt, PROMPT_VERSION, SYSTEM_PROMPT } from './prompt'
 import { extractByRules } from './fallback'
@@ -422,7 +423,9 @@ export async function extractResume(
     const lines = normalizedText.split('\n')
     const provenance: Array<FieldProvenance> = payload.data.provenance.map(
       (entry) => ({
-        path: entry.path,
+        // The model writes `work[0].company`; everything downstream expects `work.0.company`.
+        // See `normalizePath` for what that mismatch silently cost.
+        path: normalizePath(entry.path),
         confidence: entry.confidence,
         sourceText:
           entry.sourceLine !== undefined ? lines[entry.sourceLine] : undefined,
