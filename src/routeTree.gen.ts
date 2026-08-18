@@ -27,6 +27,8 @@ import { Route as ApiSharedRouteImport } from './routes/api/shared'
 import { Route as ApiTargetRouteImport } from './routes/api/target'
 import { Route as ApiTranslateRouteImport } from './routes/api/translate'
 import { Route as STokenRouteImport } from './routes/s.$token'
+import { Route as V1CvRouteImport } from './routes/v1/cv'
+import { Route as V1RenderRouteImport } from './routes/v1/render'
 import { Route as ApiAccountDeleteRouteImport } from './routes/api/account/delete'
 import { Route as ApiAccountExportRouteImport } from './routes/api/account/export'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -121,6 +123,16 @@ const STokenRoute = STokenRouteImport.update({
   path: '/s/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const V1CvRoute = V1CvRouteImport.update({
+  id: '/v1/cv',
+  path: '/v1/cv',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const V1RenderRoute = V1RenderRouteImport.update({
+  id: '/v1/render',
+  path: '/v1/render',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAccountDeleteRoute = ApiAccountDeleteRouteImport.update({
   id: '/api/account/delete',
   path: '/api/account/delete',
@@ -156,6 +168,8 @@ export interface FileRoutesByFullPath {
   '/api/target': typeof ApiTargetRoute
   '/api/translate': typeof ApiTranslateRoute
   '/s/$token': typeof STokenRoute
+  '/v1/cv': typeof V1CvRoute
+  '/v1/render': typeof V1RenderRoute
   '/api/account/delete': typeof ApiAccountDeleteRoute
   '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -179,6 +193,8 @@ export interface FileRoutesByTo {
   '/api/target': typeof ApiTargetRoute
   '/api/translate': typeof ApiTranslateRoute
   '/s/$token': typeof STokenRoute
+  '/v1/cv': typeof V1CvRoute
+  '/v1/render': typeof V1RenderRoute
   '/api/account/delete': typeof ApiAccountDeleteRoute
   '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -203,6 +219,8 @@ export interface FileRoutesById {
   '/api/target': typeof ApiTargetRoute
   '/api/translate': typeof ApiTranslateRoute
   '/s/$token': typeof STokenRoute
+  '/v1/cv': typeof V1CvRoute
+  '/v1/render': typeof V1RenderRoute
   '/api/account/delete': typeof ApiAccountDeleteRoute
   '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -228,6 +246,8 @@ export interface FileRouteTypes {
     | '/api/target'
     | '/api/translate'
     | '/s/$token'
+    | '/v1/cv'
+    | '/v1/render'
     | '/api/account/delete'
     | '/api/account/export'
     | '/api/auth/$'
@@ -251,6 +271,8 @@ export interface FileRouteTypes {
     | '/api/target'
     | '/api/translate'
     | '/s/$token'
+    | '/v1/cv'
+    | '/v1/render'
     | '/api/account/delete'
     | '/api/account/export'
     | '/api/auth/$'
@@ -274,6 +296,8 @@ export interface FileRouteTypes {
     | '/api/target'
     | '/api/translate'
     | '/s/$token'
+    | '/v1/cv'
+    | '/v1/render'
     | '/api/account/delete'
     | '/api/account/export'
     | '/api/auth/$'
@@ -298,6 +322,8 @@ export interface RootRouteChildren {
   ApiTargetRoute: typeof ApiTargetRoute
   ApiTranslateRoute: typeof ApiTranslateRoute
   STokenRoute: typeof STokenRoute
+  V1CvRoute: typeof V1CvRoute
+  V1RenderRoute: typeof V1RenderRoute
   ApiAccountDeleteRoute: typeof ApiAccountDeleteRoute
   ApiAccountExportRoute: typeof ApiAccountExportRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -431,6 +457,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof STokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/v1/cv': {
+      id: '/v1/cv'
+      path: '/v1/cv'
+      fullPath: '/v1/cv'
+      preLoaderRoute: typeof V1CvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/v1/render': {
+      id: '/v1/render'
+      path: '/v1/render'
+      fullPath: '/v1/render'
+      preLoaderRoute: typeof V1RenderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/account/delete': {
       id: '/api/account/delete'
       path: '/api/account/delete'
@@ -474,6 +514,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiTargetRoute: ApiTargetRoute,
   ApiTranslateRoute: ApiTranslateRoute,
   STokenRoute: STokenRoute,
+  V1CvRoute: V1CvRoute,
+  V1RenderRoute: V1RenderRoute,
   ApiAccountDeleteRoute: ApiAccountDeleteRoute,
   ApiAccountExportRoute: ApiAccountExportRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,

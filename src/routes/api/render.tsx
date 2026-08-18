@@ -37,7 +37,7 @@ function isFixtureName(value: string): value is FixtureName {
   return (FIXTURES as ReadonlyArray<string>).includes(value)
 }
 
-function readSelection(url: URL): {
+export function readSelection(url: URL): {
   templateId: TemplateId | undefined
   themeId: ThemeId | undefined
   fonts?: { body?: string; heading?: string }
@@ -91,7 +91,7 @@ function readSelection(url: URL): {
  *
  * Returns the refusal to send, or `undefined` when the render may go ahead.
  */
-async function refuseUnlessEntitled(
+export async function refuseUnlessEntitled(
   request: Request,
   selection: ReturnType<typeof readSelection>,
 ): Promise<Response | undefined> {
@@ -152,7 +152,11 @@ async function refuseUnlessEntitled(
   )
 }
 
-function pdfResponse(bytes: Uint8Array, filename: string, download: boolean) {
+export function pdfResponse(
+  bytes: Uint8Array,
+  filename: string,
+  download: boolean,
+) {
   return new Response(bytes as unknown as BodyInit, {
     headers: {
       'content-type': 'application/pdf',
