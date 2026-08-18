@@ -552,7 +552,11 @@ is the argument for the verification step and not against the plan.
 
 ### Stated but unbuilt, so it has to be decided
 
-10. **Model routing (docs/06).** Implement the per-task table or retire it. See v0.3.
+10. ~~**Model routing (docs/06).**~~ **Closed 2026-08-18: retired, ADR-031.** Three of the four rows
+    named Anthropic models this deployment does not use, and the fourth — scoring needs no model —
+    was already true. ADR-023 had replaced the idea on purpose: the person picks a named company. The
+    one useful part of it, cheap work here and expensive work away, moved to item 04 where it is
+    live.
 11. **Verifier 5 has no instrument.** The v0.1 spec's privacy check assumed an error reporter that was
     never wired — there is no Sentry in the repo. Either add one and keep the check, or replace the
     check with one that runs against what exists. The rule it protects (no CV content in logs, errors or

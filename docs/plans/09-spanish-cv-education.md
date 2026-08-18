@@ -1,6 +1,6 @@
 # 09 — Does the private Spanish CV have an education section at all?
 
-- **Date:** 2026-08-18 · **Status:** draft (blocked on one sentence from Edd) · **Blocks:** 2
+- **Date:** 2026-08-18 · **Status:** block 1 done, and it contradicts the answer · **Blocks:** 2
 
 ## Objective
 
@@ -18,6 +18,44 @@ formal education section, in which case there is nothing to find and every hour 
 
 **Nobody should look further until this is answered.** It is one sentence from the person who has the
 file, and it decides whether an investigation is worth starting.
+
+## Block 1, done 2026-08-18: the evidence disagrees with the answer
+
+Edd answered **yes, it has one**. The file does not support that, and this is written down rather
+than acted on, because acting on it is the hour this plan exists to prevent.
+
+`fixtures/private/edd.pdf`, read with `pdftotext -layout`:
+
+- **2 pages, 145 lines.** The project's own pipeline reported 103; both see the same document.
+- **No match for any education vocabulary, accent-insensitive**, across fourteen stems: `formaci`,
+  `educaci`, `estudio`, `acad`, `titulaci`, `universi`, `grado`, `master`, `máster`, `licenciat`,
+  `ingenier`, `curso`, `certificac`, `capacitac`, `escolar`. The accent was the first hypothesis —
+  the roadmap searched `educacion` and a document saying `Educación` would have hidden — and it is
+  not the answer. There is nothing to normalise.
+- **Page 2 is employment**, twelve entries running back to 2007, followed by the skills block. No
+  section between them.
+- **One image, 320×213 px, on page 1.** A photograph. Too small to be a section of text, so OCR would
+  find nothing a section could be hiding in.
+
+So the extraction is not losing a region. There is no region in this file.
+
+### What that probably means
+
+Not that the answer was wrong — that the file and the answer are about **different documents**. This
+export is a one-page-plus profile with metrics, twelve jobs and a skills block, which reads like a
+targeted CV rather than a complete one. A senior engineer with eighteen years of employment leaving
+education off is an ordinary choice, and it may simply be this version.
+
+### What would settle it
+
+One of two things, and both are cheap:
+
+- Confirm this file is the one you meant, in which case item 09 closes: nothing is lost because
+  nothing is there.
+- Or drop the version that has the education section into `fixtures/private/` and say its filename.
+  If a heading exists that the pipeline cannot see, that is the bug, and this becomes worth an hour.
+
+**Do not start block 2 until one of those happens.** That is the whole point of this plan.
 
 ## Acceptance criteria
 

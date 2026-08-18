@@ -756,6 +756,58 @@ line.
 
 ---
 
+## ADR-031 — Model routing is retired; the person chooses the company
+
+**2026-08-18 · Accepted**
+
+docs/06 carried a table mapping each task to a model: Haiku 4.5 for extraction, Opus 5 for bullet
+rewriting, Sonnet 5 for reading a job advert, none for scoring. It was never implemented. It is now
+removed rather than implemented.
+
+### Why not build it
+
+Measured against the code on 2026-08-18, not against the document:
+
+| Task                      | Table says | Today                    | Routing would change |
+| ------------------------- | ---------- | ------------------------ | -------------------- |
+| Extraction / structuring  | Haiku 4.5  | `provider.model`         | nothing available    |
+| Bullet rewriting          | Opus 5     | `provider.model`         | nothing available    |
+| JD requirement extraction | Sonnet 5   | `provider.model`         | nothing available    |
+| Scoring                   | none       | `score.ts`, 0 model refs | already true         |
+
+**Three of four rows name Anthropic models this deployment does not use.** Production runs MiniMax;
+DeepSeek and a local Ollama are the alternatives; the Anthropic provider exists in `provider.ts` and
+serves nobody. Those rows are not unbuilt, they are unbuildable as written.
+
+**The fourth row is already true**, and it got there without routing. `src/optimize/score.ts` has no
+client and no message.
+
+**There is one model per provider, not per task.** `provider.model` is a single string from
+`MINIMAX_MODEL` / `DEEPSEEK_MODEL` / `OLLAMA_MODEL`, and every call site takes it. Per-task selection
+would first require each provider to expose several models — configuration that does not exist and
+that nobody has asked for.
+
+### What replaced it, deliberately
+
+ADR-023. The person picks a named company at the consent gate, because docs/07 requires consent to a
+named provider. Routing could only ever sit _underneath_ that choice: overriding it would mean the
+product deciding where somebody's CV goes after asking them where it should go.
+
+### What was kept
+
+The useful idea in that table was never about vendors — it was **cheap work here, expensive work
+away**. That is alive as the exit from ADR-030 and it is filed in
+`docs/plans/04-adr-030-exit.md`. What blocks it is the blocking model call, not the absence of a
+lookup table.
+
+### The reason this is an ADR and not a deletion
+
+Four features have shipped in this project as schema plus prose with no code and no path from the
+interface — `variant-diff`, v0.4's targeting, v0.5's persistence, `basics.photoUrl` — and CLAUDE.md
+opens with that list. A described-but-absent routing table was the same failure one step earlier. It
+is removed so that the documentation stops describing a product that does not exist, and recorded
+here so the removal is not mistaken later for an oversight.
+
 ## ADR-030 — The third-party model is open to everyone, until the box can serve the local one
 
 **2026-08-15 · Accepted · temporary, with a stated exit**

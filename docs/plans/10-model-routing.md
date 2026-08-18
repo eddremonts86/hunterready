@@ -1,6 +1,9 @@
 # 10 — Model routing: build it or retire it
 
-- **Date:** 2026-08-18 · **Status:** block 1 done, block 2 needs Edd · **Blocks:** 3 · **Author:** Edd
+- **Date:** 2026-08-18 · **Status:** DONE — retired, ADR-031 · **Blocks:** 3 · **Author:** Edd
+
+> **2026-08-18: closed.** Edd chose to retire it. The table is gone from docs/06, ADR-031 records
+> why, and roadmap item 10 is struck through. The kept idea moved to plan 04.
 
 ## Objective
 
