@@ -123,22 +123,24 @@ the image and deliberately not on a laptop (ADR-012), so the `.doc` and OCR suit
 
 ## Commands
 
-**Two loops, and the fast one is now safe to use.**
+**Two loops, and the fast one is a real build.**
 
-`pnpm dev:ui` runs Vite on `:3007` with **`/api/*` proxied to the container on `:3100`**. Edit a
-component and it is on screen in about three seconds, with no image rebuild.
+`pnpm host` builds and serves on `:3011` against the same Postgres and the same models. **Measured on
+this Mac: 5 seconds end to end** — 3s to build, 2s to boot — and no Docker involved in either.
 
-This reverses the old rule, and the reason matters. The rule was "one dev environment, the container",
-because a bare `vite dev` reached no database and no model — `/api/processing` answered with an empty
-body, extraction fell back to the rule engine, and accounts, Wording, translation and
-encryption-at-rest were all off, so a feature could look finished there and be broken in the only
-environment that runs it. The proxy removes exactly that: every API call goes to the container, so the
-same Postgres, the same MiniMax, the same WASM renderer and the same entitlements answer. Verified —
-`/api/processing` through `:3007` returns `encryptsAtRest: true` and `provider: MiniMax`, and
-`/api/render` returns a real PDF.
+This is the second reversal of this rule and the last one, so both are worth keeping straight. The
+original rule was "one dev environment, the container", because a bare `vite dev` reached no database
+and no model: `/api/processing` answered with an empty body, extraction fell back to the rule engine,
+and accounts, Wording, translation and encryption-at-rest were all off, so a feature could look
+finished there and be broken in the only environment that runs it.
 
-What the fast loop owns is the **client bundle**, which is the thing you are editing when you wonder
-why a moved button costs a rebuild.
+The first fix was a Vite server on `:3007` proxying `/api/*` to the container. It worked, and it is
+**gone as of 2026-08-18**, because it answered the wrong question. It saved about two seconds over a
+full build and required the container to be running to serve a single API call — which is the ten
+minutes it existed to avoid. Once `pnpm host` was measured at five, there was nothing left to trade.
+
+What was lost with it: HMR preserving app state across an edit. If iterating deep inside a flow ever
+makes that worth having again, bring it back pointing at `:3011`, never at `:3100`.
 
 ⚠️ **It does not replace a real build for anything that ships.** ADR-005's failure — a green
 `vite dev`, a green `pnpm build`, and a 500 in production because Rollup never emitted the WASM —
@@ -170,13 +172,13 @@ is sound. `pnpm test:docker` covers the first two in CI form.
 `pnpm host` needs `db` and `llm` up; they are separate services and cheap:
 `docker compose -f docker-compose.yml -f docker-compose.local.yml up -d db llm`.
 
-Iterate on `:3007`. Believe `:3011`. Ship what `:3100` served.
+Build on `:3011`. Ship what `:3100` served.
 
 ```bash
-pnpm dev:ui   # :3007, hot reload, real backend through the proxy — for iterating
-pnpm host     # :3011, real build, real database, real models — for believing
+pnpm host     # :3011, a real build in 5 seconds — the default for everything
 pnpm app      # :3100, the shipping image — for .doc, OCR, and the last check before a release
 pnpm stale    # is :3100 serving this code, or an older image?
+pnpm stale --url https://hunterready.eduardoinerarte.dk   # and is production serving master?
 ```
 
 **`pnpm stale` before wondering about caches.** The image stamps its commit in and `/api/health`

@@ -2,27 +2,21 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "//": "The one that ships. Attaches to the real stack — the app image plus Postgres plus the model — started with `pnpm app` (Compose builds `hunterready-app:latest`; NOT `pnpm docker:run`, which starts the app alone with no database and no model, so persistence reports itself off and every generated text silently falls back to regular expressions). 3100 because Hermes' WhatsApp bridge holds 127.0.0.1:3000 while Docker publishes on *:3000, and a URL that resolves to one of two servers depending on v4/v6 order is not something to debug twice.",
-      "//2": "Believe this one. ADR-005 lived in the build, not in the browser: the Block 1 spike passed `vite dev` AND `pnpm build`, then 500'd in production because Rollup never emitted the renderer's WASM. Anything touching the render path is not done until it has been seen here.",
-      "name": "hunterready",
-      "url": "http://localhost:3100"
-    },
-    {
-      "//": "The real build, without the image. Same Postgres, same models, same WASM renderer, same fonts, and `/api/render` returns a byte-identical PDF. What it does NOT have is LibreOffice and Tesseract, so `.doc` ingestion and OCR fail here and only here (ADR-012). This is the default way to trust a build; the container above is for those two paths and for the last check before a release.",
-      "//2": "Needs db and llm up: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d db llm",
+      "//": "THE DEFAULT. A real build without the image: same Postgres, same models, same WASM renderer, same bundled fonts, and `/api/render` returns a byte-identical PDF to the container's. 5 seconds end to end on this Mac — 3s to build, 2s to boot.",
+      "//2": "What it does NOT have is LibreOffice and Tesseract, which live in the image and deliberately not on a laptop (ADR-012). So `.doc` ingestion and OCR of a scan fail here and only here. Those two paths, and the last check before a release, belong to the entry below.",
+      "//3": "Needs db and llm, which are separate services and cheap: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d db llm",
       "name": "hunterready-host",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["host"],
       "port": 3011
     },
     {
-      "//": "The fast loop, restored — and the reason the old note here said 'do not add them back' no longer holds. That entry was removed when a bare `vite dev` reached no database and no model, so a feature could look finished on 3007 and be broken in the only environment that runs it. `pnpm dev:ui` proxies every `/api/*` call to the container on 3100, so the same Postgres, the same model, the same WASM renderer and the same entitlements answer. CLAUDE.md documents the reversal and the evidence for it.",
-      "//2": "What this owns is the CLIENT BUNDLE: a component edit is on screen in about three seconds with no image rebuild. It does not own the build, so it cannot retire the entry above. Iterate here, believe 3100.",
-      "//3": "Needs the container up first, or every API call 502s.",
-      "name": "hunterready-ui",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["dev:ui"],
-      "port": 3007
+      "//": "The one that ships. Attaches to the real stack — the app image plus Postgres plus the model — started with `pnpm app` (Compose builds `hunterready-app:latest`; NOT `pnpm docker:run`, which starts the app alone with no database and no model, so persistence reports itself off and every generated text silently falls back to regular expressions).",
+      "//2": "Reach for it for exactly three things: `.doc` ingestion, OCR of a scan, and confirming the shipping image itself is sound before a release. Otherwise it costs 2 minutes warm and 10+ when the apt layer falls out of cache, for nothing the entry above does not already give you.",
+      "//3": "3100 because Hermes' WhatsApp bridge holds 127.0.0.1:3000 while Docker publishes on *:3000, and a URL that resolves to one of two servers depending on v4/v6 order is not something to debug twice.",
+      "//4": "There used to be a third entry here, `hunterready-ui` on 3007: Vite with HMR, proxying /api to this container. It was removed on 2026-08-18 once `pnpm host` was measured at 5 seconds. It saved two of those and required this container to be running to answer a single API call, which is the cost it existed to avoid. What was lost is HMR preserving app state across an edit; if that turns out to matter, bring it back pointing at 3011, not here.",
+      "name": "hunterready",
+      "url": "http://localhost:3100"
     }
   ]
 }

@@ -33,7 +33,9 @@ import { nitro } from 'nitro/vite'
  *
  * `HR_API` overrides the target for anyone running the stack on another port.
  */
-const API_TARGET = process.env.HR_API ?? 'http://localhost:3100'
+// :3011 is `pnpm host`, which is 5 seconds and needs no Docker. It used to be :3100, the
+// container, which meant the fast loop required the slow one to be running.
+const API_TARGET = process.env.HR_API ?? 'http://localhost:3011'
 
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
