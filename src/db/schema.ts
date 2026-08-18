@@ -330,6 +330,57 @@ export const shares = pgTable(
   (table) => [index('shares_user_idx').on(table.userId)],
 )
 
+/**
+ * API keys, for a machine rather than a person (ADR-032).
+ *
+ * ## What is stored is a hash
+ *
+ * `secretHash` is SHA-256 of the key. The key itself is shown once, at creation, and never again —
+ * not in a column, not in a log, not in a support tool. A database dump therefore contains nothing
+ * that can call the API, which is the only property that makes a leaked backup survivable.
+ *
+ * SHA-256 rather than argon2 or bcrypt, deliberately, and it is the opposite of the advice for
+ * passwords. A password is short, human-chosen and guessable, so it needs a slow hash. This is 32
+ * random bytes: brute force is not on the table, and a slow hash on the authentication path would
+ * add work to every single request for no security anybody can name.
+ *
+ * ## The prefix is not decoration
+ *
+ * Every key reads `hr_live_…`. It makes a leaked key greppable in a log aggregator, recognisable in a
+ * paste, and detectable by GitHub's secret scanning if it ever reaches a public repository. `prefix`
+ * stores the first characters so a person can tell two keys apart in a list without either being
+ * shown.
+ *
+ * ## Revocation is a column, not a delete
+ *
+ * A revoked key keeps its row so `lastUsedAt` survives the revocation: "when was this last used"
+ * is the first question after a leak, and deleting the row answers it with silence.
+ */
+export const apiKeys = pgTable(
+  'api_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
+    /** SHA-256 of the key. Unique, so authentication is one indexed lookup rather than a scan. */
+    secretHash: text('secret_hash').notNull().unique(),
+    /** The first characters, for telling keys apart in a list. Never enough to reconstruct one. */
+    prefix: text('prefix').notNull(),
+    /** What the owner called it: "edd's other app", "staging". Never a person's name or a CV field. */
+    label: text('label').notNull().default(''),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /** Coarse on purpose. Per-request timestamps would be a log of when somebody used the product. */
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (table) => [index('api_keys_user_idx').on(table.userId)],
+)
+
+export type ApiKeyRow = typeof apiKeys.$inferSelect
+
 export type ShareRow = typeof shares.$inferSelect
 
 export { RETENTION_DAYS }

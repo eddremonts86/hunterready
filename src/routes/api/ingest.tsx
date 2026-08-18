@@ -16,7 +16,11 @@ import { checkRateLimit, clientKey } from '@/lib/rate-limit'
 import { progressEnd, progressNoter, progressReporter } from '@/lib/progress'
 import { errorEvent, event, requestId } from '@/lib/log'
 import { mayUseThirdParty } from '@/lib/entitlements'
-import { consentedToTransfer, providerIdFrom } from '@/lib/chosen-provider'
+import {
+  consentedToTransfer,
+  consentOn,
+  providerIdFrom,
+} from '@/lib/chosen-provider'
 
 export const Route = createFileRoute('/api/ingest')({
   server: {
@@ -90,7 +94,9 @@ export const Route = createFileRoute('/api/ingest')({
             known id is not consent: `providerById` returns undefined for it and extraction stays on
             this machine, which is the direction a malformed request must always fall.
           */
-          const asked = form.get('processing')
+          // Body first, header second: a browser's field is a person's click; the header is a
+          // machine asserting on their behalf (ADR-032). Both end up in the same two functions.
+          const asked = consentOn(request, form.get('processing'))
           chosenProvider = providerIdFrom(asked)
           mayUseProvider = await mayUseThirdParty(
             request,
