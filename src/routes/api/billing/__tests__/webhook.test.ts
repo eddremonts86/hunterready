@@ -19,6 +19,7 @@
 import { createHmac } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Sql } from 'postgres'
+import type * as Repository from '@/db/repository'
 
 const URL_ENV = (
   process.env.DATABASE_MIGRATION_URL ??
@@ -72,7 +73,7 @@ describe.skipIf(URL_ENV === '')(
   'the billing webhook, signature and all',
   () => {
     let post: (body: string, signature?: string | null) => Promise<Response>
-    let repo: typeof import('@/db/repository')
+    let repo: typeof Repository
     let sql: Sql
     const suffix = `wh-${Date.now()}`
 
