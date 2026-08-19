@@ -28,7 +28,7 @@ the mistake:
 | [01](01-pricing-and-payments.md)        | Pricing and payments                | weeks   | one number from Edd   |
 | [02](02-beta-exit.md)                   | The exit from `HR_BETA_PAID_FREE`   | minutes | item 01               |
 | [03](03-name-and-domain.md)             | Name and domain                     | hours   | Edd                   |
-| [04](04-adr-030-exit.md)                | The exit from ADR-030               | hours   | **nothing** (3 of 5)  |
+| [04](04-adr-030-exit.md)                | The exit from ADR-030               | minutes | Coolify, Edd (5 of 5) |
 | [05](05-overlapping-columns-fixture.md) | Overlapping-column fixture          | hours   | a real file           |
 | [06](06-photographed-cv-fixture.md)     | Photographed CV fixture             | hours   | a real photo          |
 | [07](07-multipage-cv-fixture.md)        | Multi-page CV fixture               | hours   | a real file           |
@@ -47,8 +47,7 @@ decision, a credential or a file, not on code.**
 
 ## What is left that is actually code
 
-**04 blocks 3 and 4**, and **08 blocks 2 and 4**. That is the whole list.
+**08 blocks 2 and 4.** That is the whole list, as of 2026-08-19.
 
-Do 04 first, because it is the only item here actively spending money, and because block 3 is the one
-thing standing between the switch and being turned off — block 5 cannot happen until ingest stops
-blocking.
+04 was the one actively spending money and its code is done: nothing in the interface blocks on a
+model. Its last block is one variable in Coolify.

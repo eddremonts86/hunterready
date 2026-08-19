@@ -1,12 +1,14 @@
 # 04 — The exit from ADR-030
 
-- **Date:** 2026-08-18 · **Status:** blocks 1-2 done · **Blocks:** 5 · **Author:** Edd
+- **Date:** 2026-08-18 · **Status:** blocks 1-4 done · **Blocks:** 5 · **Author:** Edd
 
+> **2026-08-19: blocks 3 and 4 done. Nothing in the interface blocks on a model any more.** Ingest
+> answers in 7ms with a job id, exactly as targeting already did, and the waiting screen was watched
+> narrating a real upload for over two minutes without a request being held open. **Block 5 —
+> unsetting `HR_THIRD_PARTY_FOR_ALL` in Coolify — is Edd's, and it is now unblocked.**
+>
 > **2026-08-18: blocks 1 and 2 done.** Reading an advert no longer blocks: the POST answers in 3ms
-> with a job id and the reading is collected from `/api/result`. Block 3 (the same shape for ingest),
-> block 4 (checking the narration holds over a 90s wait) and block 5 (flipping the switch off) are
-> open. **Do not flip the switch until block 3 lands** — ingest is the path a first-time visitor
-> meets, and it is still synchronous.
+> with a job id and the reading is collected from `/api/result`.
 
 ## Objective
 
@@ -64,8 +66,9 @@ about that much and would have made this look easier than it is.
 
 - [ ] An anonymous visitor on the local model can target an advert and get a real result.
 - [ ] Nothing in the interface blocks for longer than it takes to show progress.
-- [ ] `HR_THIRD_PARTY_FOR_ALL` is unset in production and `/api/processing` reports
-      `thirdPartyAvailable: false` for an anonymous visitor.
+- [ ] `HR_RELEASE=true` in production and `/api/processing` reports `thirdPartyForYou: false` for an
+      anonymous visitor. (Was "`HR_THIRD_PARTY_FOR_ALL` is unset"; see block 5 for why that could
+      never have worked.)
 
 ## Non-goals
 
@@ -89,22 +92,58 @@ about that much and would have made this look easier than it is.
       is personal data and ADR-004 says an anonymous visitor stores nothing.
 - [ ] **Verify:** `curl` returns a job id in under 200ms and the result arrives on the progress stream.
 
-### Block 3: the same shape for ingest (30 min)
+### Block 3, done 2026-08-19: the same shape for ingest
 
-- [ ] `/api/ingest` returns a job id. This is the one on the critical path for a first-time visitor.
-- [ ] **Verify:** upload a real CV on the local model and watch the waiting screen narrate it.
+- [x] `/api/ingest` returns a job id. This is the one on the critical path for a first-time visitor.
+- [x] **Verified:** a real CV uploaded on the local model, watched narrating in the browser.
 
-### Block 4: make the wait honest (30 min)
+One handler serves both shapes. The pipeline moved into a `run()` that **returns** its failures
+rather than throwing them, because both mid-pipeline failures already carry a status, a code and a
+sentence written for a person — and both shapes need all three. A thrown error would keep the status
+and lose the sentence, so somebody whose scan could not be read would be told "something went wrong"
+instead.
 
-- [ ] The waiting screen already narrates what the model is reading (`src/structure/narrate.ts`).
-      Confirm it works when the answer is ninety seconds away rather than ten.
-- [ ] **Verify:** in the browser, on the local model, with the network throttled.
+`job-result.ts` gained the test suite it shipped without. That was defensible while the worst thing
+in it was a list of requirements from a public advert; this block puts a **`Resume`** in there. Ten
+tests, one per promise in its own docstring, and three of them were written after breaking the module
+on purpose: read-once, the five-minute TTL, and the cap. The fourth — that a bad id is not _stored_ —
+was written after the obvious version of it **passed with the guard deleted**, because `collect`
+refuses a bad id too and "never stored" and "stored but unreadable" look identical from outside.
 
-### Block 5: flip it off (15 min)
+### Block 4, done 2026-08-19: make the wait honest
 
-- [ ] Unset `HR_THIRD_PARTY_FOR_ALL` in Coolify, restart.
-- [ ] **Verify:** `/api/processing` reports `thirdPartyAvailable: false` for anonymous; a signed-in
-      `pro` account still gets the larger model; an anonymous ingest still produces a real `Resume`.
+- [x] Confirm the narration works when the answer is far away rather than ten seconds away.
+- [x] **Verified:** in the browser, on a local model slow enough to make the point.
+
+Watched on a CPU-backed local model rather than a throttled network, which is harsher and more like
+the `cax21`. The waiting screen narrated for **126 seconds** and kept counting — four stages, the
+last one live, and the line about the phone number and street address having been removed before the
+text was sent. No request was held open for any of it.
+
+**Then it ran past the four-minute ceiling, which is the half worth reporting.** `collectResult`
+gives up at 4 minutes, and what the person reads is _"That took longer than we can wait for. Trying
+again usually works, and nothing was saved."_ — followed by the normal upload page, not a dead end.
+Production's local model takes 57s, so the ceiling sits at roughly four times the real wait; the
+model that hit it was a stray CPU container, not the one we deploy.
+
+### Block 5: flip it off — rewritten 2026-08-19, because it was wrong
+
+- [ ] Set `HR_RELEASE=true` in Coolify, restart. **Not** "unset `HR_THIRD_PARTY_FOR_ALL`".
+- [ ] **Verify:** `/api/processing` reports `thirdPartyForYou: false` and `beta: false` for anonymous;
+      a signed-in `pro` account still gets the larger model; an anonymous ingest still produces a real
+      `Resume`.
+
+⚠️ **Both halves of the original were wrong, and they would have failed quietly.** `thirdParty` is
+`everyone || beta || paid` and beta defaults **on**, so unsetting `HR_THIRD_PARTY_FOR_ALL` changes
+nothing at all. And `thirdPartyAvailable` reported whether a provider was _configured_, never whether
+this caller could use one — so it was true for everybody either way. The check would have been run,
+seen to fail, and blamed on a stale image.
+
+The field is now `thirdPartyConfigured`, with `thirdPartyForYou` beside it carrying the entitlement,
+and the exit is one switch that overrides the leftovers (ADR-033).
+
+**Deliberately not flipped:** Edd, 2026-08-19 — the spend is capped by a monthly plan, so there is no
+hurry. This waits for pricing, which makes it the same flip as plan 02's.
 
 ## Risks
 
@@ -117,5 +156,5 @@ about that much and would have made this look easier than it is.
 
 ## Verification (end-to-end)
 
-With `HR_THIRD_PARTY_FOR_ALL` unset, an anonymous visitor uploads a CV, targets an advert and gets a
+With `HR_RELEASE=true`, an anonymous visitor uploads a CV, targets an advert and gets a
 real requirement list, with the waiting screen narrating throughout and no request blocking.

@@ -17,7 +17,7 @@
  */
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
-import { stat } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { ChildProcess } from 'node:child_process'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -191,6 +191,108 @@ describe('the built server can render a PDF', () => {
     }
   })
 
+  /**
+   * The shape that decides whether the local model is a free tier or a spinner.
+   *
+   * Ingest on production's local model took 57s (docs/plans/04), and this is the request a
+   * first-time visitor makes before they have seen anything work. Held open, it is a request every
+   * proxy and mobile network between a phone and the server is entitled to cut.
+   *
+   * Tested here rather than as a unit for the reason this whole suite exists: the claim is about a
+   * built server. `job-result.ts` is a module-level `Map`, so a unit test proves the map works while
+   * a build that split the route and the store across isolated contexts would ship — and the failure
+   * would be a job id that never resolves, which looks exactly like a slow model.
+   *
+   * `plain.txt` on purpose: no LibreOffice, no Tesseract, no model. The pipeline falls back to the
+   * rule engine, which is fine — what is under test is the shape, not the extraction.
+   */
+  describe('a long ingest hands back a job id instead of holding the request open', () => {
+    const jobId = 'parity-6f1c9a24-detached-ingest'
+
+    async function upload(fields: Record<string, string>) {
+      const bytes = await readFile('fixtures/input/plain.txt')
+      const form = new FormData()
+      form.append(
+        'file',
+        new File([bytes], 'plain.txt', { type: 'text/plain' }),
+      )
+      for (const [k, v] of Object.entries(fields)) form.append(k, v)
+      return fetch(`${baseUrl}/api/ingest`, { method: 'POST', body: form })
+    }
+
+    it('accepts in milliseconds, then serves the CV once and only once', async () => {
+      const started = Date.now()
+      const accepted = await upload({ progress: jobId, detach: 'true' })
+      const acceptedIn = Date.now() - started
+
+      expect(
+        accepted.status,
+        `expected 202, got ${accepted.status}. server log:\n${serverLog}`,
+      ).toBe(202)
+      expect(await accepted.json()).toEqual({ jobId })
+      /*
+        Generous by two orders of magnitude against the 57s it replaces. The number being asserted is
+        "did not wait for the pipeline", not a performance budget — a tight bound here would go red on
+        a loaded CI runner and teach everyone to re-run it.
+      */
+      expect(acceptedIn, 'the POST waited for the work').toBeLessThan(3_000)
+
+      // Poll exactly as the page does, on the same 700ms rhythm.
+      let collected: Response | undefined
+      for (let i = 0; i < 90; i++) {
+        const poll = await fetch(`${baseUrl}/api/result?id=${jobId}`)
+        if (poll.status !== 204) {
+          collected = poll
+          break
+        }
+        await new Promise((r) => setTimeout(r, 700))
+      }
+
+      expect(collected, 'the job never produced a result').toBeDefined()
+      expect(collected?.status).toBe(200)
+      expect(collected?.headers.get('cache-control')).toBe('no-store')
+
+      const body = (await collected?.json()) as {
+        resume?: { basics?: { fullName?: string } }
+        method?: string
+      }
+      // A real read of a real file, not an empty envelope with the right shape.
+      expect(body.resume?.basics?.fullName).toMatch(/Whitfield/i)
+      expect(body.method).toBeDefined()
+
+      /*
+        Collecting deletes. The id is in a URL, which is the least private place a string can be, and
+        the thing behind it is somebody's name, email and phone number.
+      */
+      const second = await fetch(`${baseUrl}/api/result?id=${jobId}`)
+      expect(second.status, 'the CV was still readable after collection').toBe(
+        204,
+      )
+    })
+
+    it('still answers with the CV itself when nobody asks to detach', async () => {
+      /*
+        The other shape, unchanged. Every existing caller and the `/v1` contract published this week
+        depend on it, and one handler now serves both — so the day the detached path is edited, this
+        is what says the synchronous one came along.
+      */
+      const res = await upload({ progress: 'parity-9e3b17c0-sync-ingest' })
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as {
+        resume?: { basics?: { fullName?: string } }
+      }
+      expect(body.resume?.basics?.fullName).toMatch(/Whitfield/i)
+    })
+  })
+
+  it('says it is in beta, because it is', async () => {
+    // The positive half of the release switch, on the server that runs Coolify's configuration.
+    const res = await fetch(`${baseUrl}/api/processing`)
+    const body = (await res.json()) as { beta?: boolean; paidDesigns?: boolean }
+    expect(body.beta).toBe(true)
+    expect(body.paidDesigns).toBe(true)
+  })
+
   it('logs no unhandled server errors', () => {
     expect(serverLog).not.toMatch(/ENOENT|unhandled|HTTPError/i)
   })
@@ -249,5 +351,101 @@ describe('with beta off, the paywall is still there', () => {
     expect(res.status).toBe(402)
     const body = (await res.json()) as { error?: string }
     expect(body.error).toBe('design_locked')
+  })
+})
+
+/**
+ * One switch out of beta, proved against a build with **both older switches set against it**.
+ *
+ * Edd's ask, 2026-08-19: a fast way to go from beta to release, reacting properly — while explicitly
+ * leaving `HR_THIRD_PARTY_FOR_ALL=true` in Coolify, because the spend is capped by a monthly plan.
+ *
+ * That is why this server sets both of the old variables to `true` and then sets `HR_RELEASE` on top.
+ * A release switch that merely *defaulted* the others off would pass a unit test and be defeated in
+ * production by a variable nobody deleted — and the person flipping it would have no way to tell,
+ * because the interface would look released while anonymous visitors kept spending tokens.
+ *
+ * Asserted against Nitro rather than a mock for the reason the whole suite exists (ADR-005): a build
+ * that dropped the check would ship green.
+ */
+describe('one switch takes the product out of beta', () => {
+  let released: ChildProcess | undefined
+  let releasedUrl = ''
+
+  beforeAll(async () => {
+    const port = await freePort()
+    releasedUrl = `http://127.0.0.1:${port}`
+    released = spawn('node', [SERVER_ENTRY], {
+      cwd: ROOT,
+      env: {
+        ...PROD_ENV,
+        PORT: String(port),
+        // Both of these say "give it away". The one below says no, and it is the one that counts.
+        HR_THIRD_PARTY_FOR_ALL: 'true',
+        HR_BETA_PAID_FREE: 'true',
+        HR_UNLOCK_DESIGNS: 'true',
+        HR_RELEASE: 'true',
+      },
+      stdio: 'pipe',
+    })
+    await waitForServer(`${releasedUrl}/`)
+  })
+
+  afterAll(() => {
+    released?.kill()
+  })
+
+  it('reports itself out of beta, with nothing given away', async () => {
+    const res = await fetch(`${releasedUrl}/api/processing`)
+    const body = (await res.json()) as {
+      beta?: boolean
+      paidDesigns?: boolean
+      thirdPartyForYou?: boolean
+      provider?: string | null
+      providers?: Array<unknown>
+      plan?: string
+    }
+
+    expect(body.beta, 'HR_RELEASE=true and it still calls itself beta').toBe(
+      false,
+    )
+    expect(body.plan).toBe('anonymous')
+    /*
+      The three that Edd named. `thirdPartyForYou` is the entitlement — the field `thirdPartyAvailable`
+      looked like it answered and did not, which is how plan 04 came to carry an acceptance criterion
+      that could never have passed.
+    */
+    expect(body.thirdPartyForYou).toBe(false)
+    expect(body.paidDesigns).toBe(false)
+    expect(body.provider ?? null).toBeNull()
+    expect(body.providers ?? []).toHaveLength(0)
+  })
+
+  it('locks the paid catalogue, with the developer unlock set against it', async () => {
+    const plain = await fetch(`${releasedUrl}/api/render?fixture=nurse-senior`)
+    expect(plain.status, 'a free design must still render after release').toBe(
+      200,
+    )
+
+    const paid = await fetch(
+      `${releasedUrl}/api/render?fixture=nurse-senior&template=sidebar&theme=onyx`,
+    )
+    expect(paid.status).toBe(402)
+    expect(((await paid.json()) as { error?: string }).error).toBe(
+      'design_locked',
+    )
+  })
+
+  it('locks the axes, which is the other half of the same gate', async () => {
+    for (const axis of ['accent=%23aa0000', 'bodyFont=Merriweather']) {
+      const res = await fetch(
+        `${releasedUrl}/api/render?fixture=nurse-senior&${axis}`,
+      )
+      expect(res.status, `expected 402 for ?${axis} after release`).toBe(402)
+      const body = (await res.json()) as { error?: string; message?: string }
+      expect(body.error).toBe('axes_locked')
+      // The refusal still has to say what would unlock it; a bare 402 is a dead end on screen.
+      expect(body.message).toContain('paid plan')
+    }
   })
 })

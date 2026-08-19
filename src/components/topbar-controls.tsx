@@ -24,7 +24,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { SignIn } from '@/components/sign-in'
 import { signOut } from '@/lib/auth-client'
-import { PRO_IN_BETA, ProTag } from '@/components/pro-tag'
+import { ProTag, useProNote } from '@/components/pro-tag'
 import { LOCAL } from '@/components/consent-gate'
 import type { ConsentChoice } from '@/components/consent-gate'
 
@@ -281,6 +281,7 @@ export function ModelMenu({
  * honest by a privacy page that does not.
  */
 function UpgradeNote() {
+  const proNote = useProNote()
   return (
     <div className="flex flex-col gap-2 rounded-choice bg-band p-3.5">
       <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
@@ -318,7 +319,7 @@ function UpgradeNote() {
         shut. During beta the gate is open (`betaPaidFree`), so that sentence would leave somebody
         already using the larger model reading that they cannot have it.
       */}
-      <p className="text-[12px] font-medium text-ink">{PRO_IN_BETA}</p>
+      <p className="text-[12px] font-medium text-ink">{proNote}</p>
     </div>
   )
 }

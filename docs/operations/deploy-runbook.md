@@ -19,6 +19,44 @@ post-deployment command in the Coolify table, which exists precisely because the
 > **Never set `HR_UNLOCK_DESIGNS` in Coolify.** It is the developer switch that removes the paid-design
 > gate for a whole process (`src/lib/entitlements.ts`). It belongs in `docker-compose.local.yml`
 > (gitignored) and nowhere else; in production it would give the paid catalogue away silently.
+> _Since ADR-033, `HR_RELEASE=true` overrides it — a safety net, not a licence to set it._
+
+## Going out of beta
+
+**One variable, one restart.** Set `HR_RELEASE=true` in Coolify and restart. That is the whole
+procedure; nothing else in the environment needs touching, and nothing else in the environment can
+override it.
+
+Rehearse it first — this is the one state a laptop otherwise cannot show you, because `NODE_ENV`
+and `HR_UNLOCK_DESIGNS` both open the catalogue in development:
+
+```bash
+pnpm host   # :3011, beta — then the release view on :3012, in a second tab
+```
+
+`.claude/launch.json` carries `hunterready-release` for the second one. Compare the two.
+
+Then, after the restart, four facts and one refusal:
+
+```bash
+curl -s https://hunterready.eduardoinerarte.dk/api/processing
+```
+
+```
+"beta": false                 the interface stops saying it, everywhere at once
+"thirdPartyForYou": false     an anonymous visitor's CV is read on our hardware
+"paidDesigns": false          the catalogue is gated
+"thirdPartyConfigured": true  the models are still there — this reports configuration, not entitlement
+```
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' 'https://hunterready.eduardoinerarte.dk/api/render?fixture=nurse-senior&template=sidebar&theme=onyx'
+```
+
+`402` is the pass. `200` means the switch did not take, and the first thing to check is whether the
+running image predates ADR-033 — `docker exec hunterready-app sh -c 'grep -rl HR_RELEASE .output/server/ | wc -l'`.
+
+**To go back**, unset it and restart. Nothing is one-way.
 
 ## TL;DR — the deploy flow
 
@@ -99,11 +137,13 @@ Two things about it are load-bearing:
 
 Environment variables Coolify must set:
 
-| Name                          | Required | Notes                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ----------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `LLM_API_KEY` / provider vars | no       | Absent is a supported state: extraction falls back to the deterministic rules path and the app keeps working. See `src/structure/provider.ts`.                                                                                                                                                                                                                                                              |
-| `PORT`                        | no       | Defaults to 3000 in the image.                                                                                                                                                                                                                                                                                                                                                                              |
-| `HR_THIRD_PARTY_FOR_ALL`      | no       | `true` opens the third-party model to everyone, account or not (ADR-030). **Temporary**, and it is an env var precisely so turning it off is an edit and a restart rather than a release. It grants entitlement only: consent is still asked, and the gate now appears for every visitor because there is finally a real transfer to agree to. Unset it when the local model can read an advert in seconds. |
+| Name                          | Required | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LLM_API_KEY` / provider vars | no       | Absent is a supported state: extraction falls back to the deterministic rules path and the app keeps working. See `src/structure/provider.ts`.                                                                                                                                                                                                                                                                                                                               |
+| `PORT`                        | no       | Defaults to 3000 in the image.                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `HR_THIRD_PARTY_FOR_ALL`      | no       | `true` opens the third-party model to everyone, account or not (ADR-030). ⚠️ **Redundant since beta shipped** — `thirdParty` is `everyone \|\| beta \|\| paid` and beta defaults on, so removing this alone changes nothing measurable. It is being left set on purpose. The exit is `HR_RELEASE`, below.                                                                                                                                                                    |
+| `HR_BETA_PAID_FREE`           | no       | Defaults **on** in code, so unset means beta: every Pro capability included and every one still labelled Pro. The finer-grained half of `HR_RELEASE`, kept for the case where one capability has to move alone. Not the lever to reach for.                                                                                                                                                                                                                                  |
+| `HR_RELEASE`                  | no       | **The switch out of beta (ADR-033).** `true` and the product is released in one move: no beta labelling anywhere in the interface, paid designs and the mixed axes gated, and an anonymous visitor's CV read on our own hardware. It **overrides** the two rows above and `HR_UNLOCK_DESIGNS`, so it is a complete answer on its own and cannot be defeated by a variable nobody deleted. Flip it the day pricing opens; unset it to go back. See "Going out of beta" below. |
 
 **Never** paste a key into a repo file, a commit, or a build log. `.env` and `.env.*` are gitignored
 except `.env.example`.

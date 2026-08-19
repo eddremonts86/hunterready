@@ -35,7 +35,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Resume } from '@/schema/resume'
 import { DesignPreviewDialog } from './design-preview-dialog'
 import { Section } from './design-axes'
-import { PRO_IN_BETA, ProTag } from '@/components/pro-tag'
+import { ProTag, useProNote } from '@/components/pro-tag'
 import {
   Tooltip,
   TooltipContent,
@@ -268,6 +268,7 @@ export function DesignGallery({
   /** The reader's own document, so a preview opens on what they will actually download. */
   resume: Resume
 }) {
+  const proNote = useProNote()
   const [previewing, setPreviewing] = useState<Design | undefined>(undefined)
   /**
    * Designs somebody marked on the way past.
@@ -499,7 +500,7 @@ export function DesignGallery({
               parse test. These add different typefaces and a different order of
               sections.{' '}
               {entitled ? (
-                <span className="font-medium text-ink">{PRO_IN_BETA}</span>
+                <span className="font-medium text-ink">{proNote}</span>
               ) : null}
             </p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

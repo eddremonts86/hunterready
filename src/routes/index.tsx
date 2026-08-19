@@ -29,7 +29,7 @@ import type { ConsentState } from '@/components/consent-gate'
 import { AccountMenu, ModelMenu } from '@/components/topbar-controls'
 import { Specimen } from '@/components/block-gallery'
 import { collectResult } from '@/lib/collect-result'
-import { ProTag } from '@/components/pro-tag'
+import { BetaProvider, ProTag, useInBeta } from '@/components/pro-tag'
 import { useFilePicker } from '@/components/dropzone'
 import { Library } from '@/components/library'
 import { PaperPreview } from '@/components/paper-preview'
@@ -108,11 +108,21 @@ export const Route = createFileRoute('/')({
  * semantic colours with measured contrast (DESIGN.md), and sonner's own palette is a fourth opinion.
  */
 function Workspace() {
+  /*
+    `/api/processing` asked once, here, and its beta answer placed above everything.
+
+    `HunterReady` returns early five times — the consent gate, the waiting screen, the landing page,
+    the letter view, the editor — so a provider written inside it covers whichever exit it happens to
+    sit in. It did, briefly, and the symptom was exact: on `HR_RELEASE=true` the landing page dropped
+    its beta paragraph while the chip beside the wordmark stayed, because that header renders from an
+    earlier return. Five exits is why this fact does not travel as a prop.
+  */
+  const consent = useProcessingConsent()
   return (
-    <>
-      <HunterReady />
+    <BetaProvider value={consent.beta}>
+      <HunterReady consent={consent} />
       <Toaster position="bottom-right" closeButton />
-    </>
+    </BetaProvider>
   )
 }
 
@@ -605,6 +615,12 @@ function Wordmark({ className = 'text-[17px]' }: { className?: string }) {
  * A banner somebody closes stops saying it. This does not change and neither should the notice.
  */
 function BetaChip() {
+  /*
+    Nothing at all once `HR_RELEASE=true`. This is the surface the switch is most obviously *for*:
+    a product that has opened pricing and still wears a beta chip beside its name is telling a
+    paying customer that the thing they just paid for is provisional.
+  */
+  if (!useInBeta()) return null
   return (
     <span
       title="HunterReady is in beta. Features and layouts can change at any time, and your saved CVs may need re-checking after an update."
@@ -1128,7 +1144,7 @@ function PanelTabs({
   )
 }
 
-function HunterReady() {
+function HunterReady({ consent }: { consent: ConsentState }) {
   const search = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
 
@@ -1151,7 +1167,6 @@ function HunterReady() {
   const [stages, setStages] = useState<Array<Stage>>([])
   const progressIdRef = useRef<string | undefined>(undefined)
   const [error, setError] = useState<string | undefined>()
-  const consent = useProcessingConsent()
   const [rewrites, setRewrites] = useState<Array<BulletRewrite> | undefined>()
   const [rewriting, setRewriting] = useState(false)
   /**
@@ -1449,17 +1464,51 @@ function HunterReady() {
          * the second button on the gate is decoration.
          */
         body.append('processing', consent.choice ?? 'local')
-        const response = await fetch('/api/ingest', { method: 'POST', body })
-        const payload = (await response.json()) as Record<string, unknown>
+        /*
+          Detached, for the same measured reason as the advert read and with more riding on it.
 
+          An ingest on production's local model took 57s on 2026-08-19 (docs/plans/04). This is the
+          request a first-time visitor makes before they have seen anything work, over whatever
+          network their phone is on, and a `fetch` held open for a minute is one that a proxy, a
+          load balancer or a lock screen is entitled to cut. When one does, the CV was already read
+          and the person sees a failure anyway.
+
+          So the POST returns a job id in milliseconds and the CV is collected from `/api/result`.
+          The id is the one minted above for the narration, so the stages keep arriving exactly as
+          before and there is nothing new to correlate.
+        */
+        body.append('detach', 'true')
+        const response = await fetch('/api/ingest', { method: 'POST', body })
+
+        /*
+          The refusals that arrive immediately: rate limit, an oversized file, no file, a body that
+          did not survive the trip. They never reach the pipeline, so they never become a job.
+        */
         if (!response.ok) {
+          const failed = (await response.json().catch(() => ({}))) as Record<
+            string,
+            unknown
+          >
           setError(
-            typeof payload.message === 'string'
-              ? payload.message
+            typeof failed.message === 'string'
+              ? failed.message
               : 'Something went wrong reading that file. Please try again.',
           )
           return
         }
+
+        const collected = await collectResult(progressIdRef.current)
+        if (collected === undefined) {
+          setError(
+            'That took longer than we can wait for. Trying again usually works, and nothing was saved.',
+          )
+          return
+        }
+        if ('error' in collected) {
+          setError(collected.message)
+          return
+        }
+        const payload = collected.value as Record<string, unknown>
 
         // Validate what came back rather than trusting it: the renderer must never see a shape it
         // would reject, and a bad response should surface here, not as a blank preview.
@@ -2147,13 +2196,15 @@ function HunterReady() {
                   *before* they hand over their employment history, not after. Ordinary body text and
                   not a warning colour: beta is a fact about the product, not a fault in it.
                 */}
-                <p
-                  className="rise text-[13px] leading-relaxed text-ink-soft"
-                  style={{ animationDelay: '60ms' }}
-                >
-                  HunterReady is in beta. It works, and it changes often: what
-                  you see here can move or improve at any time.
-                </p>
+                {consent.beta === false ? null : (
+                  <p
+                    className="rise text-[13px] leading-relaxed text-ink-soft"
+                    style={{ animationDelay: '60ms' }}
+                  >
+                    HunterReady is in beta. It works, and it changes often: what
+                    you see here can move or improve at any time.
+                  </p>
+                )}
 
                 {/*
                   No manual <br />, and `text-balance` instead.
@@ -2609,13 +2660,17 @@ function HunterReady() {
               <Reveal delay={140}>
                 <p className="mt-7 max-w-[68ch] border-t border-hairline pt-6 text-[14px] leading-relaxed text-ink-soft">
                   <span className="font-medium text-ink">
-                    All 103 are yours while we are in beta,
+                    {consent.beta === false
+                      ? `${FREE_VOICES} are free and the rest are part of the paid plan,`
+                      : 'All 103 are yours while we are in beta,'}
                   </span>{' '}
                   including the {VOICES.length - FREE_VOICES} voices marked Pro.
-                  Those become part of a paid plan later and we will say so
-                  before that happens. {FREE_VOICES} of them stay free
-                  afterwards, and every design renders the same document as
-                  every other, checked by the same test.
+                  {consent.beta === false
+                    ? ' '
+                    : ' Those become part of a paid plan later and we will say so before that happens. '}
+                  {FREE_VOICES} of them stay free afterwards, and every design
+                  renders the same document as every other, checked by the same
+                  test.
                 </p>
               </Reveal>
             </div>
@@ -4144,7 +4199,8 @@ function HunterReady() {
                     there, and the landing page says it in full before anyone uploads anything.
                   */}
                   <span className="tally hidden text-meta text-ink-faint lg:inline">
-                    Beta · the file does not change after you download it
+                    {consent.beta === false ? '' : 'Beta · '}the file does not
+                    change after you download it
                   </span>
                   {/*
                     The download, on the document rather than under the editor.
