@@ -527,9 +527,13 @@ is the argument for the verification step and not against the plan.
    released state against a real build — the latter with both older switches set against it — which
    is the part that would rot silently. Rehearse it with `pnpm host` on `:3012`
    (`.claude/launch.json` → `hunterready-release`).
-3. **Name and domain** (docs/09 question 8). `.dev`/`.app`/`.com` availability and trademark never
-   checked, and it was always marked "needed by v1.0". Cheap, and it gets more expensive the later it
-   is asked.
+3. **Name and domain** (docs/09 question 8). **Availability checked 2026-08-19: `hunterready` is free
+   on all seven of `.com` `.dev` `.app` `.dk` `.io` `.co` `.net`**, each method controlled against a
+   domain that is certainly registered. `.dev` is being bought at Porkbun, where `builderhunt.dev`
+   already lives. **The trademark search is deliberately deferred** — Edd is not sure the name
+   survives beta — and it has **moved from "needed by v1.0" to a precondition of item 1**, because
+   the moment it stops being cheap is the first payment, not the release. Today a rename is 20
+   occurrences across 7 files, all documentation and none in `src/`.
 
 ### Costing money today
 

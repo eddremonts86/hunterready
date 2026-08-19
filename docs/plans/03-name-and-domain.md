@@ -2,6 +2,31 @@
 
 - **Date:** 2026-08-18 · **Status:** draft · **Blocks:** 3 · **Author:** Edd
 
+> **2026-08-19: block 1 done, and the deadline moved.**
+>
+> `hunterready` is **free on all seven** TLDs checked — `.com` `.dev` `.app` `.dk` `.io` `.co` `.net`
+> — and each method was controlled against a domain that is certainly registered, because the first
+> one lied: RDAP returns 404 for `eduardoinerarte.dk`, which is Edd's live production host. `.dk`
+> came from DK Hostmaster's own whois, `.io`/`.co` from whois, `.dev`/`.app` from RDAP with `web.dev`
+> and `web.app` as the control. Porkbun, where `builderhunt.dev` already lives: `.dev` $8.75 first
+> year, $12.87 renewal.
+>
+> **Block 2 is deliberately not done, and the reason is a decision rather than a blocker.** Edd is
+> not sure `HunterReady` survives beta, and paying to clear a name you may drop is spending on the
+> answer to a question you might never ask.
+>
+> ⚠️ **But this item said "needed by v1.0", and that is the wrong trigger.** The moment a trademark
+> collision stops being cheap is the moment **somebody pays** — the name goes on an invoice, on a
+> payment-provider account, and on a card statement, and renaming stops being a find-and-replace and
+> becomes a communication to people who gave you money. Measured today, a rename costs 20 occurrences
+> across 7 files, **all documentation and none in `src/`**. After the first payment it costs that
+> plus everything spent building recognition, which is why the cost grows with how well it goes.
+>
+> **So the trademark search is now a precondition of [plan 01](01-pricing-and-payments.md), not of
+> v1.0**, and the name has to be decided before pricing opens rather than "after beta" — those are
+> the same moment, and doing them in that order means either renaming a paid product or delaying the
+> checkout.
+
 ## Objective
 
 Establish that "HunterReady" is available and defensible as a name and a domain, or choose another

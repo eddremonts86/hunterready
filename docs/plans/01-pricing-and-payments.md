@@ -1,6 +1,6 @@
 # 01 — Pricing and payments
 
-- **Date:** 2026-08-18 · **Status:** price range decided, exact figure open · **Blocks:** 6 · **Author:** Edd
+- **Date:** 2026-08-18 · **Status:** price range decided, exact figure open · **blocks 6 → 7** · **Blocks:** 6 · **Author:** Edd
 
 ## Objective
 
@@ -35,6 +35,21 @@ the pricing page.
 - Invoicing companies. This is a consumer product; a B2B invoice flow is another product.
 
 ## Plan
+
+### Block 0: the name is settled and searched (Edd, added 2026-08-19)
+
+- [ ] The name that will be on the invoice is decided.
+- [ ] A trademark search against EUIPO and the Danish register for that name, in classes 9 and 42,
+      recorded with the register, the classes and the date.
+- [ ] **Verify:** the search is in [plan 03](03-name-and-domain.md), with its date.
+
+Moved here from plan 03, where it sat behind "needed by v1.0" — too late and too vague. **This is
+the last moment a rename is cheap.** Once somebody pays, the name is on an invoice, on a payment
+provider's account and on a card statement, and changing it stops being a find-and-replace. Today it
+is 20 occurrences across 7 files, all documentation.
+
+A clean search is not a legal opinion, and this block does not pretend otherwise. It is the
+difference between an unknown and a known.
 
 ### Block 1: the two numbers (30 min, Edd)
 
