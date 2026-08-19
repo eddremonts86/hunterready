@@ -43,6 +43,13 @@
       "when": 1787146369137,
       "tag": "0005_outgoing_young_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787147140766,
+      "tag": "0006_tearful_red_wolf",
+      "breakpoints": true
     }
   ]
 }

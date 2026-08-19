@@ -148,6 +148,64 @@ export async function setPlan(input: {
  * it and did nothing" is distinguishable later from "it never arrived" — which is the only question
  * worth asking when somebody says they paid and nothing happened.
  */
+/**
+ * Remember which Stripe customer an account is, the first time we are told.
+ *
+ * Called from `checkout.session.completed`, which is the only event that carries both identifiers —
+ * our `client_reference_id` and Stripe's `cus_…`. Every subscription event after it carries only the
+ * second, so without this the first payment works and every renewal and cancellation afterwards is
+ * about somebody we cannot name.
+ *
+ * Idempotent by writing the same value again, because that event is redelivered like any other.
+ */
+export async function linkStripeCustomer(input: {
+  userId: string
+  customerId: string
+}): Promise<void> {
+  await db
+    .update(authUsers)
+    .set({ stripeCustomerId: input.customerId })
+    .where(eq(authUsers.id, input.userId))
+}
+
+/**
+ * The two things checkout needs about an account, and deliberately nothing else.
+ *
+ * The e-mail so Stripe can prefill and send a receipt, and the customer id so a second subscription
+ * attaches to the person who already exists rather than creating a duplicate — two customers for one
+ * account is how somebody ends up paying twice and cancelling only one of them.
+ */
+export async function billingIdentity(userId: string): Promise<
+  | {
+      email: string
+      customerId?: string
+    }
+  | undefined
+> {
+  const [row] = await db
+    .select({ email: authUsers.email, customerId: authUsers.stripeCustomerId })
+    .from(authUsers)
+    .where(eq(authUsers.id, userId))
+    .limit(1)
+  if (row === undefined) return undefined
+  return {
+    email: row.email,
+    ...(row.customerId === null ? {} : { customerId: row.customerId }),
+  }
+}
+
+/** Who a `cus_…` belongs to, or undefined for a customer that predates the link or was never ours. */
+export async function userIdForStripeCustomer(
+  customerId: string,
+): Promise<string | undefined> {
+  const [row] = await db
+    .select({ id: authUsers.id })
+    .from(authUsers)
+    .where(eq(authUsers.stripeCustomerId, customerId))
+    .limit(1)
+  return row?.id
+}
+
 export async function applyBillingEvent(input: {
   /** The provider's own event id. Uniqueness comes from them, not from us. */
   eventId: string

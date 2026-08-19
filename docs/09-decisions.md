@@ -758,8 +758,23 @@ line.
 
 ## ADR-034 — A merchant of record sells the subscription, not us
 
-**2026-08-19 · Proposed** — the fee is a business decision and belongs to Edd. The engineering
-consequences are recorded here either way, because they are nearly identical and that is the point.
+**2026-08-19 · Proposed, and _not_ accepted.**
+
+> **Edd chose Stripe, and takes the OSS obligation himself.** The analysis below stands and is left
+> unedited, because it is the reasoning that will be re-read the first quarter a VAT return is due —
+> and because it names the exact volume at which this decision was going to be revisited anyway. It
+> was a business call with the cost on the table, not an oversight.
+>
+> What that decides in code: the checkout is Stripe's hosted Checkout Session with
+> `automatic_tax` on, so the **rate charged** is right from the first sale. **Registering for OSS in
+> Denmark and filing the quarterly return is Edd's**, and no amount of configuration makes it ours.
+> Everything below about the shape of the integration held: a hosted checkout, a signed webhook, one
+> column, and only the first two provider-specific.
+
+_Original proposal follows._
+
+The fee is a business decision and belongs to Edd. The engineering consequences are recorded here
+either way, because they are nearly identical and that is the point.
 
 Plan 01 block 2 said "Stripe unless there is a reason". There is a reason, and it is not technical.
 

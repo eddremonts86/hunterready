@@ -104,6 +104,23 @@ export const authUsers = pgTable('auth_users', {
    * one certainty about tiers is that they change.
    */
   plan: text('plan').notNull().default('free'),
+  /**
+   * The Stripe customer this account is, once they have been through checkout.
+   *
+   * Needed because the two kinds of event identify the person differently. A
+   * `checkout.session.completed` carries the `client_reference_id` we set — our own user id — and
+   * every `customer.subscription.*` after it carries only Stripe's customer id. Without this column
+   * the first payment works and every renewal, cancellation and dispute afterwards arrives about
+   * somebody we cannot name.
+   *
+   * Unique, because two accounts claiming one customer would make a cancellation ambiguous, and the
+   * safe resolution of an ambiguous cancellation is to drop both — which would be a bug that reads
+   * as a billing dispute.
+   *
+   * It is an opaque `cus_…` handle and nothing else: no card, no address, no amount. Stripe holds
+   * all of that, and this column exists so a webhook can find a row.
+   */
+  stripeCustomerId: text('stripe_customer_id').unique(),
   deleteAfter: retention(),
 })
 

@@ -50,6 +50,20 @@ const STRING_ALLOWLIST = new Set([
   'providersConfigured',
   'providersSkipped',
   'providerPinned',
+  /**
+   * Stripe's event type, and what we did about it.
+   *
+   * `billingKind` is a value Stripe chose — `customer.subscription.updated` — and `billingOutcome` is
+   * ours: `pro`, `free` or `ignored`. Neither can carry an e-mail, a customer id or an amount,
+   * because the handler passes exactly these two and the ledger's columns do not hold the rest
+   * (ADR-034).
+   *
+   * Prefixed, for the third time in this list and for the same reason `summaryOutcome` gives above. A
+   * bare `kind` is the generic key somebody later hangs a filename on, and this allowlist is worth
+   * only as much as the promise that every name on it carries a handful of known words.
+   */
+  'billingKind',
+  'billingOutcome',
 ])
 
 function scrub(fields: Record<string, Primitive>): Record<string, Primitive> {

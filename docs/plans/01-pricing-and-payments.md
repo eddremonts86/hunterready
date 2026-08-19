@@ -55,17 +55,26 @@ difference between an unknown and a known.
 
 - [x] **2026-08-18: EUR 10-19 per month.** Edd's range, chosen as professional-tool rather than
       consumption pricing, which sets an expectation about what the plan has to include.
-- [ ] Pick the exact figure inside that range. A range is enough to write the plan; a pricing page
-      needs one number.
+- [x] **2026-08-19: EUR 12 per month.** The low end of the range — less friction for a product whose
+      name is not known yet, and it leaves room to go up when the plan visibly includes more than it
+      does today. Written into `PRICING` in `src/lib/pricing.ts`, not into any page's copy.
 - [ ] Decide whether the free tier keeps all twelve designs. Currently it does, and the catalogue
       section on the landing page says so out loud, so changing it is a copy change too.
 - [ ] **Verify:** the exact price is written into this file, and the free-tier answer with it.
 
-### Block 2: choose the provider (30 min)
+### Block 2, done 2026-08-19: Stripe, with the VAT obligation named out loud
 
-- [ ] Stripe unless there is a reason. Confirm it supports DK VAT (MOSS/OSS) without extra work,
-      because a consumer subscription across the EU is a VAT question before it is a code question.
-- [ ] **Verify:** an ADR naming the provider and why, appended not rewritten.
+- [x] **The block's premise was wrong and that is the finding.** "Stripe unless there is a reason,
+      confirm it supports DK VAT without extra work" — it does not, and no payment _processor_ does.
+      Stripe is not a merchant of record: Stripe Tax calculates and can file, but registering for
+      OSS, remitting and filing stays with the seller, from the first consumer sale into the EU.
+- [x] **Verify:** ADR-034, which priced the alternative at about €0.50 per subscriber per month
+      (€52/month at a hundred) and recommended a merchant of record.
+- [x] **Edd chose Stripe and takes the OSS obligation.** Recorded in the ADR rather than hidden in a
+      commit, with the volume at which it was going to be revisited anyway.
+
+`automatic_tax` is enabled on the checkout session so the **rate charged** is correct from the first
+sale. The registration and the quarterly return are Edd's, and no configuration makes them ours.
 
 ### Block 3: checkout (30 min)
 
