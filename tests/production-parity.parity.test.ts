@@ -17,7 +17,7 @@
  */
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
-import { stat } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { ChildProcess } from 'node:child_process'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -189,6 +189,100 @@ describe('the built server can render a PDF', () => {
       expect(res.status, `expected 200 for ?${axis} during beta`).toBe(200)
       expect(res.headers.get('content-type')).toContain('application/pdf')
     }
+  })
+
+  /**
+   * The shape that decides whether the local model is a free tier or a spinner.
+   *
+   * Ingest on production's local model took 57s (docs/plans/04), and this is the request a
+   * first-time visitor makes before they have seen anything work. Held open, it is a request every
+   * proxy and mobile network between a phone and the server is entitled to cut.
+   *
+   * Tested here rather than as a unit for the reason this whole suite exists: the claim is about a
+   * built server. `job-result.ts` is a module-level `Map`, so a unit test proves the map works while
+   * a build that split the route and the store across isolated contexts would ship — and the failure
+   * would be a job id that never resolves, which looks exactly like a slow model.
+   *
+   * `plain.txt` on purpose: no LibreOffice, no Tesseract, no model. The pipeline falls back to the
+   * rule engine, which is fine — what is under test is the shape, not the extraction.
+   */
+  describe('a long ingest hands back a job id instead of holding the request open', () => {
+    const jobId = 'parity-6f1c9a24-detached-ingest'
+
+    async function upload(fields: Record<string, string>) {
+      const bytes = await readFile('fixtures/input/plain.txt')
+      const form = new FormData()
+      form.append(
+        'file',
+        new File([bytes], 'plain.txt', { type: 'text/plain' }),
+      )
+      for (const [k, v] of Object.entries(fields)) form.append(k, v)
+      return fetch(`${baseUrl}/api/ingest`, { method: 'POST', body: form })
+    }
+
+    it('accepts in milliseconds, then serves the CV once and only once', async () => {
+      const started = Date.now()
+      const accepted = await upload({ progress: jobId, detach: 'true' })
+      const acceptedIn = Date.now() - started
+
+      expect(
+        accepted.status,
+        `expected 202, got ${accepted.status}. server log:\n${serverLog}`,
+      ).toBe(202)
+      expect(await accepted.json()).toEqual({ jobId })
+      /*
+        Generous by two orders of magnitude against the 57s it replaces. The number being asserted is
+        "did not wait for the pipeline", not a performance budget — a tight bound here would go red on
+        a loaded CI runner and teach everyone to re-run it.
+      */
+      expect(acceptedIn, 'the POST waited for the work').toBeLessThan(3_000)
+
+      // Poll exactly as the page does, on the same 700ms rhythm.
+      let collected: Response | undefined
+      for (let i = 0; i < 90; i++) {
+        const poll = await fetch(`${baseUrl}/api/result?id=${jobId}`)
+        if (poll.status !== 204) {
+          collected = poll
+          break
+        }
+        await new Promise((r) => setTimeout(r, 700))
+      }
+
+      expect(collected, 'the job never produced a result').toBeDefined()
+      expect(collected?.status).toBe(200)
+      expect(collected?.headers.get('cache-control')).toBe('no-store')
+
+      const body = (await collected?.json()) as {
+        resume?: { basics?: { fullName?: string } }
+        method?: string
+      }
+      // A real read of a real file, not an empty envelope with the right shape.
+      expect(body.resume?.basics?.fullName).toMatch(/Whitfield/i)
+      expect(body.method).toBeDefined()
+
+      /*
+        Collecting deletes. The id is in a URL, which is the least private place a string can be, and
+        the thing behind it is somebody's name, email and phone number.
+      */
+      const second = await fetch(`${baseUrl}/api/result?id=${jobId}`)
+      expect(second.status, 'the CV was still readable after collection').toBe(
+        204,
+      )
+    })
+
+    it('still answers with the CV itself when nobody asks to detach', async () => {
+      /*
+        The other shape, unchanged. Every existing caller and the `/v1` contract published this week
+        depend on it, and one handler now serves both — so the day the detached path is edited, this
+        is what says the synchronous one came along.
+      */
+      const res = await upload({ progress: 'parity-9e3b17c0-sync-ingest' })
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as {
+        resume?: { basics?: { fullName?: string } }
+      }
+      expect(body.resume?.basics?.fullName).toMatch(/Whitfield/i)
+    })
   })
 
   it('logs no unhandled server errors', () => {
