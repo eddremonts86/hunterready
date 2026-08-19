@@ -1,6 +1,11 @@
 # 08 — MiniMax sometimes returns no provenance
 
-- **Date:** 2026-08-18 · **Status:** blocks 1 and 3 done · **Blocks:** 4 · **Author:** Edd
+- **Date:** 2026-08-18 · **Status:** DONE, all four blocks · **Blocks:** 4 · **Author:** Edd
+
+> **2026-08-19: closed. It was never the providers.** `provenance` was **optional in the JSON Schema
+> we sent**, while the prompt three paragraphs earlier asked the model to cite a line for every
+> field. Requiring it took the aggregate from 45% to 96% and the worst single pass from 0% to 67%.
+> DeepSeek, which cited nothing at all on a 75-field document in every pass, now cites 67–96% of it.
 
 ## Objective
 
@@ -94,9 +99,10 @@ without them there is no way to tell whether a model change helped.
 
 ## Acceptance criteria
 
-- [ ] A measured rate: how many fields lack provenance, across the fixture set, per provider.
-- [ ] Either the rate drops after a schema or prompt change, or the interface degrades honestly.
-- [ ] A test that fails if provenance coverage falls below the recorded floor.
+- [x] A measured rate: how many fields lack provenance, across the fixture set, per provider.
+- [x] Either the rate drops after a schema or prompt change, or the interface degrades honestly.
+      **Both**: the rate went 45% → 96%, and the empty case still degrades honestly.
+- [x] A test that fails if provenance coverage falls below the recorded floor.
 
 ## Non-goals
 
@@ -111,11 +117,45 @@ without them there is no way to tell whether a model change helped.
 - [ ] Count fields with and without provenance across the fixtures, per provider.
 - [ ] **Verify:** a table in this file. "Sometimes" is not a number.
 
-### Block 2: try the cheap causes (30 min)
+### Block 2, done 2026-08-19: it was the schema, and it was one line
 
-- [ ] Check whether `provenance` is `required` in the JSON Schema sent, and whether the omission
-      correlates with input length or with specific paths.
-- [ ] **Verify:** re-measure. A change with no measurement after it is a guess.
+- [x] Check whether `provenance` is `required` in the JSON Schema sent.
+- [x] **Verified:** re-measured, same harness, same fixtures, three passes.
+
+**It was not required.** `ExtractionPayload.provenance` carries `.default([])`, so
+`z.toJSONSchema(…, { io: 'input' })` emitted `required: ["resume"]`. The code even documented this as
+correct — _"fields with defaults are optional rather than required"_ — which is true of a validator
+and wrong of a request.
+
+And the prompt, in the same call, says: _"For each field you fill, report how sure you are that you
+read it correctly, and the index of the line you took it from."_
+
+**The prompt asked and the schema excused.** Provenance is the only part of the answer with no
+visible consequence if it is dropped, so a model resolving that tension takes the excuse.
+
+|                                  | before      | after           |
+| -------------------------------- | ----------- | --------------- |
+| DeepSeek · plain.txt (32)        | 0% · 94%    | **100% · 100%** |
+| DeepSeek · nurse-senior.pdf (75) | **0% · 0%** | **67% · 96%**   |
+| MiniMax · plain.txt (33)         | 68% · 100%  | **100% · 100%** |
+| MiniMax · nurse-senior.pdf (72)  | 22% · 96%   | **97% · 100%**  |
+| aggregate over all 12 passes     | **45%**     | **96%**         |
+
+The fix asks strictly and accepts leniently: the tool schema demands `provenance`, and the runtime
+parse keeps its `.default([])`, so a model that ignores the demand costs the person their citations
+and never their CV. Trading a whole read for a side channel would be the worse bargain, and block 3
+already made the empty case honest on screen.
+
+**The output-length hypothesis was half right and not the cause.** Length still shows — DeepSeek
+manages 100% of a 32-field document and 67–96% of a 75-field one — but it is now a degradation
+rather than a total absence, and the total absence was ours.
+
+### What this item was called
+
+_"MiniMax sometimes returns no provenance."_ MiniMax was the **better** of the two providers
+throughout, and neither was the problem. The title described a symptom of our own request, and the
+plan's own hypothesis pointed at model behaviour for two blocks before anybody read the emitted
+schema. Worth remembering the next time a provider looks unreliable.
 
 ### Block 3: degrade honestly (30 min)
 
@@ -123,10 +163,24 @@ without them there is no way to tell whether a model change helped.
       source is unknown is a field worth a second look, which is the same idea as the scan warning.
 - [ ] **Verify:** in the browser, on a CV with a field the model gave no provenance for.
 
-### Block 4: pin the floor (20 min)
+### Block 4, done 2026-08-19: pin the floor, twice
 
-- [ ] A test asserting coverage stays at or above the measured rate.
-- [ ] **Verify:** lower the floor artificially and watch it go red.
+- [x] A test asserting coverage stays at or above the measured rate.
+- [x] **Verified:** raised the floor above the real rate and watched it go red.
+
+Two tests, because the useful one and the cheap one are not the same test.
+
+**`provenance-coverage.test.ts` holds the floor**: aggregate ≥ 80% and no single pass below 50%.
+Both bounds are loose on purpose — the numbers are a spread across three passes of identical code,
+and CLAUDE.md records what happens to a threshold tightened onto one lucky run. They sit in the gap
+between 45%/0% and 96%/67% with room on both sides. Raising them to 100/99 goes red with a message
+naming the provider and the fixture.
+
+⚠️ **But it costs money and four minutes, so it is opt-in and never runs in CI** — which makes it
+useless against the thing most likely to happen: somebody simplifying `toolSchema` back to a single
+`z.toJSONSchema` call. So **`provenance-is-required.test.ts`** is free, hermetic, runs on every push
+and holds the real exported schema rather than a mirror of it. Deleting the `required` entry fails
+it immediately.
 
 ## Risks
 

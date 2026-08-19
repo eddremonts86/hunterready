@@ -105,13 +105,51 @@ export type ExtractResult = ExtractSuccess | ExtractFailure
  * Zod 4 emits JSON Schema natively, so the tool contract and the runtime validator cannot drift
  * (ADR-001). `io: 'input'` matters: it describes what the model should *send*, so fields with
  * defaults are optional rather than required.
+ *
+ * ## Except `provenance`, which is asked for strictly and accepted leniently
+ *
+ * `.default([])` on the Zod side made it optional in the emitted schema, so the tool contract said
+ * `required: ["resume"]` — and the prompt, three paragraphs earlier, asks the model to report "the
+ * index of the line you took it from" for every field. **The prompt asked and the schema excused**,
+ * and a model resolving that under output-budget pressure takes the excuse: provenance is the one
+ * part of the answer with no visible consequence if dropped.
+ *
+ * Measured before this line existed, three passes per pairing:
+ *
+ * ```
+ *   DeepSeek   plain.txt          0% ·  94%     passes 94 · 0 · 0
+ *   DeepSeek   nurse-senior.pdf   0% ·   0%     passes  0 · 0 · 0
+ *   MiniMax    plain.txt         68% · 100%     passes 68 · 100 · 97
+ *   MiniMax    nurse-senior.pdf  22% ·  96%     passes 65 · 22 · 96
+ * ```
+ *
+ * So the schema now demands it. **The runtime parse deliberately does not** — `ExtractionPayload`
+ * keeps its `.default([])`, so a model that still omits provenance produces a CV with no citations
+ * rather than a failed extraction that falls back to regular expressions. Trading a whole read for a
+ * side channel would be the worse bargain by far, and `review-form.tsx` already says "check
+ * everything, we could not tell which fields" when the list is empty.
+ *
+ * Ask for everything; refuse nothing you can still use.
  */
-function toolSchema(): Record<string, unknown> {
-  return z.toJSONSchema(ExtractionPayload, {
+/*
+  Exported for one test, deliberately, against the local convention.
+
+  The other four `toolSchema`s in this codebase are private and their tests mirror them — the same
+  shape `provider-name.test.ts` uses, where a copy is pinned to the source with a `toContain`. That is
+  fine for a mapping. It is not fine here: the whole finding below is that one missing entry in
+  `required` cost DeepSeek every citation on a 75-field document, and a mirrored schema would keep
+  agreeing with itself while the shipped one regressed. The test has to hold the real object.
+*/
+export function toolSchema(): Record<string, unknown> {
+  const schema = z.toJSONSchema(ExtractionPayload, {
     io: 'input',
     // The tool-use API rejects $refs; inline everything.
     reused: 'inline',
-  })
+  }) as { required?: Array<string> }
+
+  const required = new Set(schema.required ?? [])
+  required.add('provenance')
+  return { ...schema, required: [...required] }
 }
 
 /**

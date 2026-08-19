@@ -32,7 +32,7 @@ the mistake:
 | [05](05-overlapping-columns-fixture.md) | Overlapping-column fixture          | hours   | a real file           |
 | [06](06-photographed-cv-fixture.md)     | Photographed CV fixture             | hours   | a real photo          |
 | [07](07-multipage-cv-fixture.md)        | Multi-page CV fixture               | hours   | a real file           |
-| [08](08-minimax-provenance.md)          | MiniMax returns no provenance       | hours   | **nothing** (2 of 4)  |
+| [08](08-minimax-provenance.md)          | MiniMax returns no provenance       | —       | **closed, was ours**  |
 | [09](09-spanish-cv-education.md)        | Does the Spanish CV have education? | —       | **closed, no bug**    |
 | [10](10-model-routing.md)               | Model routing: build or retire      | —       | **closed, ADR-031**   |
 | [11](11-verifier-5-instrument.md)       | Verifier 5 has no instrument        | minutes | a decision (4 of 4)   |
@@ -42,12 +42,15 @@ the mistake:
 | [15](15-production-commit-stamp.md)     | Production reports `build: unknown` | minutes | Coolify, Edd (1 of 2) |
 | [16](16-public-api.md)                  | An API a machine can use            | hours   | Edd (8 of 8)          |
 
-"(n of m)" is the block still open. Three are closed; of the thirteen left, **seven are waiting on a
-decision, a credential or a file, not on code.**
+"(n of m)" is the block still open. Four are closed, and **not one of the twelve left is waiting on
+code** — they want a price, a domain, three real CV files, four Coolify variables, a vendor fix, or
+one decision.
 
 ## What is left that is actually code
 
-**08 blocks 2 and 4.** That is the whole list, as of 2026-08-19.
+**Nothing**, as of 2026-08-19.
 
-04 was the one actively spending money and its code is done: nothing in the interface blocks on a
-model. Its last block is one variable in Coolify.
+Every remaining item is waiting on a price, a domain, three real CV files, a Coolify variable, a
+vendor fix, or one decision about an error reporter. The last two code items closed on the same day:
+04 took the model call off the blocking path, and 08 turned out to be one missing entry in a JSON
+Schema we were sending ourselves.

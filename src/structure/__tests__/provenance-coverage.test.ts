@@ -180,5 +180,46 @@ describe.skipIf(!MEASURE)('provenance coverage, per provider', () => {
     )
 
     expect(rows.length).toBe(providers.length * FIXTURES.length)
+
+    /*
+      The floor (roadmap item 08, block 4).
+
+      Two bounds and both are loose, because the thing being measured moves: the numbers above are a
+      spread across three passes of identical code, and CLAUDE.md already records what happens to a
+      threshold tightened onto one lucky run — `rewrite-quality` measured the same quantity at 27%,
+      4%, 15% and 12%.
+
+      They are set where they are because they separate the two worlds cleanly. Making `provenance`
+      required in the tool schema moved the aggregate from ~45% to ~96% and the worst single pass
+      from 0% to 67%:
+
+        before   94  0  0  ·   0  0  0  ·  68 100 97  ·  65 22 96      aggregate 45%
+        after   100 100 100 ·  67 96 96  · 100 100 100 · 100 97 100     aggregate 96%
+
+      80% and 50% sit in the gap with room on both sides. A regression that removes the `required`
+      entry fails both; an unlucky run of healthy code fails neither.
+    */
+    const everyPass = rows.flatMap((r) => r.pcts)
+    const aggregate = Math.round(
+      everyPass.reduce((sum, p) => sum + p, 0) / everyPass.length,
+    )
+
+    expect(
+      aggregate,
+      `aggregate provenance coverage fell to ${aggregate}%. See provenance-report.txt for which paths went uncited.`,
+    ).toBeGreaterThanOrEqual(80)
+
+    /*
+      And a per-pass floor, because an aggregate hides the failure this item was opened for. DeepSeek
+      returning literally nothing on the larger document, three times running, would still leave the
+      mean respectable if the other three pairings were perfect — and "one provider silently cites
+      nothing" is precisely the state the review screen cannot survive.
+    */
+    const worst = Math.min(...everyPass)
+    const worstRow = rows.find((r) => r.pcts.includes(worst))
+    expect(
+      worst,
+      `${worstRow?.provider} on ${worstRow?.fixture} cited ${worst}% of fields in one pass`,
+    ).toBeGreaterThanOrEqual(50)
   }, 600_000)
 })

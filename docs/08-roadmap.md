@@ -554,15 +554,24 @@ is the argument for the verification step and not against the plan.
    literally one. **Deliberately not flipped:** Edd, 2026-08-19, the spend is capped by a monthly plan,
    so there is no hurry and the switch waits for pricing.
 
-### Ingestion quality — all three are missing inputs, not missing code
+### Ingestion quality — the three that are left are missing inputs, not missing code
 
 5. **A real Canva/Enhancv export** with genuinely _overlapping_ column spans. Interleaved ordering is
    covered by `two-column-interleaved.pdf`; overlap defeats a different rule.
 6. **A real photographed CV** — perspective skew, uneven lighting, shadow. `scanned.pdf` is a clean
    rasterization and cannot fake any of it.
 7. **A genuine multi-page CV**, still owed to Block 4's page-break verifier.
-8. **MiniMax sometimes returns no provenance**, which costs the review step its "where did this come
-   from" answer on the affected fields.
+8. ~~**MiniMax sometimes returns no provenance**, which costs the review step its "where did this
+   come from" answer on the affected fields.~~ **Closed 2026-08-19, and it was never the providers.**
+   `provenance` was **optional in the JSON Schema we sent** — `.default([])` on the Zod side — while
+   the prompt in the same call asked the model to cite a line for every field it filled. The prompt
+   asked and the schema excused, and provenance is the one part of the answer with no visible
+   consequence if dropped. Requiring it in the tool contract, while keeping the runtime parse
+   lenient, took the aggregate from **45% to 96%** and the worst single pass from **0% to 67%**.
+   MiniMax was the better of the two providers throughout; DeepSeek cited nothing at all on a
+   75-field document, three passes running, and now cites 67–96%. A floor holds it
+   (`provenance-coverage.test.ts`, opt-in) and a free hermetic test holds the `required` entry itself
+   (`provenance-is-required.test.ts`), because the paid one never runs in CI.
 
 ### Needs one sentence from Edd
 
