@@ -46,6 +46,63 @@ import { currentUserId } from '@/lib/session'
 const THIRD_PARTY_PLANS = new Set(['pro'])
 
 /**
+ * **The one switch.** `HR_RELEASE=true` and the product stops being in beta, in every sense at once.
+ *
+ * ## Why one lever and not three
+ *
+ * There were three, and they overlapped in a way that made the state of the product a puzzle rather
+ * than a fact. Worse, one of them had quietly stopped working: `thirdParty` is
+ * `everyone || beta || paid`, and `beta` defaults **on**, so `HR_THIRD_PARTY_FOR_ALL` had been
+ * redundant since the day beta shipped. Unsetting it in Coolify — the documented exit from ADR-030,
+ * written down as an acceptance criterion in plan 04 — would have changed nothing at all, and the
+ * check would have been run, failed, and blamed on caching.
+ *
+ * That is the failure this exists to prevent. Not "too many flags": **a switch whose name promised
+ * something a second switch had already taken over.**
+ *
+ * ## It wins, and that is the whole point
+ *
+ * `HR_THIRD_PARTY_FOR_ALL=true` is still set in production and is deliberately being left there —
+ * the spend is capped by a monthly plan, so there is no hurry. Release mode therefore cannot merely
+ * *default* the old switches off; it has to **override** them, or the one lever would be defeated by
+ * a leftover variable nobody remembered. Flipping this is a complete answer on its own, whatever
+ * else is still lying around in the environment.
+ *
+ * ## What it turns off
+ *
+ * Every concession the beta makes, together:
+ *
+ *  - the third-party model for anonymous visitors (ADR-030's suspension)
+ *  - the third-party model as a free capability (`betaPaidFree`)
+ *  - the paid design catalogue and the mixed axes
+ *  - `HR_UNLOCK_DESIGNS`, so that turning release mode on **locally** shows the real gate rather
+ *    than a developer's view of it — otherwise the one way to rehearse this switch is the one way
+ *    it cannot be rehearsed
+ *  - the word "beta" everywhere the interface says it, via `beta` on `/api/processing`
+ *
+ * ## The old switches are not deleted
+ *
+ * `HR_BETA_PAID_FREE` and `HR_THIRD_PARTY_FOR_ALL` still work, still mean what they meant, and are
+ * still the finer-grained controls if one capability ever needs to move on its own. They are simply
+ * no longer the thing anybody reaches for to answer "are we out of beta yet". This one is.
+ */
+export function releaseMode(): boolean {
+  return process.env.HR_RELEASE === 'true'
+}
+
+/**
+ * Whether the product still calls itself beta. Reported to the client so the interface can agree.
+ *
+ * The same fact as `!releaseMode()`, named for the thing it is used for. A page that says "free for
+ * everyone while HunterReady is in beta" after release is not a stale label, it is a promise the
+ * product is no longer keeping — so the sentence has to move with the switch, not with a later
+ * cleanup commit somebody remembers to write.
+ */
+export function inBeta(): boolean {
+  return !releaseMode()
+}
+
+/**
  * Suspend the plan check: everybody gets the third-party model, signed in or not (ADR-030).
  *
  * **Consent is untouched.** This grants entitlement, which is one half of `mayUseThirdParty`'s `&&`;
@@ -66,6 +123,8 @@ const THIRD_PARTY_PLANS = new Set(['pro'])
  * ends it — the model call coming off the blocking path, which is ADR-027's actual lever.
  */
 function thirdPartyForEveryone(): boolean {
+  // Release mode wins. The variable is still set in production on purpose; see `releaseMode`.
+  if (releaseMode()) return false
   return process.env.HR_THIRD_PARTY_FOR_ALL === 'true'
 }
 
@@ -104,6 +163,8 @@ function thirdPartyForEveryone(): boolean {
  * forgotten in a corner.
  */
 export function betaPaidFree(): boolean {
+  // Release mode wins, so `HR_RELEASE=true` alone is a complete answer. See `releaseMode`.
+  if (releaseMode()) return false
   return process.env.HR_BETA_PAID_FREE !== 'false'
 }
 
@@ -122,6 +183,15 @@ export function betaPaidFree(): boolean {
  * defaulting into either.
  */
 export function designsUnlocked(): boolean {
+  /*
+    Release mode wins here too, and this one is worth a sentence.
+
+    The developer unlock exists so the paid catalogue can be tested. Release mode is the one thing a
+    developer would turn on in order to test the *gate* — so if the unlock survived it, the single
+    state nobody could ever rehearse would be the state this switch exists to produce. Setting
+    `HR_RELEASE=true` on a laptop now shows exactly what a visitor sees the day pricing opens.
+  */
+  if (releaseMode()) return false
   return (
     process.env.HR_UNLOCK_DESIGNS === 'true' ||
     process.env.NODE_ENV === 'development'

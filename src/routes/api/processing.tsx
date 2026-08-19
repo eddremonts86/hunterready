@@ -16,7 +16,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { availableProviders, resolveProvider } from '@/structure/provider'
 import { encryptionEnabled } from '@/db/crypto'
-import { designsUnlocked, entitlementFor } from '@/lib/entitlements'
+import { designsUnlocked, entitlementFor, inBeta } from '@/lib/entitlements'
 
 /**
  * Host → the company's name as a person would recognise it.
@@ -103,8 +103,38 @@ export const Route = createFileRoute('/api/processing')({
              * account, who simply sees that their CV stays here.
              */
             plan,
-            /** Whether a third-party model is configured *at all*, so the UI can offer the upgrade. */
-            thirdPartyAvailable: resolveProvider() !== undefined,
+            /**
+             * Whether a third-party model is configured *at all*, so the UI can offer the upgrade.
+             *
+             * ⚠️ Renamed from `thirdPartyAvailable` on 2026-08-19, because that name described the
+             * wrong thing and had already misled the only reader it ever had. Plan 04 wrote three
+             * acceptance criteria of the form "unset the switch and this goes false" — and it never
+             * would have, because a configured MiniMax makes it true for everybody, entitled or not.
+             * The check would have been run, failed, and blamed on a stale image.
+             *
+             * Nothing in the app reads it. It is a diagnostic, and a diagnostic whose name is a lie
+             * is worse than no diagnostic.
+             */
+            thirdPartyConfigured: resolveProvider() !== undefined,
+            /**
+             * Whether **this caller** may use it. The question the other field looked like it
+             * answered.
+             *
+             * This is the one that goes false for an anonymous visitor the moment `HR_RELEASE=true`,
+             * and the one worth curling after a deploy. `provider` and `providers` already encode it
+             * — `null` and `[]` — but only by absence, and "the field I expected is empty" is a much
+             * weaker signal than a boolean that says no.
+             */
+            thirdPartyForYou: thirdParty,
+            /**
+             * Whether the product still calls itself beta.
+             *
+             * Here so the interface can stop saying "free for everyone while HunterReady is in beta"
+             * at the same instant it stops being true, rather than in a cleanup commit somebody
+             * remembers to write afterwards. One switch, `HR_RELEASE`, moves this and the
+             * entitlements above together — see `releaseMode` in `src/lib/entitlements.ts`.
+             */
+            beta: inBeta(),
             /**
              * Whether this caller may use the paid designs.
              *

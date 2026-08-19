@@ -376,15 +376,17 @@ function Privacy() {
           that changes often can change those, and a privacy notice that does not say so is asking to
           be read as more settled than it is. It names the one thing that will not move.
         */}
-        <p className="text-[14px] leading-relaxed text-ink-soft">
-          <strong className="font-semibold text-ink">
-            HunterReady is in beta.
-          </strong>{' '}
-          Features, layouts and wording change often, and this page changes with
-          them. What does not change is the rule underneath it: nothing is sent
-          anywhere you have not named, and nothing is kept that you have not
-          asked us to keep.
-        </p>
+        {consent.beta === false ? null : (
+          <p className="text-[14px] leading-relaxed text-ink-soft">
+            <strong className="font-semibold text-ink">
+              HunterReady is in beta.
+            </strong>{' '}
+            Features, layouts and wording change often, and this page changes
+            with them. What does not change is the rule underneath it: nothing
+            is sent anywhere you have not named, and nothing is kept that you
+            have not asked us to keep.
+          </p>
+        )}
 
         {/* Where you stand right now, on the page that explains the choice. A privacy notice that
             cannot tell you what you already agreed to is asking you to remember for it. */}

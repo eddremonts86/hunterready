@@ -11,6 +11,15 @@
       "port": 3011
     },
     {
+      "//": "The same build, seen the way a visitor sees it the day pricing opens. `HR_RELEASE=true` is the single switch out of beta: no Beta chip, no 'free while we are in beta' anywhere, paid designs and the mixed axes locked behind a 402, and an anonymous visitor's CV read on our own machine.",
+      "//2": "It exists because the state a switch produces has to be lookable-at before the switch is flipped in production, and this one cannot be rehearsed any other way — `NODE_ENV=development` and `HR_UNLOCK_DESIGNS` both unlock the catalogue, so a laptop always shows the beta view. `HR_RELEASE` deliberately overrides both, and it overrides `HR_THIRD_PARTY_FOR_ALL` too, which is still set in production on purpose.",
+      "//3": "3012 so it can run beside the beta view on 3011 and the two can be compared in two tabs.",
+      "name": "hunterready-release",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "HR_RELEASE=true PORT=3012 pnpm host"],
+      "port": 3012
+    },
+    {
       "//": "The one that ships. Attaches to the real stack — the app image plus Postgres plus the model — started with `pnpm app` (Compose builds `hunterready-app:latest`; NOT `pnpm docker:run`, which starts the app alone with no database and no model, so persistence reports itself off and every generated text silently falls back to regular expressions).",
       "//2": "Reach for it for exactly three things: `.doc` ingestion, OCR of a scan, and confirming the shipping image itself is sound before a release. Otherwise it costs 2 minutes warm and 10+ when the apt layer falls out of cache, for nothing the entry above does not already give you.",
       "//3": "3100 because Hermes' WhatsApp bridge holds 127.0.0.1:3000 while Docker publishes on *:3000, and a URL that resolves to one of two servers depending on v4/v6 order is not something to debug twice.",

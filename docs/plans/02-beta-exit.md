@@ -2,6 +2,13 @@
 
 - **Date:** 2026-08-18 · **Status:** draft · **Blocks:** 2 · **Author:** Edd
 
+> **2026-08-19: the switch changed and got bigger, ADR-033.** The exit is now `HR_RELEASE=true`, one
+> variable that overrides `HR_BETA_PAID_FREE`, `HR_THIRD_PARTY_FOR_ALL` and `HR_UNLOCK_DESIGNS`
+> instead of defaulting them off, and takes the word "beta" out of the interface at the same instant.
+> This plan and plan 04 were always the same lever seen from two sides; they are now literally one.
+> The blocks below still describe what has to be true before it is flipped — the switch is built and
+> proved, the pricing is not.
+
 ## Objective
 
 Turn beta off on the day pricing opens, without anyone discovering it by losing a feature.

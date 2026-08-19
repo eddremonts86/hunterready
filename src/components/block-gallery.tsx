@@ -44,7 +44,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { PRO_IN_BETA, ProTag } from '@/components/pro-tag'
+import { ProTag, useProNote } from '@/components/pro-tag'
 import { BLOCK_SPECS } from '@/render/blocks'
 import type { BlockSpec } from '@/render/blocks'
 import type { BlockKind, Resume } from '@/schema/resume'
@@ -358,6 +358,7 @@ export function BlockGallery({
   onAdd: (block: Resume['custom'][number]) => void
   trigger: React.ReactNode
 }) {
+  const proNote = useProNote()
   const [open, setOpen] = useState(false)
 
   return (
@@ -414,7 +415,7 @@ export function BlockGallery({
                   </h3>
                   <p className="text-[12px] leading-relaxed text-ink-soft">
                     {group.note}
-                    {group.id === 'risky' ? ` ${PRO_IN_BETA}` : ''}
+                    {group.id === 'risky' ? ` ${proNote}` : ''}
                   </p>
                 </div>
                 {/*
