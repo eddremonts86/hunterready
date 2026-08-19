@@ -253,3 +253,140 @@ describe('beta includes every paid capability, and can be switched back', () => 
     })
   })
 })
+
+/**
+ * The one switch, and the reason it has to win rather than merely default.
+ *
+ * Edd's ask, 2026-08-19: "debemos tener una forma rápida de pasar de beta a release mode de una, y al
+ * hacer esto el sistema debe reaccionar como es debido" — while explicitly leaving
+ * `HR_THIRD_PARTY_FOR_ALL=true` set in Coolify, because the spend is capped by a monthly plan and
+ * there is no hurry.
+ *
+ * That last part is the whole design. A release switch that only *defaults* the older switches off
+ * would be defeated by a variable nobody remembered to delete, and the person flipping it would have
+ * no way to tell — the interface would look released and anonymous visitors would still be spending
+ * third-party tokens. So each of these asserts release mode beating a switch that is actively set
+ * against it.
+ */
+describe('release mode is one lever and it wins', () => {
+  it('shuts the third-party model to an anonymous visitor with the ADR-030 switch still on', async () => {
+    const { entitlementFor } = await withWorld({
+      userId: undefined,
+      env: { HR_THIRD_PARTY_FOR_ALL: 'true', HR_RELEASE: 'true' },
+    })
+    expect(await entitlementFor(REQUEST)).toEqual({
+      thirdParty: false,
+      paidDesigns: false,
+      plan: 'anonymous',
+    })
+  })
+
+  it('ends the beta giveaway with the beta switch still on', async () => {
+    /*
+      `HR_BETA_PAID_FREE` is not merely unset here, it is set to `true`. Anything less would test that
+      release mode wins an argument nobody was having.
+    */
+    const { entitlementFor } = await withWorld({
+      userId: undefined,
+      env: { HR_BETA_PAID_FREE: 'true', HR_RELEASE: 'true' },
+    })
+    expect(await entitlementFor(REQUEST)).toEqual({
+      thirdParty: false,
+      paidDesigns: false,
+      plan: 'anonymous',
+    })
+  })
+
+  it('beats both at once, which is the state production is actually in', async () => {
+    const { entitlementFor } = await withWorld({
+      userId: undefined,
+      env: {
+        HR_THIRD_PARTY_FOR_ALL: 'true',
+        HR_BETA_PAID_FREE: 'true',
+        HR_RELEASE: 'true',
+      },
+    })
+    expect(await entitlementFor(REQUEST)).toEqual({
+      thirdParty: false,
+      paidDesigns: false,
+      plan: 'anonymous',
+    })
+  })
+
+  it('leaves a paying account exactly as it was', async () => {
+    /*
+      The point of the switch is to *restore* the plan logic, not to shut the product. If this ever
+      goes red, release mode has become an outage with a principle written on it.
+    */
+    const { entitlementFor } = await withWorld({
+      userId: 'u1',
+      plan: 'pro',
+      env: { HR_RELEASE: 'true' },
+    })
+    expect(await entitlementFor(REQUEST)).toEqual({
+      thirdParty: true,
+      paidDesigns: true,
+      plan: 'pro',
+    })
+  })
+
+  it('locks the designs a developer had unlocked, so the gate can be rehearsed', async () => {
+    /*
+      `HR_UNLOCK_DESIGNS` exists so the paid catalogue can be tested. Release mode is the one thing a
+      developer turns on in order to test the *gate* — so if the unlock survived it, the single state
+      this switch exists to produce would be the one state nobody could ever look at.
+    */
+    const open = await withWorld({ env: { HR_UNLOCK_DESIGNS: 'true' } })
+    expect(open.designsUnlocked()).toBe(true)
+
+    const shut = await withWorld({
+      env: { HR_UNLOCK_DESIGNS: 'true', HR_RELEASE: 'true' },
+    })
+    expect(shut.designsUnlocked()).toBe(false)
+  })
+
+  it('tells the interface to stop saying beta at the same instant', async () => {
+    const during = await withWorld({ env: { HR_BETA_PAID_FREE: 'true' } })
+    expect(during.inBeta()).toBe(true)
+
+    const after = await withWorld({ env: { HR_RELEASE: 'true' } })
+    expect(after.inBeta()).toBe(false)
+    /*
+      One fact, two names, never allowed to drift: a page that still says "free while we are in beta"
+      after the entitlements have shut is not a stale label, it is a promise the product has stopped
+      keeping.
+    */
+    expect(after.releaseMode()).toBe(true)
+  })
+
+  it('is off unless it is exactly "true", like every other switch here', async () => {
+    for (const value of ['', 'false', '1', 'yes', 'TRUE']) {
+      const { releaseMode } = await withWorld({ env: { HR_RELEASE: value } })
+      expect(releaseMode(), `HR_RELEASE=${value} should not release`).toBe(
+        false,
+      )
+    }
+  })
+})
+
+/**
+ * The overlap that made this necessary, pinned so it cannot come back quietly.
+ *
+ * `thirdParty` is `everyone || beta || paid` and `beta` defaults **on**, so `HR_THIRD_PARTY_FOR_ALL`
+ * has been doing nothing since the day beta shipped. Plan 04 nevertheless carried three acceptance
+ * criteria of the form "unset it and the third party closes" — a check that would have been run,
+ * failed, and blamed on a stale image.
+ */
+describe('the switch that had quietly stopped mattering', () => {
+  it('leaves the model open to an anonymous visitor when only the ADR-030 switch is removed', async () => {
+    const { entitlementFor } = await withWorld({
+      userId: undefined,
+      // Beta on — which is production. The ADR-030 switch is absent.
+      env: { HR_BETA_PAID_FREE: 'true' },
+    })
+    expect(
+      (await entitlementFor(REQUEST)).thirdParty,
+      'unsetting HR_THIRD_PARTY_FOR_ALL alone is not an exit from ADR-030',
+    ).toBe(true)
+  })
+})

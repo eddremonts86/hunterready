@@ -285,6 +285,14 @@ describe('the built server can render a PDF', () => {
     })
   })
 
+  it('says it is in beta, because it is', async () => {
+    // The positive half of the release switch, on the server that runs Coolify's configuration.
+    const res = await fetch(`${baseUrl}/api/processing`)
+    const body = (await res.json()) as { beta?: boolean; paidDesigns?: boolean }
+    expect(body.beta).toBe(true)
+    expect(body.paidDesigns).toBe(true)
+  })
+
   it('logs no unhandled server errors', () => {
     expect(serverLog).not.toMatch(/ENOENT|unhandled|HTTPError/i)
   })
@@ -343,5 +351,101 @@ describe('with beta off, the paywall is still there', () => {
     expect(res.status).toBe(402)
     const body = (await res.json()) as { error?: string }
     expect(body.error).toBe('design_locked')
+  })
+})
+
+/**
+ * One switch out of beta, proved against a build with **both older switches set against it**.
+ *
+ * Edd's ask, 2026-08-19: a fast way to go from beta to release, reacting properly — while explicitly
+ * leaving `HR_THIRD_PARTY_FOR_ALL=true` in Coolify, because the spend is capped by a monthly plan.
+ *
+ * That is why this server sets both of the old variables to `true` and then sets `HR_RELEASE` on top.
+ * A release switch that merely *defaulted* the others off would pass a unit test and be defeated in
+ * production by a variable nobody deleted — and the person flipping it would have no way to tell,
+ * because the interface would look released while anonymous visitors kept spending tokens.
+ *
+ * Asserted against Nitro rather than a mock for the reason the whole suite exists (ADR-005): a build
+ * that dropped the check would ship green.
+ */
+describe('one switch takes the product out of beta', () => {
+  let released: ChildProcess | undefined
+  let releasedUrl = ''
+
+  beforeAll(async () => {
+    const port = await freePort()
+    releasedUrl = `http://127.0.0.1:${port}`
+    released = spawn('node', [SERVER_ENTRY], {
+      cwd: ROOT,
+      env: {
+        ...PROD_ENV,
+        PORT: String(port),
+        // Both of these say "give it away". The one below says no, and it is the one that counts.
+        HR_THIRD_PARTY_FOR_ALL: 'true',
+        HR_BETA_PAID_FREE: 'true',
+        HR_UNLOCK_DESIGNS: 'true',
+        HR_RELEASE: 'true',
+      },
+      stdio: 'pipe',
+    })
+    await waitForServer(`${releasedUrl}/`)
+  })
+
+  afterAll(() => {
+    released?.kill()
+  })
+
+  it('reports itself out of beta, with nothing given away', async () => {
+    const res = await fetch(`${releasedUrl}/api/processing`)
+    const body = (await res.json()) as {
+      beta?: boolean
+      paidDesigns?: boolean
+      thirdPartyForYou?: boolean
+      provider?: string | null
+      providers?: Array<unknown>
+      plan?: string
+    }
+
+    expect(body.beta, 'HR_RELEASE=true and it still calls itself beta').toBe(
+      false,
+    )
+    expect(body.plan).toBe('anonymous')
+    /*
+      The three that Edd named. `thirdPartyForYou` is the entitlement — the field `thirdPartyAvailable`
+      looked like it answered and did not, which is how plan 04 came to carry an acceptance criterion
+      that could never have passed.
+    */
+    expect(body.thirdPartyForYou).toBe(false)
+    expect(body.paidDesigns).toBe(false)
+    expect(body.provider ?? null).toBeNull()
+    expect(body.providers ?? []).toHaveLength(0)
+  })
+
+  it('locks the paid catalogue, with the developer unlock set against it', async () => {
+    const plain = await fetch(`${releasedUrl}/api/render?fixture=nurse-senior`)
+    expect(plain.status, 'a free design must still render after release').toBe(
+      200,
+    )
+
+    const paid = await fetch(
+      `${releasedUrl}/api/render?fixture=nurse-senior&template=sidebar&theme=onyx`,
+    )
+    expect(paid.status).toBe(402)
+    expect(((await paid.json()) as { error?: string }).error).toBe(
+      'design_locked',
+    )
+  })
+
+  it('locks the axes, which is the other half of the same gate', async () => {
+    for (const axis of ['accent=%23aa0000', 'bodyFont=Merriweather']) {
+      const res = await fetch(
+        `${releasedUrl}/api/render?fixture=nurse-senior&${axis}`,
+      )
+      expect(res.status, `expected 402 for ?${axis} after release`).toBe(402)
+      const body = (await res.json()) as { error?: string; message?: string }
+      expect(body.error).toBe('axes_locked')
+      // The refusal still has to say what would unlock it; a bare 402 is a dead end on screen.
+      expect(body.message).toContain('paid plan')
+    }
   })
 })

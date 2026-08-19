@@ -756,6 +756,87 @@ line.
 
 ---
 
+## ADR-033 — One switch takes the product out of beta, and it overrides the others
+
+**2026-08-19 · Accepted**
+
+Edd, 2026-08-19: the third-party spend does not matter for now because it is capped by a monthly
+plan, so leave `HR_THIRD_PARTY_FOR_ALL=true` where it is — **but there has to be a fast way to go
+from beta to release in one move, and the system has to react properly when it happens.**
+
+### What was actually there
+
+Three deploy-time switches with overlapping reach, and no single answer to "are we out of beta yet":
+
+| variable                 | grants                                     | default |
+| ------------------------ | ------------------------------------------ | ------- |
+| `HR_THIRD_PARTY_FOR_ALL` | the third-party model to anonymous callers | off     |
+| `HR_BETA_PAID_FREE`      | the third-party model **and** paid designs | **on**  |
+| `HR_UNLOCK_DESIGNS`      | paid designs, for developers               | off     |
+
+`thirdParty` is `everyone || beta || paid`. Beta defaults **on**. So `HR_THIRD_PARTY_FOR_ALL` had
+been doing **nothing at all** since the day beta shipped — the capability it grants was already
+granted by the switch beside it.
+
+That is not a tidiness problem. **Plan 04 carried three acceptance criteria of the form "unset
+`HR_THIRD_PARTY_FOR_ALL` and `/api/processing` reports `thirdPartyAvailable: false` for an anonymous
+visitor."** Both halves were wrong: unsetting it would have changed nothing, and the field named in
+the criterion reports whether a provider is _configured_, not whether this caller may use one. The
+documented exit from ADR-030 would have been performed, observed to fail, and most likely blamed on a
+stale image — which is the failure mode `pnpm stale` exists for and would not have caught.
+
+### The decision
+
+**`HR_RELEASE=true` is the one switch, and it overrides the other three rather than defaulting them
+off.**
+
+The override is the whole design, and it comes straight from Edd's constraint. `HR_THIRD_PARTY_FOR_ALL`
+is staying set in production on purpose. A release switch that merely changed defaults would be
+silently defeated by it, and the person who flipped it would have no way to know: the interface would
+look released while anonymous visitors kept spending third-party tokens. So release mode wins over a
+variable set against it, and flipping it is a complete answer whatever else is lying around in the
+environment.
+
+It reaches four things at once:
+
+- the third-party model for anonymous visitors (ADR-030's suspension)
+- the third-party model as a free capability (`betaPaidFree`)
+- the paid catalogue and the mixed axes
+- **`HR_UNLOCK_DESIGNS`**, so that turning release mode on locally shows the real gate. Otherwise the
+  one state this switch exists to produce would be the one state nobody could ever look at, since
+  `NODE_ENV=development` and the container's own unlock both open the catalogue on a laptop.
+
+And the interface agrees at the same instant. `/api/processing` reports `beta`, and the seven places
+that say the word — the chip beside the wordmark, the note above the upload, the line under the
+design strip, the tally beside Download, the privacy page and the Pro sentence in three panels — read
+it from one context. A page still promising "free for everyone while HunterReady is in beta" after
+pricing opens is not a stale label; it is a promise the product has stopped keeping.
+
+### Two fields, because one name was answering the wrong question
+
+`thirdPartyAvailable` meant "a provider is configured", and it misled the only reader it ever had.
+It is now `thirdPartyConfigured`, and `thirdPartyForYou` carries the entitlement — the thing plan 04
+was reaching for. Nothing in the app read the old name; it is a diagnostic, and a diagnostic whose
+name is a lie is worse than none.
+
+### What was rejected
+
+**Deleting the two older switches.** They still mean what they meant and are the finer-grained
+controls if one capability ever has to move alone. What changes is that neither is the thing anybody
+reaches for to answer "are we released" — and `HR_RELEASE` cannot be argued with by either.
+
+**Making it a code constant flipped at release.** It would make the release a deploy of new code
+rather than a restart, and — more to the point — it could not be rehearsed. `HR_RELEASE=true` on a
+laptop is `pnpm host` on `:3012` beside the beta view on `:3011`, the two compared in two tabs.
+
+### The exit from ADR-030, restated
+
+ADR-030's suspension ends when `HR_RELEASE=true`, not when `HR_THIRD_PARTY_FOR_ALL` is unset. Its own
+recorded exit condition — the model call coming off the blocking path — was met on 2026-08-19 (plan
+04, blocks 1 to 4). The switch is being left on deliberately while the spend is capped.
+
+---
+
 ## ADR-032 — An API caller gets the local model unless it asserts the person's consent
 
 **2026-08-18 · Accepted**

@@ -31,6 +31,8 @@
  */
 import { useEffect, useState } from 'react'
 
+import { useInBeta } from '@/components/pro-tag'
+
 const STORAGE_KEY = 'hunterready.processing-consent.v1'
 
 /**
@@ -97,6 +99,15 @@ export interface ConsentState {
    * believes about itself.
    */
   paidDesigns?: boolean
+  /**
+   * Whether the product still calls itself beta. `undefined` until the server has answered.
+   *
+   * Rides along for the same reason `paidDesigns` does: this hook is already the one place that asks
+   * the server what is true of this deployment. Read it as `beta !== false`, so the interface keeps
+   * saying what it says today while the answer is in flight — the alternative is a "Beta" chip that
+   * blinks into existence a moment after every page load.
+   */
+  beta?: boolean
   choice?: ConsentChoice
   decide: (choice: ConsentChoice) => void
   reset: () => void
@@ -132,6 +143,7 @@ export function useProcessingConsent(): ConsentState {
     undefined,
   )
   const [paidDesigns, setPaidDesigns] = useState<boolean | undefined>(undefined)
+  const [beta, setBeta] = useState<boolean | undefined>(undefined)
   /** The account's plan, for the topbar chip. `anonymous` when there is no session. */
   const [plan, setPlan] = useState<string | undefined>(undefined)
   const [choice, setChoice] = useState<ConsentChoice | undefined>(undefined)
@@ -146,6 +158,7 @@ export function useProcessingConsent(): ConsentState {
             providers?: Array<{ id: string; name: string }>
             encryptsAtRest?: boolean
             paidDesigns?: boolean
+            beta?: boolean
             plan?: string
           }>,
       )
@@ -156,6 +169,8 @@ export function useProcessingConsent(): ConsentState {
         setProviders(offered)
         setEncryptsAtRest(data.encryptsAtRest === true)
         setPaidDesigns(data.paidDesigns === true)
+        // `!== false`, not `=== true`: an older server that does not send the field is in beta.
+        setBeta(data.beta !== false)
         setPlan(typeof data.plan === 'string' ? data.plan : undefined)
         const stored = read()
         /**
@@ -208,6 +223,7 @@ export function useProcessingConsent(): ConsentState {
     chosenName: providers.find((p) => p.id === choice)?.name,
     encryptsAtRest,
     paidDesigns,
+    beta,
     plan,
     choice,
     decide,
@@ -494,6 +510,12 @@ export function ProcessingChoice({
 }) {
   const entitled = providers.length > 0
   /*
+    From the context rather than a prop, unlike everything else here. The injection rule above is
+    about not reaching into the *route*; this is a deploy-time fact with a default, and threading it
+    through as a fifth prop would put one more thing between the switch and the sentence it moves.
+  */
+  const beta = useInBeta()
+  /*
     A stored answer naming a company that is no longer offered falls back to local rather than to the
     first one on the list. Picking a substitute would be the app choosing who receives somebody's CV.
   */
@@ -535,7 +557,7 @@ export function ProcessingChoice({
             id: p.id,
             label: p.name,
             pro: true,
-            hint: `The larger model. Its text goes to ${p.name} and nowhere else; we keep no copy. Free for everyone while we are in beta.`,
+            hint: `The larger model. Its text goes to ${p.name} and nowhere else; we keep no copy.${beta ? ' Free for everyone while we are in beta.' : ' Part of the paid plan.'}`,
           })),
           /*
             Kept for the visitor who has no plan: a locked option that says what it would give them.

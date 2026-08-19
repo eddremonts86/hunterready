@@ -27,7 +27,7 @@
  */
 import { useEffect, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
-import { PRO_IN_BETA, ProTag } from '@/components/pro-tag'
+import { ProTag, useProNote } from '@/components/pro-tag'
 import {
   Collapsible,
   CollapsibleContent,
@@ -295,6 +295,7 @@ export function DesignAxes({
   entitled: boolean
   onChange: (next: Axes) => void
 }) {
+  const proNote = useProNote()
   const accent = axes.colours.accent ?? defaults.accent
   const paper = axes.colours.paper ?? defaults.paper
   const verdict = judgeAccent(accent, paper)
@@ -334,7 +335,7 @@ export function DesignAxes({
           "not open yet" sentence for the state this switch turns off; this is the state somebody is
           actually in during beta, and it was the one with nothing to read.
         */}
-        <p className="text-meta leading-relaxed text-ink-soft">{PRO_IN_BETA}</p>
+        <p className="text-meta leading-relaxed text-ink-soft">{proNote}</p>
         {touched && (
           <button
             type="button"

@@ -41,11 +41,19 @@ services:
       # startup rather than assumed — and `/privacy` reads the real state so it cannot overstate.
       # LOSING THIS KEY LOSES EVERY STORED CV. There is no recovery path and there should not be one.
       DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-}
+      # THE SWITCH OUT OF BETA (ADR-033). `true` and the product is released: no beta labelling
+      # anywhere, paid designs and the mixed axes gated, and an anonymous visitor's CV read on our
+      # own hardware. It OVERRIDES the two below and `HR_UNLOCK_DESIGNS`, deliberately — so it is a
+      # complete answer on its own and cannot be defeated by a variable nobody deleted.
+      HR_RELEASE: ${HR_RELEASE:-}
       # ADR-030, temporary: the third-party model for everyone while the box cannot serve the local
       # one fast enough. Consent is untouched — this grants entitlement, not permission.
+      # ⚠️ Redundant since beta shipped: `HR_BETA_PAID_FREE` already grants the same thing, so
+      # removing this alone changes nothing. `HR_RELEASE=true` is the exit. See ADR-033.
       HR_THIRD_PARTY_FOR_ALL: ${HR_THIRD_PARTY_FOR_ALL:-}
       # Beta: every Pro capability included, and every one of them still labelled Pro on screen.
-      # Defaults ON in code, so unset here means beta. Set to `false` the day pricing opens.
+      # Defaults ON in code, so unset here means beta. The finer-grained half of `HR_RELEASE`, kept
+      # for the case where one capability has to move on its own; not the lever to reach for.
       HR_BETA_PAID_FREE: ${HR_BETA_PAID_FREE:-}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       # The local model. This is what a user gets when they decline the third-party provider — see

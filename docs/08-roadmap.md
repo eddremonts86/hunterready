@@ -518,13 +518,15 @@ is the argument for the verification step and not against the plan.
 1. **Pricing and payments.** Numbers, provider, and an endpoint that sets `plan`. See v1.0 above and
    docs/09 question 7 — the shape is decided, so this is now work plus two numbers, not a design
    question.
-2. **The exit from `HR_BETA_PAID_FREE`.** Beta hands every Pro capability to everyone: the larger
-   model, all 103 designs, the mixed axes, saved CVs. It defaults on, so production is running it, and
-   `HR_BETA_PAID_FREE=false` ends it. Not a separate decision from item 1 — it is the same switch seen
-   from the other side, and the day pricing opens it flips. Listed separately because it lives in a
-   different file from the checkout and would otherwise be found by a user rather than by us.
-   `entitlements.test.ts` and `production-parity.parity.test.ts` both prove the off state still works,
-   which is the part that would rot silently.
+2. **The exit from beta.** Beta hands every Pro capability to everyone: the larger model, all 103
+   designs, the mixed axes, saved CVs. Not a separate decision from item 1 — it is the same switch
+   seen from the other side, and the day pricing opens it flips. **Since 2026-08-19 it is one switch,
+   `HR_RELEASE=true` (ADR-033)**, which overrides `HR_BETA_PAID_FREE`, `HR_THIRD_PARTY_FOR_ALL` and
+   `HR_UNLOCK_DESIGNS` rather than defaulting them off, and takes the word "beta" out of the interface
+   at the same instant. `entitlements.test.ts` and `production-parity.parity.test.ts` both prove the
+   released state against a real build — the latter with both older switches set against it — which
+   is the part that would rot silently. Rehearse it with `pnpm host` on `:3012`
+   (`.claude/launch.json` → `hunterready-release`).
 3. **Name and domain** (docs/09 question 8). `.dev`/`.app`/`.com` availability and trademark never
    checked, and it was always marked "needed by v1.0". Cheap, and it gets more expensive the later it
    is asked.
@@ -542,8 +544,15 @@ is the argument for the verification step and not against the plan.
    failure that ADR was written about is gone; what is left is latency, which is a request shape.
    `/api/target` now answers in 3ms with a job id, and since 2026-08-19 `/api/ingest` answers in 7ms
    with one too. **Blocks 1 to 4 are done and nothing in the interface blocks on a model any more**;
-   the waiting screen was watched narrating a real upload for over two minutes. What is left is
-   block 5, which is one variable in Coolify and is Edd's.
+   the waiting screen was watched narrating a real upload for over two minutes. ADR-030's own recorded
+   exit condition is therefore met.
+
+   ⚠️ **The exit is not the one this item described, and the difference is not cosmetic.** `thirdParty`
+   is `everyone || beta || paid` and beta defaults on, so `HR_THIRD_PARTY_FOR_ALL` has been redundant
+   since beta shipped: unsetting it changes nothing measurable. The exit is `HR_RELEASE=true`
+   (ADR-033), which is the same switch as item 2 — the two items were always one lever and are now
+   literally one. **Deliberately not flipped:** Edd, 2026-08-19, the spend is capped by a monthly plan,
+   so there is no hurry and the switch waits for pricing.
 
 ### Ingestion quality — all three are missing inputs, not missing code
 

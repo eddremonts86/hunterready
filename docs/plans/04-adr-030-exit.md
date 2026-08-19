@@ -66,8 +66,9 @@ about that much and would have made this look easier than it is.
 
 - [ ] An anonymous visitor on the local model can target an advert and get a real result.
 - [ ] Nothing in the interface blocks for longer than it takes to show progress.
-- [ ] `HR_THIRD_PARTY_FOR_ALL` is unset in production and `/api/processing` reports
-      `thirdPartyAvailable: false` for an anonymous visitor.
+- [ ] `HR_RELEASE=true` in production and `/api/processing` reports `thirdPartyForYou: false` for an
+      anonymous visitor. (Was "`HR_THIRD_PARTY_FOR_ALL` is unset"; see block 5 for why that could
+      never have worked.)
 
 ## Non-goals
 
@@ -125,11 +126,24 @@ again usually works, and nothing was saved."_ — followed by the normal upload 
 Production's local model takes 57s, so the ceiling sits at roughly four times the real wait; the
 model that hit it was a stray CPU container, not the one we deploy.
 
-### Block 5: flip it off (15 min)
+### Block 5: flip it off — rewritten 2026-08-19, because it was wrong
 
-- [ ] Unset `HR_THIRD_PARTY_FOR_ALL` in Coolify, restart.
-- [ ] **Verify:** `/api/processing` reports `thirdPartyAvailable: false` for anonymous; a signed-in
-      `pro` account still gets the larger model; an anonymous ingest still produces a real `Resume`.
+- [ ] Set `HR_RELEASE=true` in Coolify, restart. **Not** "unset `HR_THIRD_PARTY_FOR_ALL`".
+- [ ] **Verify:** `/api/processing` reports `thirdPartyForYou: false` and `beta: false` for anonymous;
+      a signed-in `pro` account still gets the larger model; an anonymous ingest still produces a real
+      `Resume`.
+
+⚠️ **Both halves of the original were wrong, and they would have failed quietly.** `thirdParty` is
+`everyone || beta || paid` and beta defaults **on**, so unsetting `HR_THIRD_PARTY_FOR_ALL` changes
+nothing at all. And `thirdPartyAvailable` reported whether a provider was _configured_, never whether
+this caller could use one — so it was true for everybody either way. The check would have been run,
+seen to fail, and blamed on a stale image.
+
+The field is now `thirdPartyConfigured`, with `thirdPartyForYou` beside it carrying the entitlement,
+and the exit is one switch that overrides the leftovers (ADR-033).
+
+**Deliberately not flipped:** Edd, 2026-08-19 — the spend is capped by a monthly plan, so there is no
+hurry. This waits for pricing, which makes it the same flip as plan 02's.
 
 ## Risks
 
@@ -142,5 +156,5 @@ model that hit it was a stray CPU container, not the one we deploy.
 
 ## Verification (end-to-end)
 
-With `HR_THIRD_PARTY_FOR_ALL` unset, an anonymous visitor uploads a CV, targets an advert and gets a
+With `HR_RELEASE=true`, an anonymous visitor uploads a CV, targets an advert and gets a
 real requirement list, with the waiting screen narrating throughout and no request blocking.
