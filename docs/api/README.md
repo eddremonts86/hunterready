@@ -4,6 +4,16 @@ Read a CV into structured fields, and render structured fields into a PDF that a
 can parse. Two endpoints, because everything else in the product operates on the object the first one
 produces.
 
+> **This page explains; [`/docs`](https://hunterready.eduardoinerarte.dk/docs) enumerates.**
+> The browsable reference is generated from the Zod schemas the server validates against, so its
+> field lists cannot drift from what the API accepts — and the document behind it,
+> [`/v1/openapi.json`](https://hunterready.eduardoinerarte.dk/v1/openapi.json), imports into Postman
+> or Bruno and generates a typed client.
+>
+> What is here and not there is the reasoning: who consents, what is deliberately absent, and why a
+> `422` will never tell you which field was wrong. OpenAPI is better at reference and worse at prose,
+> so the two sit beside each other rather than one replacing the other.
+
 **Base URL:** `https://hunterready.eduardoinerarte.dk`
 **Version:** `v1`. The unversioned `/api/*` routes are what the browser client talks to; they change
 when the interface changes and are not a contract.
