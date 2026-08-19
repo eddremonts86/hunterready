@@ -104,18 +104,55 @@ describe('the boot line names what resolved and what did not', () => {
 
 describe('the boot line carries nothing secret', () => {
   it('contains no part of the key, and no measurement of it', async () => {
-    const lines = await boot({ DEEPSEEK_API_KEY: SECRET })
-    const all = lines.join('\n')
-
-    expect(all).not.toContain(SECRET)
-    // Fragments, in case something ever "helpfully" prints a prefix or a suffix.
-    expect(all).not.toContain(SECRET.slice(0, 8))
-    expect(all).not.toContain(SECRET.slice(-8))
     /*
-      And the length. A secret's length is information about the secret, and it is the shape a
-      well-meaning diagnostic reaches for first. `log.ts` cannot scrub it, because a number has no
-      field name saying where it came from.
+      The clock is pinned, and pinned to a hostile instant deliberately.
+
+      `SECRET.length` is 40, and `log.ts` stamps every line with `new Date().toISOString()`. The
+      millisecond below serialises as `...T08:19:18.540Z`, which contains "40". So this is the exact
+      moment at which the first version of this test — which searched the whole serialised line —
+      failed a privacy gate because of a clock. It passed twice locally and on one CI runner before
+      going red on another a minute later.
+
+      Pinning it turns a 1-in-10 flake into a permanent property: if anyone ever widens the search
+      back to the raw line, this fails every single run instead of one in ten. Which matters more
+      than the tidiness of it — a privacy gate that goes red for no reason is one people re-run, and
+      the fifth time it goes red for a real reason it gets re-run too.
     */
-    expect(all).not.toContain(String(SECRET.length))
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-08-19T08:19:18.540Z'))
+
+    try {
+      const lines = await boot({ DEEPSEEK_API_KEY: SECRET })
+      const all = lines.join('\n')
+
+      expect(all).not.toContain(SECRET)
+      // Fragments, in case something ever "helpfully" prints a prefix or a suffix.
+      expect(all).not.toContain(SECRET.slice(0, 8))
+      expect(all).not.toContain(SECRET.slice(-8))
+
+      /*
+        And the length. A secret's length is information about the secret, and it is the shape a
+        well-meaning diagnostic reaches for first. `log.ts` cannot scrub it, because a number has no
+        field name saying where it came from.
+
+        Asked of the fields the announcement chose, not of the envelope the logger adds. `ts` is
+        `new Date().toISOString()` unconditionally and `level` is a literal, so neither can carry a
+        credential — and dropping them removes fourteen digits of clock that an assertion about a
+        secret had no business reading.
+      */
+      for (const line of lines) {
+        const {
+          ts: _ts,
+          level: _level,
+          ...chosen
+        } = JSON.parse(line) as Record<string, unknown>
+        expect(
+          JSON.stringify(chosen),
+          `the announcement's own fields must not measure the key`,
+        ).not.toContain(String(SECRET.length))
+      }
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
