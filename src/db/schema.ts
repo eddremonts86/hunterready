@@ -104,7 +104,68 @@ export const authUsers = pgTable('auth_users', {
    * one certainty about tiers is that they change.
    */
   plan: text('plan').notNull().default('free'),
+  /**
+   * The Stripe customer this account is, once they have been through checkout.
+   *
+   * Needed because the two kinds of event identify the person differently. A
+   * `checkout.session.completed` carries the `client_reference_id` we set — our own user id — and
+   * every `customer.subscription.*` after it carries only Stripe's customer id. Without this column
+   * the first payment works and every renewal, cancellation and dispute afterwards arrives about
+   * somebody we cannot name.
+   *
+   * Unique, because two accounts claiming one customer would make a cancellation ambiguous, and the
+   * safe resolution of an ambiguous cancellation is to drop both — which would be a bug that reads
+   * as a billing dispute.
+   *
+   * It is an opaque `cus_…` handle and nothing else: no card, no address, no amount. Stripe holds
+   * all of that, and this column exists so a webhook can find a row.
+   */
+  stripeCustomerId: text('stripe_customer_id').unique(),
   deleteAfter: retention(),
+})
+
+/**
+ * Every billing event we have already acted on, so acting on it twice cannot happen.
+ *
+ * ## Why a table and not a memory of the last one
+ *
+ * Payment providers **retry**. Every one of them redelivers a webhook it did not get a `2xx` for, and
+ * all of them warn that an event can arrive more than once even when it did. That is not a fault: it
+ * is what makes at-least-once delivery reliable, and it makes the receiver's idempotency the load
+ * bearing part.
+ *
+ * The failure it prevents here is not a double charge — the provider owns the money. It is a double
+ * *grant*: a `subscription.cancelled` arriving twice is harmless, but a cancel and a stale re-delivered
+ * `active` racing each other decides whether somebody who stopped paying keeps the larger model. The
+ * ledger makes the answer "whichever we recorded first, once".
+ *
+ * In Postgres rather than memory because a restart mid-retry is exactly when the duplicate arrives,
+ * and a process that forgets on boot is a process that grants again.
+ *
+ * ## What is deliberately not in here
+ *
+ * No amount, no currency, no card, no customer name, no address. The provider holds all of that and it
+ * is the merchant of record (ADR-034) — this row exists to answer "have I seen this id?" and nothing
+ * else. A billing table is a tempting place to accumulate a shadow copy of somebody's purchase
+ * history, and the only defence against that is for the columns not to exist.
+ */
+export const billingEvents = pgTable('billing_events', {
+  /** The provider's own event id. The primary key, because that is precisely the uniqueness we want. */
+  id: text('id').primaryKey(),
+  /** Which provider sent it, so two providers cannot collide on an id during a migration between them. */
+  provider: text('provider').notNull(),
+  /** The provider's event name, for reading the ledger later. A closed vocabulary in practice. */
+  kind: text('kind').notNull(),
+  /** The account it moved, when it moved one. Null for an event about somebody we could not match. */
+  userId: text('user_id').references(() => authUsers.id, {
+    onDelete: 'set null',
+    onUpdate: 'cascade',
+  }),
+  /** What we did: `pro`, `free`, or `ignored`. The outcome, not the reasoning. */
+  outcome: text('outcome').notNull(),
+  receivedAt: timestamp('received_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 })
 
 export const authSessions = pgTable('auth_sessions', {

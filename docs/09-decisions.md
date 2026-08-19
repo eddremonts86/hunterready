@@ -756,6 +756,90 @@ line.
 
 ---
 
+## ADR-034 — A merchant of record sells the subscription, not us
+
+**2026-08-19 · Proposed, and _not_ accepted.**
+
+> **Edd chose Stripe, and takes the OSS obligation himself.** The analysis below stands and is left
+> unedited, because it is the reasoning that will be re-read the first quarter a VAT return is due —
+> and because it names the exact volume at which this decision was going to be revisited anyway. It
+> was a business call with the cost on the table, not an oversight.
+>
+> What that decides in code: the checkout is Stripe's hosted Checkout Session with
+> `automatic_tax` on, so the **rate charged** is right from the first sale. **Registering for OSS in
+> Denmark and filing the quarterly return is Edd's**, and no amount of configuration makes it ours.
+> Everything below about the shape of the integration held: a hosted checkout, a signed webhook, one
+> column, and only the first two provider-specific.
+
+_Original proposal follows._
+
+The fee is a business decision and belongs to Edd. The engineering consequences are recorded here
+either way, because they are nearly identical and that is the point.
+
+Plan 01 block 2 said "Stripe unless there is a reason". There is a reason, and it is not technical.
+
+### The question the block was actually asking
+
+"Confirm it supports DK VAT (MOSS/OSS) **without extra work**, because a consumer subscription across
+the EU is a VAT question before it is a code question."
+
+The answer is that it does not, and no payment processor does. **Stripe is a payment processor, not a
+merchant of record.** Stripe Tax will calculate the right rate and can file returns as a paid add-on,
+but the legal obligation to register for OSS, collect, remit and file **stays with the seller**. For a
+Danish company selling a digital subscription to consumers across the EU, VAT is due in the _buyer's_
+country from the first sale, which means an OSS registration in Denmark and a quarterly return.
+
+That is not a line of code. It is a recurring administrative obligation with a penalty attached, and
+this product has one part-time person.
+
+### What it costs to make it go away
+
+A merchant of record — Polar, Lemon Squeezy, Paddle — becomes the **legal seller**. They collect the
+VAT, they hold the registrations, they file. Priced against Edd's range:
+
+| price/month | Stripe 2.9% + €0.30 | MoR 5% + €0.50 | difference | at 100 subs | at 1,000 |
+| ----------- | ------------------- | -------------- | ---------- | ----------- | -------- |
+| €10         | €0.59 (5.9%)        | €1.00 (10.0%)  | €0.41      | €41/mo      | €410/mo  |
+| €15         | €0.73 (4.9%)        | €1.25 (8.3%)   | €0.52      | €52/mo      | €515/mo  |
+| €19         | €0.85 (4.5%)        | €1.45 (7.6%)   | €0.60      | €60/mo      | €599/mo  |
+
+And the Stripe column is understated: it excludes Stripe Tax per transaction, the OSS registration,
+and whatever an accountant charges for four returns a year.
+
+**So the trade is about fifty euros a month at a hundred subscribers to not do EU VAT compliance**,
+and it inverts somewhere in the high hundreds. That is a fine place for it to invert, because a
+product with a thousand subscribers can afford an accountant and a product with ten cannot afford a
+filing deadline it forgot.
+
+### The decision
+
+**Start on a merchant of record. Revisit at the volume where the spread pays for an accountant.**
+
+Not chosen between Polar, Lemon Squeezy and Paddle here — that is Edd's, and the fee tables move. What
+this ADR fixes is the _category_, because the category is what determines whether there is a
+compliance obligation at all.
+
+### Why this is a cheap decision to get wrong
+
+The integration is the same shape under all four options, and that is the argument for not agonising:
+
+1. a **hosted** checkout — a URL we send somebody to, never a card field in this codebase
+2. a **signed webhook** saying a subscription became active or stopped being active
+3. **one column** changing
+
+Only steps 1 and 2 have provider-specific code, and both are small: creating a session, and verifying
+a signature. Everything underneath — the idempotency ledger, the audited plan change, the entitlement
+drop, the pricing surface — is written against the _outcome_, not the provider. Moving from a merchant
+of record to Stripe later is a day, and this ADR is what says so out loud in advance.
+
+### What is not being decided
+
+**Not becoming a merchant of record ourselves**, ever. **Not touching card details**, under any
+provider — the risk that CLAUDE.md's rules protect against is somebody's CV leaking, and a card
+number in this codebase would be a second class of that mistake with a regulator attached.
+
+---
+
 ## ADR-033 — One switch takes the product out of beta, and it overrides the others
 
 **2026-08-19 · Accepted**

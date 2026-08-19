@@ -119,6 +119,7 @@
     "react-hook-form": "^7.85.0",
     "react-resizable-panels": "^4.12.2",
     "sonner": "^2.0.8",
+    "stripe": "^22.5.0",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.1.18",
     "takumi-pdf": "^0.6.4",

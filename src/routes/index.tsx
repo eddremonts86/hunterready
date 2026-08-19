@@ -66,7 +66,7 @@ import type {
 import type { BulletRewrite } from '@/optimize/rewrite'
 import { shiftTarget } from '@/optimize/rewrite-shift'
 import { diffResumes } from '@/optimize/variant-diff'
-import { DESIGNS, tierOf } from '@/render/designs'
+import { DESIGNS, FREE_DESIGNS, PAID_DESIGNS, tierOf } from '@/render/designs'
 import { kindOf, Resume } from '@/schema/resume'
 import { BLOCK_SPECS, unsafeBlocks } from '@/render/blocks'
 import type { FieldProvenance } from '@/schema/provenance'
@@ -388,6 +388,15 @@ const VOICES = (() => {
 })()
 
 const FREE_VOICES = VOICES.filter((d) => d.tier === 'free').length
+
+/**
+ * How many structures the free tier spans, counted rather than written down.
+ *
+ * "Twelve designs across three structures" is a claim on a pricing page, and the day a fourth free
+ * structure is added the sentence has to move with it. Deriving it costs one line and removes the
+ * only way that sentence can quietly become false.
+ */
+const FREE_STRUCTURES = new Set(FREE_DESIGNS.map((d) => d.structure)).size
 
 /**
  * The comparison, and the rule it follows: **the left column is not a strawman.**
@@ -1167,6 +1176,32 @@ function HunterReady({ consent }: { consent: ConsentState }) {
   const [stages, setStages] = useState<Array<Stage>>([])
   const progressIdRef = useRef<string | undefined>(undefined)
   const [error, setError] = useState<string | undefined>()
+  /**
+   * Ask the server for a checkout URL and go there.
+   *
+   * No card field, no amount, no price sent from the browser — the server reads the Stripe Price and
+   * the client is told only where to go. A checkout whose amount comes from the page it was clicked
+   * on is a checkout somebody can edit in devtools.
+   */
+  const startCheckout = useCallback(async () => {
+    try {
+      const response = await fetch('/api/billing/checkout', { method: 'POST' })
+      const payload = (await response.json().catch(() => ({}))) as {
+        url?: string
+        message?: string
+      }
+      if (!response.ok || typeof payload.url !== 'string') {
+        setError(
+          payload.message ??
+            'We could not start the checkout. Please try again.',
+        )
+        return
+      }
+      window.location.href = payload.url
+    } catch {
+      setError('We could not reach the server. Please try again.')
+    }
+  }, [])
   const [rewrites, setRewrites] = useState<Array<BulletRewrite> | undefined>()
   const [rewriting, setRewriting] = useState(false)
   /**
@@ -2798,6 +2833,156 @@ function HunterReady({ consent }: { consent: ConsentState }) {
                     </details>
                   </Reveal>
                 ))}
+              </div>
+            </div>
+          </section>
+
+          {/* What it costs, and what it costs nothing.
+
+              Placed after the design strip and before the questions, because by here a reader has
+              seen the catalogue and the Pro tags on it and the honest next thought is "so what is
+              the number". Band rather than another white section: it is a claim about money on a
+              page that has been making claims about accuracy, and the change of ground says a
+              different kind of thing is being said.
+
+              **The free column is first and it is not a stub.** Twelve designs, the model on our own
+              hardware, and every export format — a real product, and the more private half besides,
+              because that CV never leaves this infrastructure (ADR-023). A pricing table whose free
+              column exists to look thin is a table that reads as a trick.
+          */}
+          <section id="pricing" className="band-fade border-b border-hairline">
+            <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
+              <Reveal>
+                <div className="flex flex-col gap-3">
+                  <span className="eyebrow">What it costs</span>
+                  <h2 className="text-section text-balance text-ink">
+                    {consent.beta === false
+                      ? 'One plan, and a free tier that is a real product'
+                      : 'Free while we are in beta, and one plan afterwards'}
+                    <span className="text-signal">.</span>
+                  </h2>
+                  <p className="max-w-[62ch] text-[15px] leading-relaxed text-ink-soft">
+                    Every layout is checked by reading the PDF back, whichever
+                    column you are in. The paid half buys the bigger catalogue
+                    and a larger model, never a more accurate one.
+                  </p>
+                </div>
+              </Reveal>
+
+              <div className="mt-10 grid gap-4 lg:grid-cols-2">
+                <Reveal>
+                  <div className="flex h-full flex-col gap-5 rounded-card border border-hairline bg-ground p-6 sm:p-8">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[13px] font-semibold uppercase tracking-[0.08em] text-ink-soft">
+                        Free
+                      </span>
+                      <span className="text-[34px] font-bold leading-none tracking-[-0.03em] text-ink">
+                        €0
+                      </span>
+                      <span className="text-meta text-ink-faint">
+                        No account needed
+                      </span>
+                    </div>
+                    <ul className="flex flex-col gap-2.5 text-[14px] leading-relaxed text-ink-soft">
+                      {[
+                        /*
+                          From the catalogue, not from `VOICES`.
+
+                          The first version said `${FREE_VOICES}` — 4 — because `VOICES` is the
+                          curated strip further up this page, one design per theme, and not the
+                          catalogue at all. On a *pricing* page that is not an off-by-one: it
+                          understates the free tier by two thirds and it is a claim about what
+                          somebody gets for nothing.
+                        */
+                        `${FREE_DESIGNS.length} designs across ${FREE_STRUCTURES} structures`,
+                        'The model on our own server — your CV never leaves it',
+                        'PDF, Word, and a single self-contained web page',
+                        'Bullet rewriting, job targeting, cover letters',
+                        'English, Spanish and Danish',
+                      ].map((line) => (
+                        <li key={line} className="flex gap-2.5">
+                          <Icon
+                            name="check"
+                            className="mt-0.5 h-4 w-4 shrink-0 text-affirm"
+                          />
+                          {line}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </Reveal>
+
+                <Reveal delay={80}>
+                  <div className="flex h-full flex-col gap-5 rounded-card border border-signal-edge bg-signal-wash p-6 sm:p-8">
+                    <div className="flex flex-col gap-1">
+                      {/*
+                        No `ProTag` here, though the first version had one — the column is already
+                        headed Pro and the tag rendered the same word underneath it. The tag's job is
+                        to mark a Pro capability wherever it appears *among free ones*; on the Pro
+                        column it is a label labelling itself.
+                      */}
+                      <span className="text-[13px] font-semibold uppercase tracking-[0.08em] text-signal">
+                        Pro
+                      </span>
+                      <span className="text-[34px] font-bold leading-none tracking-[-0.03em] text-ink">
+                        {consent.price ?? '€12'}
+                        <span className="text-[16px] font-semibold text-ink-soft">
+                          {' '}
+                          / {consent.pricePeriod ?? 'month'}
+                        </span>
+                      </span>
+                      <span className="text-meta text-ink-faint">
+                        VAT added at checkout · cancel any time
+                      </span>
+                    </div>
+                    <ul className="flex flex-col gap-2.5 text-[14px] leading-relaxed text-ink">
+                      {[
+                        `All ${DESIGNS.length} designs, including the ${PAID_DESIGNS.length} marked Pro`,
+                        'Your own typefaces and colours',
+                        'The larger model, at a company you name',
+                        'CVs saved between visits',
+                      ].map((line) => (
+                        <li key={line} className="flex gap-2.5">
+                          <Icon
+                            name="check"
+                            className="mt-0.5 h-4 w-4 shrink-0 text-signal"
+                          />
+                          {line}
+                        </li>
+                      ))}
+                    </ul>
+
+                    {/*
+                      The state of this button is the whole honesty of the section. Beta: everything
+                      here is already included and saying "subscribe" would sell somebody what they
+                      have. Not configured: paid plans are not open, said plainly, because a button
+                      that answers 503 is worse than no button.
+                    */}
+                    <div className="mt-auto pt-2">
+                      {consent.beta !== false ? (
+                        <p className="text-[13px] leading-relaxed text-ink-soft">
+                          <span className="font-medium text-ink">
+                            Included for everyone right now.
+                          </span>{' '}
+                          Nothing to pay while we are in beta, and we will say
+                          so before that changes.
+                        </p>
+                      ) : consent.checkoutOpen === true ? (
+                        <button
+                          type="button"
+                          onClick={() => void startCheckout()}
+                          className="inline-flex h-11 w-full items-center justify-center rounded-pill bg-signal px-6 text-[15px] font-semibold text-white transition-colors hover:bg-signal-deep active:translate-y-px"
+                        >
+                          Get Pro
+                        </button>
+                      ) : (
+                        <p className="text-[13px] leading-relaxed text-ink-soft">
+                          Paid plans are not open yet.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </Reveal>
               </div>
             </div>
           </section>
