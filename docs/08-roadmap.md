@@ -540,8 +540,10 @@ is the argument for the verification step and not against the plan.
    against production, the local model now _answers_ — `source: model`, three requirements, 52 to
    101 seconds — where ADR-030 recorded it timing out into the rule engine and matching 0 of 4. The
    failure that ADR was written about is gone; what is left is latency, which is a request shape.
-   `/api/target` now answers in 3ms with a job id. ⚠️ **The switch stays on until `/api/ingest` does
-   the same** (plan 04, block 3): ingest is the path a first-time visitor meets and it still blocks.
+   `/api/target` now answers in 3ms with a job id, and since 2026-08-19 `/api/ingest` answers in 7ms
+   with one too. **Blocks 1 to 4 are done and nothing in the interface blocks on a model any more**;
+   the waiting screen was watched narrating a real upload for over two minutes. What is left is
+   block 5, which is one variable in Coolify and is Edd's.
 
 ### Ingestion quality — all three are missing inputs, not missing code
 

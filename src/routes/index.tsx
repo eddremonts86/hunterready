@@ -1449,17 +1449,51 @@ function HunterReady() {
          * the second button on the gate is decoration.
          */
         body.append('processing', consent.choice ?? 'local')
-        const response = await fetch('/api/ingest', { method: 'POST', body })
-        const payload = (await response.json()) as Record<string, unknown>
+        /*
+          Detached, for the same measured reason as the advert read and with more riding on it.
 
+          An ingest on production's local model took 57s on 2026-08-19 (docs/plans/04). This is the
+          request a first-time visitor makes before they have seen anything work, over whatever
+          network their phone is on, and a `fetch` held open for a minute is one that a proxy, a
+          load balancer or a lock screen is entitled to cut. When one does, the CV was already read
+          and the person sees a failure anyway.
+
+          So the POST returns a job id in milliseconds and the CV is collected from `/api/result`.
+          The id is the one minted above for the narration, so the stages keep arriving exactly as
+          before and there is nothing new to correlate.
+        */
+        body.append('detach', 'true')
+        const response = await fetch('/api/ingest', { method: 'POST', body })
+
+        /*
+          The refusals that arrive immediately: rate limit, an oversized file, no file, a body that
+          did not survive the trip. They never reach the pipeline, so they never become a job.
+        */
         if (!response.ok) {
+          const failed = (await response.json().catch(() => ({}))) as Record<
+            string,
+            unknown
+          >
           setError(
-            typeof payload.message === 'string'
-              ? payload.message
+            typeof failed.message === 'string'
+              ? failed.message
               : 'Something went wrong reading that file. Please try again.',
           )
           return
         }
+
+        const collected = await collectResult(progressIdRef.current)
+        if (collected === undefined) {
+          setError(
+            'That took longer than we can wait for. Trying again usually works, and nothing was saved.',
+          )
+          return
+        }
+        if ('error' in collected) {
+          setError(collected.message)
+          return
+        }
+        const payload = collected.value as Record<string, unknown>
 
         // Validate what came back rather than trusting it: the renderer must never see a shape it
         // would reject, and a bad response should surface here, not as a blank preview.
