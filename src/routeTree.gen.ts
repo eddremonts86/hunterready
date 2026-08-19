@@ -20,6 +20,7 @@ import { Route as ApiProcessingRouteImport } from './routes/api/processing'
 import { Route as ApiProgressRouteImport } from './routes/api/progress'
 import { Route as ApiRenderRouteImport } from './routes/api/render'
 import { Route as ApiRenderLetterRouteImport } from './routes/api/render-letter'
+import { Route as ApiResultRouteImport } from './routes/api/result'
 import { Route as ApiResumeRouteImport } from './routes/api/resume'
 import { Route as ApiRewriteRouteImport } from './routes/api/rewrite'
 import { Route as ApiShareRouteImport } from './routes/api/share'
@@ -92,6 +93,11 @@ const ApiRenderRoute = ApiRenderRouteImport.update({
 const ApiRenderLetterRoute = ApiRenderLetterRouteImport.update({
   id: '/api/render-letter',
   path: '/api/render-letter',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiResultRoute = ApiResultRouteImport.update({
+  id: '/api/result',
+  path: '/api/result',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiResumeRoute = ApiResumeRouteImport.update({
@@ -197,6 +203,7 @@ export interface FileRoutesByFullPath {
   '/api/progress': typeof ApiProgressRoute
   '/api/render': typeof ApiRenderRoute
   '/api/render-letter': typeof ApiRenderLetterRoute
+  '/api/result': typeof ApiResultRoute
   '/api/resume': typeof ApiResumeRoute
   '/api/rewrite': typeof ApiRewriteRoute
   '/api/share': typeof ApiShareRoute
@@ -228,6 +235,7 @@ export interface FileRoutesByTo {
   '/api/progress': typeof ApiProgressRoute
   '/api/render': typeof ApiRenderRoute
   '/api/render-letter': typeof ApiRenderLetterRoute
+  '/api/result': typeof ApiResultRoute
   '/api/resume': typeof ApiResumeRoute
   '/api/rewrite': typeof ApiRewriteRoute
   '/api/share': typeof ApiShareRoute
@@ -260,6 +268,7 @@ export interface FileRoutesById {
   '/api/progress': typeof ApiProgressRoute
   '/api/render': typeof ApiRenderRoute
   '/api/render-letter': typeof ApiRenderLetterRoute
+  '/api/result': typeof ApiResultRoute
   '/api/resume': typeof ApiResumeRoute
   '/api/rewrite': typeof ApiRewriteRoute
   '/api/share': typeof ApiShareRoute
@@ -293,6 +302,7 @@ export interface FileRouteTypes {
     | '/api/progress'
     | '/api/render'
     | '/api/render-letter'
+    | '/api/result'
     | '/api/resume'
     | '/api/rewrite'
     | '/api/share'
@@ -324,6 +334,7 @@ export interface FileRouteTypes {
     | '/api/progress'
     | '/api/render'
     | '/api/render-letter'
+    | '/api/result'
     | '/api/resume'
     | '/api/rewrite'
     | '/api/share'
@@ -355,6 +366,7 @@ export interface FileRouteTypes {
     | '/api/progress'
     | '/api/render'
     | '/api/render-letter'
+    | '/api/result'
     | '/api/resume'
     | '/api/rewrite'
     | '/api/share'
@@ -387,6 +399,7 @@ export interface RootRouteChildren {
   ApiProgressRoute: typeof ApiProgressRoute
   ApiRenderRoute: typeof ApiRenderRoute
   ApiRenderLetterRoute: typeof ApiRenderLetterRoute
+  ApiResultRoute: typeof ApiResultRoute
   ApiResumeRoute: typeof ApiResumeRoute
   ApiRewriteRoute: typeof ApiRewriteRoute
   ApiShareRoute: typeof ApiShareRoute
@@ -484,6 +497,13 @@ declare module '@tanstack/react-router' {
       path: '/api/render-letter'
       fullPath: '/api/render-letter'
       preLoaderRoute: typeof ApiRenderLetterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/result': {
+      id: '/api/result'
+      path: '/api/result'
+      fullPath: '/api/result'
+      preLoaderRoute: typeof ApiResultRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/resume': {
@@ -627,6 +647,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiProgressRoute: ApiProgressRoute,
   ApiRenderRoute: ApiRenderRoute,
   ApiRenderLetterRoute: ApiRenderLetterRoute,
+  ApiResultRoute: ApiResultRoute,
   ApiResumeRoute: ApiResumeRoute,
   ApiRewriteRoute: ApiRewriteRoute,
   ApiShareRoute: ApiShareRoute,

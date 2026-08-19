@@ -28,6 +28,7 @@ import {
 import type { ConsentState } from '@/components/consent-gate'
 import { AccountMenu, ModelMenu } from '@/components/topbar-controls'
 import { Specimen } from '@/components/block-gallery'
+import { collectResult } from '@/lib/collect-result'
 import { ProTag } from '@/components/pro-tag'
 import { useFilePicker } from '@/components/dropzone'
 import { Library } from '@/components/library'
@@ -1788,6 +1789,18 @@ function HunterReady() {
       progressIdRef.current = crypto.randomUUID()
       setStages([])
       try {
+        /*
+          Detached, and the reason is a measurement rather than a preference.
+
+          Reading an advert on the local model took 101s and then 52s against production on
+          2026-08-18 (docs/plans/04). A `fetch` held open that long is a request every proxy,
+          load balancer and mobile network between a phone and this server is entitled to cut,
+          and when one does the person loses an answer that was already written.
+
+          So the POST returns a job id in milliseconds and the answer is collected from
+          `/api/result`. The id is the one already generated above for the narration, so there is
+          nothing new to correlate and the stages keep arriving exactly as before.
+        */
         const response = await fetch('/api/target', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -1796,18 +1809,32 @@ function HunterReady() {
             resume: loaded.resume,
             processing: consent.choice ?? 'local',
             progress: progressIdRef.current,
+            detach: true,
           }),
         })
-        const payload = (await response.json()) as Record<string, unknown>
+
         if (!response.ok) {
+          const failed = (await response.json()) as Record<string, unknown>
           setTargetError(
-            typeof payload.message === 'string'
-              ? payload.message
+            typeof failed.message === 'string'
+              ? failed.message
               : 'We could not read that advert just now.',
           )
           return
         }
-        setReading(payload as unknown as AdvertReadingResult)
+
+        const payload = await collectResult(progressIdRef.current)
+        if (payload === undefined) {
+          setTargetError(
+            'That took longer than we can wait for. Your CV is untouched, and trying again usually works.',
+          )
+          return
+        }
+        if ('error' in payload) {
+          setTargetError(payload.message)
+          return
+        }
+        setReading(payload.value as AdvertReadingResult)
       } catch {
         setTargetError('We could not reach the server. Your CV is untouched.')
       } finally {

@@ -8,8 +8,10 @@ so at the top of its plan; do not delete the plan, because the reasoning is the 
 Each follows `~/Projects/ai-os/specs/spec_template.md`: objective, context, acceptance criteria,
 non-goals, blocks of at most 30 minutes with a **Verify** line apiece, risks, end-to-end verification.
 
-**These are plans, not a queue.** Nothing here is started. `specs/current_spec.md` is where a plan
-goes when it becomes the active one, and only one is active at a time.
+**These were plans, not a queue.** That stopped being true on 2026-08-18, when most of them were
+worked through in one pass; each one's status header says where it stands and the table below
+summarises it. `specs/current_spec.md` is where a plan goes when it becomes the active one, and only
+one is active at a time.
 
 Two constraints every plan below inherits from CLAUDE.md, because they were both learned by shipping
 the mistake:
@@ -23,27 +25,30 @@ the mistake:
 
 | #                                       | Plan                                | Size    | Blocked on            |
 | --------------------------------------- | ----------------------------------- | ------- | --------------------- |
-| [01](01-pricing-and-payments.md)        | Pricing and payments                | weeks   | two numbers from Edd  |
+| [01](01-pricing-and-payments.md)        | Pricing and payments                | weeks   | one number from Edd   |
 | [02](02-beta-exit.md)                   | The exit from `HR_BETA_PAID_FREE`   | minutes | item 01               |
 | [03](03-name-and-domain.md)             | Name and domain                     | hours   | Edd                   |
-| [04](04-adr-030-exit.md)                | The exit from ADR-030               | days    | nothing               |
+| [04](04-adr-030-exit.md)                | The exit from ADR-030               | hours   | **nothing** (3 of 5)  |
 | [05](05-overlapping-columns-fixture.md) | Overlapping-column fixture          | hours   | a real file           |
 | [06](06-photographed-cv-fixture.md)     | Photographed CV fixture             | hours   | a real photo          |
 | [07](07-multipage-cv-fixture.md)        | Multi-page CV fixture               | hours   | a real file           |
-| [08](08-minimax-provenance.md)          | MiniMax returns no provenance       | days    | nothing               |
-| [09](09-spanish-cv-education.md)        | Does the Spanish CV have education? | minutes | one sentence from Edd |
-| [10](10-model-routing.md)               | Model routing: build or retire      | days    | a decision            |
-| [11](11-verifier-5-instrument.md)       | Verifier 5 has no instrument        | days    | a decision            |
+| [08](08-minimax-provenance.md)          | MiniMax returns no provenance       | hours   | **nothing** (2 of 4)  |
+| [09](09-spanish-cv-education.md)        | Does the Spanish CV have education? | —       | **closed, no bug**    |
+| [10](10-model-routing.md)               | Model routing: build or retire      | —       | **closed, ADR-031**   |
+| [11](11-verifier-5-instrument.md)       | Verifier 5 has no instrument        | minutes | a decision (4 of 4)   |
 | [12](12-deepseek-v4-pro.md)             | DeepSeek v4-pro empty tool input    | minutes | the vendor            |
-| [13](13-deepseek-in-production.md)      | DeepSeek configured in production   | minutes | Edd's credentials     |
-| [14](14-provider-display-name.md)       | `provider` returns a hostname       | minutes | nothing               |
-| [15](15-production-commit-stamp.md)     | Production reports `build: unknown` | minutes | nothing               |
-| [16](16-public-api.md)                  | An API a machine can use            | weeks   | nothing               |
+| [13](13-deepseek-in-production.md)      | DeepSeek configured in production   | minutes | Coolify, Edd (1 of 2) |
+| [14](14-provider-display-name.md)       | `provider` returns a hostname       | —       | **closed**            |
+| [15](15-production-commit-stamp.md)     | Production reports `build: unknown` | minutes | Coolify, Edd (1 of 2) |
+| [16](16-public-api.md)                  | An API a machine can use            | hours   | Edd (8 of 8)          |
 
-## If you only do three
+"(n of m)" is the block still open. Three are closed; of the thirteen left, **seven are waiting on a
+decision, a credential or a file, not on code.**
 
-**14, 15 and 13 are an afternoon between them** and two of the three are one line. They are the
-cheapest honest progress on this list, and 15 in particular buys back the "is production serving my
-change?" question that costs a round of guessing every time it is asked.
+## What is left that is actually code
 
-Then **04**, because it is the only item on the list actively spending money.
+**04 blocks 3 and 4**, and **08 blocks 2 and 4**. That is the whole list.
+
+Do 04 first, because it is the only item here actively spending money, and because block 3 is the one
+thing standing between the switch and being turned off — block 5 cannot happen until ingest stops
+blocking.

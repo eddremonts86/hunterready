@@ -1,6 +1,12 @@
 # 04 — The exit from ADR-030
 
-- **Date:** 2026-08-18 · **Status:** draft · **Blocks:** 5 · **Author:** Edd
+- **Date:** 2026-08-18 · **Status:** blocks 1-2 done · **Blocks:** 5 · **Author:** Edd
+
+> **2026-08-18: blocks 1 and 2 done.** Reading an advert no longer blocks: the POST answers in 3ms
+> with a job id and the reading is collected from `/api/result`. Block 3 (the same shape for ingest),
+> block 4 (checking the narration holds over a 90s wait) and block 5 (flipping the switch off) are
+> open. **Do not flip the switch until block 3 lands** — ingest is the path a first-time visitor
+> meets, and it is still synchronous.
 
 ## Objective
 
@@ -24,6 +30,35 @@ staring at a spinner, and `/api/progress` already exists for the narration.
 
 The concern ADR-030 itself recorded is closed: `/api/ingest`, `/api/target`, `/api/translate` and
 `/api/cover-letter` all rate-limit now.
+
+## Block 1, done 2026-08-18: measured again, and the failure has changed
+
+Against production, forcing the local model with `processing: local`:
+
+| operation                      | today                            | ADR-030, 2026-08-15                |
+| ------------------------------ | -------------------------------- | ---------------------------------- |
+| read an advert (`/api/target`) | 101s, then 52s · `source: model` | 102s and 171s · fell back to rules |
+| ingest a CV (`/api/ingest`)    | 57s · `method: local`            | not recorded                       |
+| requirements matched           | 3                                | **0 of 4**                         |
+
+**The failure ADR-030 was written about is gone.** Its case was not "slow": it was that the local
+model timed out into the rule engine, and the rule engine then matched nothing, so an anonymous
+visitor's targeting button produced a useless answer or never appeared. Today the model answers, and
+the answer is real — `source: model`, three requirements pulled out of the advert.
+
+What remains is latency: **52 to 101 seconds**, with a 2x spread between two identical requests a
+minute apart. That is unusable as a blocking request and entirely usable as a job with progress,
+which is what ADR-027 said and what blocks 2 to 4 build. **No model change is needed.** The remaining
+work is a request shape.
+
+That also narrows the risk that mattered most in this plan. "A ninety-second wait is still
+unacceptable even narrated" was listed as the thing block 1's numbers would decide. They decide it in
+favour of proceeding: a wait that produces a correct answer can be narrated, and one that produces
+nothing cannot.
+
+⚠️ Measured against production rather than a laptop, deliberately. CLAUDE.md records that the brew
+Ollama on Metal is roughly 4x the container's CPU, so a local number would have been optimistic by
+about that much and would have made this look easier than it is.
 
 ## Acceptance criteria
 
