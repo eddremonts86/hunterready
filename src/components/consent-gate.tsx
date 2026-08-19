@@ -108,6 +108,16 @@ export interface ConsentState {
    * blinks into existence a moment after every page load.
    */
   beta?: boolean
+  /**
+   * Whether this deployment can take money, and what it charges.
+   *
+   * From the server rather than a constant, because `hasCheckout()` reads `process.env` and a client
+   * bundle has none — the price would be right and the boolean quietly wrong. `undefined` until the
+   * answer arrives, and the surface reads that as "not open", which is today's truth.
+   */
+  checkoutOpen?: boolean
+  price?: string
+  pricePeriod?: string
   choice?: ConsentChoice
   decide: (choice: ConsentChoice) => void
   reset: () => void
@@ -144,6 +154,11 @@ export function useProcessingConsent(): ConsentState {
   )
   const [paidDesigns, setPaidDesigns] = useState<boolean | undefined>(undefined)
   const [beta, setBeta] = useState<boolean | undefined>(undefined)
+  const [billing, setBilling] = useState<{
+    checkoutOpen?: boolean
+    price?: string
+    pricePeriod?: string
+  }>({})
   /** The account's plan, for the topbar chip. `anonymous` when there is no session. */
   const [plan, setPlan] = useState<string | undefined>(undefined)
   const [choice, setChoice] = useState<ConsentChoice | undefined>(undefined)
@@ -159,6 +174,9 @@ export function useProcessingConsent(): ConsentState {
             encryptsAtRest?: boolean
             paidDesigns?: boolean
             beta?: boolean
+            checkoutOpen?: boolean
+            price?: string
+            pricePeriod?: string
             plan?: string
           }>,
       )
@@ -171,6 +189,13 @@ export function useProcessingConsent(): ConsentState {
         setPaidDesigns(data.paidDesigns === true)
         // `!== false`, not `=== true`: an older server that does not send the field is in beta.
         setBeta(data.beta !== false)
+        setBilling({
+          checkoutOpen: data.checkoutOpen === true,
+          ...(data.price === undefined ? {} : { price: data.price }),
+          ...(data.pricePeriod === undefined
+            ? {}
+            : { pricePeriod: data.pricePeriod }),
+        })
         setPlan(typeof data.plan === 'string' ? data.plan : undefined)
         const stored = read()
         /**
@@ -224,6 +249,7 @@ export function useProcessingConsent(): ConsentState {
     encryptsAtRest,
     paidDesigns,
     beta,
+    ...billing,
     plan,
     choice,
     decide,

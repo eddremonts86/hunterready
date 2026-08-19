@@ -76,25 +76,50 @@ difference between an unknown and a known.
 `automatic_tax` is enabled on the checkout session so the **rate charged** is correct from the first
 sale. The registration and the quarterly return are Edd's, and no configuration makes them ours.
 
-### Block 3: checkout (30 min)
+### Block 3, built 2026-08-19 · verify open (needs keys)
 
-- [ ] A hosted checkout, not a card form. **Never handle card details in this codebase.**
-- [ ] `POST /api/billing/checkout` creates a session for the signed-in user and returns its URL.
-- [ ] **Verify:** a test-mode payment reaches the provider's success page.
+- [x] A hosted checkout, not a card form. **No card field exists anywhere in this codebase.**
+- [x] `POST /api/billing/checkout` creates a session for the signed-in user and returns its URL.
+      `automatic_tax` on; `client_reference_id` carries our user id out and back.
+- [ ] **Verify:** a test-mode payment reaches Stripe's success page. **Needs `STRIPE_SECRET_KEY` and
+      `HR_STRIPE_PRICE_ID`, which is Edd's.** Nothing here proves Stripe accepts the payload.
 
-### Block 4: the webhook that sets the plan (30 min)
+### Block 4, done 2026-08-19
 
-- [ ] `POST /api/billing/webhook`, signature-verified, idempotent by event id.
-- [ ] On subscription active → `plan = 'pro'`. On cancelled, expired or disputed → `plan = 'free'`.
-- [ ] **Verify:** replay the same event twice and confirm one row change. Replay a cancellation and
-      confirm the entitlement drops on the next `/api/processing`.
+- [x] `POST /api/billing/webhook`, signature-verified, idempotent by event id.
+- [x] Active or trialing → `pro`. Cancelled, paused, `past_due` or disputed → `free`.
+- [x] **Verified:** nine tests against a real Postgres, with signatures computed in the test —
+      `t=<unix>,v1=hmac-sha256("t.body")` is arithmetic, so the signature built there is the one
+      Stripe builds. Replay changes nothing; a stale `active` redelivered after a cancellation does
+      not restore the plan; a forged secret and a body edited after signing are both `400` with the
+      plan untouched.
 
-### Block 5: the pricing surface (30 min)
+Broken deliberately: `constructEventAsync` → `JSON.parse` turns the two forgery tests red, and adding
+`past_due` to the paying set turns the third red.
 
-- [ ] A pricing section that names the price and what free keeps. The Pro tags already tell somebody
-      what they are buying, so this is the number and the list, not a sales page.
-- [ ] Cancel from the account panel.
-- [ ] **Verify:** in the browser, signed in, on a phone width.
+**`Stripe.Dispute` carries no customer.** The first version passed `payment_intent` through as one,
+which resolves to no account and files the event as `ignored` — a chargeback that leaves the plan
+intact and writes a row claiming otherwise.
+
+### Block 5, done 2026-08-19
+
+- [x] `#pricing` on the landing page: €12, and what free keeps.
+- [x] Cancel from the account panel — "Subscription and invoices", which opens Stripe's billing
+      portal. Not "Cancel": somebody wanting an invoice or a new card looks in the same place, and a
+      cancellation people are unsure worked is a cancellation they call their bank about.
+- [x] **Verified in the browser, in both states that exist today:**
+
+| build              | heading                                              | button                               |
+| ------------------ | ---------------------------------------------------- | ------------------------------------ |
+| beta               | "Free while we are in beta, and one plan afterwards" | none — "Included for everyone"       |
+| release, no Stripe | "One plan, and a free tier that is a real product"   | none — "Paid plans are not open yet" |
+
+The third state — released **and** configured, which shows "Get Pro" — needs keys.
+
+**The free column is first and the numbers are derived.** The first version read `4 designs` because
+it used `VOICES`, the curated strip further up the page, instead of the catalogue. On a pricing page
+that is not an off-by-one: it understates the free tier by two thirds. It now counts `FREE_DESIGNS`
+and the structures they span — 12 across 3 — so the sentence cannot go stale when a design is added.
 
 ### Block 6: flip beta off (see plan 02)
 
