@@ -2,6 +2,9 @@
 
 - **Date:** 2026-08-18 · **Status:** blocks 1-7 done · **Blocks:** 8 · **Author:** Edd
 
+> **2026-08-19: the contract became browsable.** `GET /v1/openapi.json` is generated from the Zod
+> schemas the runtime validates against, and `/docs` renders it. Block 8 is still Edd's.
+
 > **2026-08-18: blocks 1 to 7 done.** Block 8 is Edd's — pointing his other application at it. The
 > walkthrough in `docs/api/README.md` was followed end to end against a booted build, and doing so
 > found a contract bug that had been live in production: the model and the rule engine emitted two

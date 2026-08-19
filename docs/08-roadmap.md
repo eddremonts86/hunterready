@@ -637,6 +637,10 @@ is the argument for the verification step and not against the plan.
     `/v1` routes behind one door, per-key quotas, a contract in [docs/api/](api/README.md), and
     ADR-032 for the consent question — the caller gets the local model unless it asserts the person's
     consent on the request. Block 8 is Edd's: pointing his other application at it.
+    **2026-08-19: the contract is browsable.** `/v1/openapi.json` is generated from the Zod schemas
+    the runtime validates against — so a field list cannot drift from what the API accepts — and
+    `/docs` renders it. A test reads `src/routes/v1/` off disk and fails in both directions: a route
+    nobody described, and a description of a route nobody can reach.
 
 ### Not open, despite appearances
 

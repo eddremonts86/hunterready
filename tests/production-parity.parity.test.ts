@@ -293,6 +293,91 @@ describe('the built server can render a PDF', () => {
     expect(body.paidDesigns).toBe(true)
   })
 
+  /**
+   * The contract, and the page that draws it, against the build that ships.
+   *
+   * Both belong here rather than in a unit test, and for different reasons. The document is built by
+   * calling `z.toJSONSchema` on the real `Resume` — which **500'd the first time it was requested**,
+   * with "Transforms cannot be represented in JSON Schema", while `tsc` and every unit test stayed
+   * green. And the page mounts a Vue application inside React through a bundler that has to agree
+   * with both. Neither failure has a shape a mock can produce.
+   */
+  describe('the API describes itself', () => {
+    it('serves an OpenAPI document generated from the live schemas', async () => {
+      const res = await fetch(`${baseUrl}/v1/openapi.json`)
+      expect(
+        res.status,
+        `expected 200, got ${res.status}. server log:\n${serverLog}`,
+      ).toBe(200)
+      expect(res.headers.get('content-type')).toContain('application/json')
+
+      const doc = (await res.json()) as {
+        openapi?: string
+        servers?: Array<{ url: string }>
+        paths?: Record<string, unknown>
+        components?: {
+          schemas?: Record<string, { properties?: Record<string, unknown> }>
+        }
+      }
+
+      expect(doc.openapi).toMatch(/^3\.0\./)
+      expect(Object.keys(doc.paths ?? {})).toContain('/v1/cv')
+      /*
+        The base URL is whatever the reader reached, never a constant. A document that hardcodes
+        production points anybody evaluating a preview build at the live API.
+      */
+      expect(doc.servers?.[0]?.url).toBe(baseUrl)
+      // Proof it came from `src/schema/resume.ts` and not from a fixture someone pasted in.
+      expect(
+        Object.keys(doc.components?.schemas?.Resume?.properties ?? {}),
+      ).toContain('basics')
+    })
+
+    it('needs no key, because a contract you cannot read is one you cannot evaluate', async () => {
+      // The only /v1 route that does not call `enterV1`, and the only one that should not.
+      const res = await fetch(`${baseUrl}/v1/openapi.json`)
+      expect(res.status).not.toBe(401)
+    })
+
+    it('serves the reference page', async () => {
+      const res = await fetch(`${baseUrl}/docs`)
+      expect(res.status).toBe(200)
+      expect(await res.text()).toContain('HunterReady')
+    })
+
+    it('forbids the reference page from connecting anywhere but here', async () => {
+      /*
+        The one that would have been a privacy breach rather than a bug.
+
+        Scalar's quickstart sets `proxyUrl: 'https://proxy.scalar.com'` to dodge CORS. On a page whose
+        "Test Request" button carries a **CV and an API key**, that routes somebody's employment
+        history through a company nobody named to them.
+
+        ⚠️ **The first version of this test grepped the built assets for that host and went red** —
+        the string is compiled into three Scalar chunks whether or not anything calls it. A grep
+        cannot tell a dead constant from a live default. Loosening it until it passed would have
+        replaced a real question with a green tick, so the page carries `connect-src 'self'` instead
+        and this asserts the browser is the thing enforcing it.
+
+        Config can be renamed, defaults can change, a line can be deleted in a refactor. A CSP holds
+        through all three.
+      */
+      const html = await (await fetch(`${baseUrl}/docs`)).text()
+
+      const csp = /<meta[^>]*http-equiv="Content-Security-Policy"[^>]*>/i.exec(
+        html,
+      )?.[0]
+      expect(csp, `no CSP on /docs. server log:\n${serverLog}`).toBeDefined()
+      /*
+        Entity-decoded first: React serialises the apostrophes as `&#x27;`, which the browser's HTML
+        parser unescapes before the CSP is read. Matching the raw markup would have meant either a
+        regex nobody can read, or a test quietly asserting the wrong string.
+      */
+      const directive = (csp ?? '').replace(/&#x27;/g, "'")
+      expect(directive).toMatch(/connect-src\s+'self'/)
+    })
+  })
+
   it('logs no unhandled server errors', () => {
     expect(serverLog).not.toMatch(/ENOENT|unhandled|HTTPError/i)
   })

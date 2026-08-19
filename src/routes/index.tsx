@@ -2896,6 +2896,19 @@ function HunterReady({ consent }: { consent: ConsentState }) {
               >
                 What we do with your data
               </a>
+              {/*
+                Under "Straight answers" rather than in a developer section of its own, because that
+                is what it is: the whole contract, with the request and response shapes generated
+                from the same schemas the server validates against. One link is the right amount of
+                room for it — the audience is every sector, and almost nobody reading this page has
+                an API key.
+              */}
+              <a
+                href="/docs"
+                className="text-[13px] text-ink-soft transition-colors hover:text-signal"
+              >
+                The API, if you are building on it
+              </a>
               <a
                 href="mailto:hello@hunterready.dev"
                 className="text-[13px] text-ink-soft transition-colors hover:text-signal"

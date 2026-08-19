@@ -11,7 +11,28 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const V1 = join(process.cwd(), 'src/routes/v1')
+
+/**
+ * The one route under `/v1` that is deliberately not an endpoint.
+ *
+ * `openapi[.]json` serves the contract itself, and a contract you need a key to read is a contract
+ * you cannot evaluate before asking for one. It calls no `enterV1`: no authentication, no bucket, no
+ * request id, and nothing in it that is not already in `docs/api/`.
+ *
+ * **Listed by name rather than by a pattern.** This test caught the route being added — which is it
+ * working — and the honest response to a guard that fires is an exception with a reason next to it,
+ * not a looser rule. A second public route has to be argued for here, in this comment, by whoever
+ * adds it.
+ */
+const PUBLIC_BY_DESIGN = new Set(['openapi[.]json.tsx'])
+
 const files = readdirSync(V1)
+  .filter((f) => f.endsWith('.tsx'))
+  .filter((f) => !PUBLIC_BY_DESIGN.has(f))
+  .map((f) => ({ name: f, text: readFileSync(join(V1, f), 'utf8') }))
+
+/** Everything, including the exception — for the rules that hold whether or not a key is needed. */
+const allFiles = readdirSync(V1)
   .filter((f) => f.endsWith('.tsx'))
   .map((f) => ({ name: f, text: readFileSync(join(V1, f), 'utf8') }))
 
@@ -38,7 +59,7 @@ describe('every /v1 route enters through the same door', () => {
 
   it('and enterV1 is the only place the bucket is chosen', () => {
     // One decision about what a rate-limit key is, not eight that can drift apart.
-    for (const { name, text } of files) {
+    for (const { name, text } of allFiles) {
       expect(text, `${name} must not bucket on its own`).not.toContain(
         'checkRateLimit(',
       )
@@ -67,11 +88,24 @@ describe('/v1 reuses the rules rather than restating them', () => {
 
   it('never returns zod issues, which quote the value they rejected', () => {
     // docs/07: a rejected value is CV content, and an issue list puts it in a response body.
-    for (const { name, text } of files) {
+    for (const { name, text } of allFiles) {
       expect(text, `${name} must not return parsed.error`).not.toContain(
         'parsed.error',
       )
     }
+  })
+})
+
+describe('the contract is readable without a key', () => {
+  it('serves the document without entering the door, and nothing else does', () => {
+    const doc = readFileSync(join(V1, 'openapi[.]json.tsx'), 'utf8')
+    /*
+      The call, not the word. The route's own comment says "`enterV1` is deliberately not called",
+      and a bare substring search read that sentence as the thing it was denying.
+    */
+    expect(doc).not.toContain('await enterV1(')
+    // And it must stay the only one. A second exception is a decision, not a diff.
+    expect([...PUBLIC_BY_DESIGN]).toEqual(['openapi[.]json.tsx'])
   })
 })
 
