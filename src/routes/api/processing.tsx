@@ -24,14 +24,31 @@ import { designsUnlocked, entitlementFor } from '@/lib/entitlements'
  * An unknown host falls back to its bare hostname rather than to a friendly lie. "api.example.com"
  * is a worse answer than "MiniMax" and a much better one than "our AI partner".
  */
-function displayName(label: string): string {
+/**
+ * The hosts this deployment can be pointed at, and the company each one belongs to.
+ *
+ * A table rather than a chain of `endsWith`, because the chain had a bug the chain could not show:
+ * `endsWith('minimax.io')` is also true of `evilminimax.io`. Not an attack surface — the label comes
+ * from our own environment, not from a request — but a typo in a base URL would have been reported
+ * to somebody as a company name while deciding whether to send that company their CV. `match` below
+ * accepts the domain itself or a subdomain of it, and nothing else.
+ */
+const VENDORS: ReadonlyArray<readonly [string, ReadonlyArray<string>]> = [
+  ['Anthropic', ['anthropic.com', 'anthropic']],
+  // Three MiniMax hosts. The `.chat` one was found in production, not in a doc: see the test.
+  ['MiniMax', ['minimax.io', 'minimaxi.com', 'minimaxi.chat']],
+  ['DeepSeek', ['deepseek.com']],
+  ['OpenAI', ['openai.com']],
+]
+
+const match = (host: string, domain: string): boolean =>
+  host === domain || host.endsWith(`.${domain}`)
+
+export function displayName(label: string): string {
   const host = label.replace(/^https?:\/\//, '').replace(/[/:].*$/, '')
-  if (host === 'anthropic' || host.endsWith('anthropic.com')) return 'Anthropic'
-  if (host.endsWith('minimax.io') || host.endsWith('minimaxi.com')) {
-    return 'MiniMax'
+  for (const [name, domains] of VENDORS) {
+    if (domains.some((domain) => match(host, domain))) return name
   }
-  if (host.endsWith('deepseek.com')) return 'DeepSeek'
-  if (host.endsWith('openai.com')) return 'OpenAI'
   return host
 }
 

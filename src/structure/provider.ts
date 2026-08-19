@@ -26,6 +26,8 @@
  */
 import Anthropic from '@anthropic-ai/sdk'
 
+import { event } from '@/lib/log'
+
 /** MiniMax's Anthropic-compatible endpoint, used when only the OpenAI-style vars are present. */
 const MINIMAX_ANTHROPIC_BASE = 'https://api.minimax.io/anthropic'
 
@@ -203,11 +205,57 @@ export interface ProviderChoice {
  * deployment that has decided is not asking.
  */
 export function availableProviders(): Array<ProviderChoice> {
+  announceProviders()
   const pinned = value('HR_PROVIDER')?.toLowerCase()
   const ids = pinned === undefined ? Object.keys(BY_ID) : [pinned]
   return ids
     .filter((id) => BY_ID[id]?.() !== undefined)
     .map((id) => ({ id, name: NAMES[id] ?? id }))
+}
+
+/**
+ * Say once, at boot, which providers resolved and which did not.
+ *
+ * **Because the absence was silent, and that cost a release.** DeepSeek shipped on 2026-08-18 and did
+ * not appear in production: `deepseek()` returns `undefined` without `DEEPSEEK_API_KEY`, so the app
+ * started clean, health was green, and a model somebody had deliberately added was simply not in the
+ * list. Nothing was wrong enough to log. It was found by reading `/api/processing` after the deploy.
+ *
+ * Names only, from the fixed `BY_ID` keys. **No key, no fragment of one, and not even a length** —
+ * the length of a secret is information about the secret, and `log.ts`'s scrubber cannot know that a
+ * number it is handed came from one.
+ *
+ * Skipping is not a failure. Running with one provider is a valid deployment, and the local model is
+ * always there. This is a line to read, not an alarm.
+ */
+let announced = false
+
+export function announceProviders(): void {
+  /*
+    Once per process, following `db/crypto.ts`, which says the same thing about encryption for the
+    same reason. There is no boot hook in this app — no nitro plugin, no server entry of our own — so
+    "at startup" means "at first use", and the first use is the first request to `/api/processing`.
+  */
+  if (announced) return
+  announced = true
+
+  const pinned = value('HR_PROVIDER')?.toLowerCase()
+  const ids = Object.keys(BY_ID)
+  const configured = ids.filter((id) => BY_ID[id]?.() !== undefined)
+  const skipped = ids.filter((id) => !configured.includes(id))
+
+  /*
+    The field names are prefixed because `log.ts` allowlists names, not values: a bare `skipped` is
+    a key somebody later hangs a filename on. Adding to that allowlist is meant to be deliberate, and
+    the first version of this line was redacted to `[redacted]` by the scrubber, which is the scrubber
+    working rather than being in the way.
+  */
+  event('providers.resolved', {
+    providersConfigured: configured.join(',') || 'none',
+    providersSkipped: skipped.join(',') || 'none',
+    // A pin means only one of them can ever be chosen, which is worth seeing next to the list.
+    providerPinned: pinned ?? 'none',
+  })
 }
 
 export function providerById(id: string): Provider | undefined {

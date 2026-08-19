@@ -10,6 +10,10 @@
  * What is left here is the one thing the rest of the code needs: a user id, or nothing.
  */
 import { auth } from './auth'
+import { hashKey, keyFromHeader } from './api-key'
+import { db } from '@/db/client'
+import { apiKeys } from '@/db/schema'
+import { and, eq, isNull } from 'drizzle-orm'
 
 /**
  * The signed-in user's id, or undefined.
@@ -21,12 +25,53 @@ import { auth } from './auth'
 export async function currentUserId(
   request: Request,
 ): Promise<string | undefined> {
+  /*
+    A key first, because a machine cannot present a cookie and a browser will not present a key, so
+    the two never compete. **This is deliberately the same function the whole app already calls.**
+
+    `entitlementFor`, `mayUseThirdParty`, the render gate and every route read identity through here.
+    Giving API callers a second path would mean two answers to "who is this", and the moment those
+    two disagree is the moment a paywall or a privacy rule holds in one and not the other. One
+    function, two ways to identify (ADR-032).
+  */
+  const viaKey = await userIdForApiKey(request)
+  if (viaKey !== undefined) return viaKey
+
   if (auth === undefined) return undefined
   try {
     const session = await auth.api.getSession({ headers: request.headers })
     return session?.user.id
   } catch {
     // A database blip must not read as "signed in". Failing closed is the only safe direction here.
+    return undefined
+  }
+}
+
+/**
+ * The owner of the key on this request, if there is a live one.
+ *
+ * Revocation is checked here rather than cached, so a revoked key stops working on the very next
+ * call. That costs one indexed lookup per request and buys the only revocation anybody would trust:
+ * a cached one means a leaked key keeps working for however long the cache lives, which is exactly
+ * the window an incident is trying to close.
+ */
+export async function userIdForApiKey(
+  request: Request,
+): Promise<string | undefined> {
+  const secret = keyFromHeader(request.headers.get('authorization'))
+  if (secret === undefined || db === undefined) return undefined
+
+  try {
+    const [row] = await db
+      .select({ userId: apiKeys.userId })
+      .from(apiKeys)
+      .where(
+        and(eq(apiKeys.secretHash, hashKey(secret)), isNull(apiKeys.revokedAt)),
+      )
+      .limit(1)
+    return row?.userId
+  } catch {
+    // Same rule as the session path: a failed lookup is not an identity.
     return undefined
   }
 }

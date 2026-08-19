@@ -106,18 +106,32 @@ Displayed as a checklist with the specific fixes, and the score as a byproduct.
 Nobody improves a CV from "68/100"; people improve it from
 "4 of 11 bullets have no outcome — here they are".
 
-## Model routing (cost)
+## Which model reads a CV
 
-| Task                      | Model     | Why                                         |
-| ------------------------- | --------- | ------------------------------------------- |
-| Extraction / structuring  | Haiku 4.5 | mechanical, schema-constrained, high volume |
-| Bullet rewriting          | Opus 5    | quality is the product here                 |
-| JD requirement extraction | Sonnet 5  | structured, moderate nuance                 |
-| Scoring                   | none      | deterministic code                          |
+**The person chooses, and there is no routing table.** There used to be one here, mapping each task
+to a different Anthropic model. It was retired on 2026-08-18 without ever being built; ADR-031 records
+why, and the short version is that it described a product with a different provider lineup.
+
+What actually decides:
+
+- **The person picks a named company** at the consent gate — MiniMax, DeepSeek, or our own server —
+  because ADR-023 makes the third-party model a paid capability and docs/07 requires consent to a
+  named provider rather than to "an AI partner". A routing table that overrode that choice would be
+  the product deciding where somebody's CV goes _after_ asking them.
+- **Each provider exposes one model**, set by `MINIMAX_MODEL`, `DEEPSEEK_MODEL` or `OLLAMA_MODEL`.
+  All the call sites take `provider.model`. Changing which model a deployment uses is an environment
+  variable, not code.
+- **Scoring uses none of them.** `src/optimize/score.ts` has no client and no message: it is
+  deterministic code, which is the one thing the old table got right about this product.
 
 Rough per-CV budget: extraction ~10–15k input / ~3k output; a full rewrite pass on
 a 2-page CV ~25 bullet calls. Cache aggressively on `hash(bullet + promptVersion)` —
 users re-run this constantly while iterating.
+
+**The idea worth keeping from the old table** was never about vendors: cheap work on our own hardware,
+expensive work on a third party. That is live, and it lives in
+[docs/plans/04-adr-030-exit.md](plans/04-adr-030-exit.md), because the thing standing in its way is
+the blocking model call, not the absence of a lookup.
 
 ## Privacy
 

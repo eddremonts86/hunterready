@@ -756,6 +756,118 @@ line.
 
 ---
 
+## ADR-032 — An API caller gets the local model unless it asserts the person's consent
+
+**2026-08-18 · Accepted**
+
+Edd asked for an API another application can call. Fifteen routes already cover the whole product and
+every one of them authenticates by session cookie, so the work is machine authentication, a versioned
+contract and quotas. Before any of that, one question has to be answered on purpose, because
+answering it by accident inside a handler is how a privacy promise becomes untrue quietly.
+
+### The question
+
+ADR-023 makes sending a CV to a third party conditional on **two** things: entitlement, and the
+person's own consent to a **named company**. docs/07 requires that the consent name the company, not
+"an AI partner". The consent gate exists because a human is sitting there to answer it.
+
+**A machine is not that human and cannot consent on their behalf.** So: whose CV is this, and who
+agreed to send it to MiniMax?
+
+### The decision
+
+**Local by default. Third-party only when the caller asserts, per request, that the person consented
+to a named company — and the caller records that consent on its own side.**
+
+Concretely: with no assertion, the CV is read on our own hardware and does not leave. An API caller
+that has its own consent flow may say so on the request, naming the company, exactly as the browser
+client does. The assertion is a claim by a partner, and it is entered into deliberately rather than
+inferred.
+
+### The two that were refused
+
+**Local only, always.** No transfer, no question, no clause. It is the safest answer and today it
+would make the API nearly useless: ADR-030 is on precisely because the local model takes 102 to 171
+seconds to read a job advert on the production box. An API that only offers that is an API nobody
+integrates. Revisit if plan 04 lands and the local path becomes fast.
+
+**The end user consents through us.** The API opens a session the person completes in a browser. It
+is the most correct answer in privacy terms and it stops being a machine-to-machine API: Edd's other
+application would have to send its users here, which is the opposite of the point.
+
+### What this obliges
+
+- **The default is the safe one.** A caller that forgets the header, or gets it wrong, gets the local
+  model. Nothing leaks through omission.
+- **The assertion names a company**, the same vocabulary the consent gate uses, and it is per request
+  rather than per key. A key is not a standing permission to send anybody's CV anywhere.
+- **It is a contract term, not a checkbox.** For Edd's own application that is an internal promise.
+  Before a third party is issued a key, it becomes a written clause: they hold the consent record and
+  they can produce it. That is how a data processor relationship normally works and it should not be
+  pretended otherwise.
+- **Entitlement is unchanged.** ADR-023's `&&` still holds — the assertion is the _consent_ half. A
+  key with no plan gets what an anonymous browser visitor gets and no more, so an integration cannot
+  spend third-party tokens nobody is paying for.
+
+### Why this is honest rather than convenient
+
+It moves an obligation onto a partner, and that is worth saying plainly rather than burying. What
+makes it acceptable is the default: a partner that does nothing gets the private path, and the only
+way to reach the other one is to state, in writing on each request, that somebody agreed. The failure
+mode of forgetting is privacy, not exposure.
+
+## ADR-031 — Model routing is retired; the person chooses the company
+
+**2026-08-18 · Accepted**
+
+docs/06 carried a table mapping each task to a model: Haiku 4.5 for extraction, Opus 5 for bullet
+rewriting, Sonnet 5 for reading a job advert, none for scoring. It was never implemented. It is now
+removed rather than implemented.
+
+### Why not build it
+
+Measured against the code on 2026-08-18, not against the document:
+
+| Task                      | Table says | Today                    | Routing would change |
+| ------------------------- | ---------- | ------------------------ | -------------------- |
+| Extraction / structuring  | Haiku 4.5  | `provider.model`         | nothing available    |
+| Bullet rewriting          | Opus 5     | `provider.model`         | nothing available    |
+| JD requirement extraction | Sonnet 5   | `provider.model`         | nothing available    |
+| Scoring                   | none       | `score.ts`, 0 model refs | already true         |
+
+**Three of four rows name Anthropic models this deployment does not use.** Production runs MiniMax;
+DeepSeek and a local Ollama are the alternatives; the Anthropic provider exists in `provider.ts` and
+serves nobody. Those rows are not unbuilt, they are unbuildable as written.
+
+**The fourth row is already true**, and it got there without routing. `src/optimize/score.ts` has no
+client and no message.
+
+**There is one model per provider, not per task.** `provider.model` is a single string from
+`MINIMAX_MODEL` / `DEEPSEEK_MODEL` / `OLLAMA_MODEL`, and every call site takes it. Per-task selection
+would first require each provider to expose several models — configuration that does not exist and
+that nobody has asked for.
+
+### What replaced it, deliberately
+
+ADR-023. The person picks a named company at the consent gate, because docs/07 requires consent to a
+named provider. Routing could only ever sit _underneath_ that choice: overriding it would mean the
+product deciding where somebody's CV goes after asking them where it should go.
+
+### What was kept
+
+The useful idea in that table was never about vendors — it was **cheap work here, expensive work
+away**. That is alive as the exit from ADR-030 and it is filed in
+`docs/plans/04-adr-030-exit.md`. What blocks it is the blocking model call, not the absence of a
+lookup table.
+
+### The reason this is an ADR and not a deletion
+
+Four features have shipped in this project as schema plus prose with no code and no path from the
+interface — `variant-diff`, v0.4's targeting, v0.5's persistence, `basics.photoUrl` — and CLAUDE.md
+opens with that list. A described-but-absent routing table was the same failure one step earlier. It
+is removed so that the documentation stops describing a product that does not exist, and recorded
+here so the removal is not mistaken later for an oversight.
+
 ## ADR-030 — The third-party model is open to everyone, until the box can serve the local one
 
 **2026-08-15 · Accepted · temporary, with a stated exit**

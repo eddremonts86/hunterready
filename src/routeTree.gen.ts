@@ -20,6 +20,7 @@ import { Route as ApiProcessingRouteImport } from './routes/api/processing'
 import { Route as ApiProgressRouteImport } from './routes/api/progress'
 import { Route as ApiRenderRouteImport } from './routes/api/render'
 import { Route as ApiRenderLetterRouteImport } from './routes/api/render-letter'
+import { Route as ApiResultRouteImport } from './routes/api/result'
 import { Route as ApiResumeRouteImport } from './routes/api/resume'
 import { Route as ApiRewriteRouteImport } from './routes/api/rewrite'
 import { Route as ApiShareRouteImport } from './routes/api/share'
@@ -27,6 +28,14 @@ import { Route as ApiSharedRouteImport } from './routes/api/shared'
 import { Route as ApiTargetRouteImport } from './routes/api/target'
 import { Route as ApiTranslateRouteImport } from './routes/api/translate'
 import { Route as STokenRouteImport } from './routes/s.$token'
+import { Route as V1CapabilitiesRouteImport } from './routes/v1/capabilities'
+import { Route as V1CoverLetterRouteImport } from './routes/v1/cover-letter'
+import { Route as V1CvRouteImport } from './routes/v1/cv'
+import { Route as V1RenderRouteImport } from './routes/v1/render'
+import { Route as V1RenderLetterRouteImport } from './routes/v1/render-letter'
+import { Route as V1RewriteRouteImport } from './routes/v1/rewrite'
+import { Route as V1TargetRouteImport } from './routes/v1/target'
+import { Route as V1TranslateRouteImport } from './routes/v1/translate'
 import { Route as ApiAccountDeleteRouteImport } from './routes/api/account/delete'
 import { Route as ApiAccountExportRouteImport } from './routes/api/account/export'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -86,6 +95,11 @@ const ApiRenderLetterRoute = ApiRenderLetterRouteImport.update({
   path: '/api/render-letter',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiResultRoute = ApiResultRouteImport.update({
+  id: '/api/result',
+  path: '/api/result',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiResumeRoute = ApiResumeRouteImport.update({
   id: '/api/resume',
   path: '/api/resume',
@@ -121,6 +135,46 @@ const STokenRoute = STokenRouteImport.update({
   path: '/s/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const V1CapabilitiesRoute = V1CapabilitiesRouteImport.update({
+  id: '/v1/capabilities',
+  path: '/v1/capabilities',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const V1CoverLetterRoute = V1CoverLetterRouteImport.update({
+  id: '/v1/cover-letter',
+  path: '/v1/cover-letter',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const V1CvRoute = V1CvRouteImport.update({
+  id: '/v1/cv',
+  path: '/v1/cv',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const V1RenderRoute = V1RenderRouteImport.update({
+  id: '/v1/render',
+  path: '/v1/render',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const V1RenderLetterRoute = V1RenderLetterRouteImport.update({
+  id: '/v1/render-letter',
+  path: '/v1/render-letter',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const V1RewriteRoute = V1RewriteRouteImport.update({
+  id: '/v1/rewrite',
+  path: '/v1/rewrite',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const V1TargetRoute = V1TargetRouteImport.update({
+  id: '/v1/target',
+  path: '/v1/target',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const V1TranslateRoute = V1TranslateRouteImport.update({
+  id: '/v1/translate',
+  path: '/v1/translate',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAccountDeleteRoute = ApiAccountDeleteRouteImport.update({
   id: '/api/account/delete',
   path: '/api/account/delete',
@@ -149,6 +203,7 @@ export interface FileRoutesByFullPath {
   '/api/progress': typeof ApiProgressRoute
   '/api/render': typeof ApiRenderRoute
   '/api/render-letter': typeof ApiRenderLetterRoute
+  '/api/result': typeof ApiResultRoute
   '/api/resume': typeof ApiResumeRoute
   '/api/rewrite': typeof ApiRewriteRoute
   '/api/share': typeof ApiShareRoute
@@ -156,6 +211,14 @@ export interface FileRoutesByFullPath {
   '/api/target': typeof ApiTargetRoute
   '/api/translate': typeof ApiTranslateRoute
   '/s/$token': typeof STokenRoute
+  '/v1/capabilities': typeof V1CapabilitiesRoute
+  '/v1/cover-letter': typeof V1CoverLetterRoute
+  '/v1/cv': typeof V1CvRoute
+  '/v1/render': typeof V1RenderRoute
+  '/v1/render-letter': typeof V1RenderLetterRoute
+  '/v1/rewrite': typeof V1RewriteRoute
+  '/v1/target': typeof V1TargetRoute
+  '/v1/translate': typeof V1TranslateRoute
   '/api/account/delete': typeof ApiAccountDeleteRoute
   '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -172,6 +235,7 @@ export interface FileRoutesByTo {
   '/api/progress': typeof ApiProgressRoute
   '/api/render': typeof ApiRenderRoute
   '/api/render-letter': typeof ApiRenderLetterRoute
+  '/api/result': typeof ApiResultRoute
   '/api/resume': typeof ApiResumeRoute
   '/api/rewrite': typeof ApiRewriteRoute
   '/api/share': typeof ApiShareRoute
@@ -179,6 +243,14 @@ export interface FileRoutesByTo {
   '/api/target': typeof ApiTargetRoute
   '/api/translate': typeof ApiTranslateRoute
   '/s/$token': typeof STokenRoute
+  '/v1/capabilities': typeof V1CapabilitiesRoute
+  '/v1/cover-letter': typeof V1CoverLetterRoute
+  '/v1/cv': typeof V1CvRoute
+  '/v1/render': typeof V1RenderRoute
+  '/v1/render-letter': typeof V1RenderLetterRoute
+  '/v1/rewrite': typeof V1RewriteRoute
+  '/v1/target': typeof V1TargetRoute
+  '/v1/translate': typeof V1TranslateRoute
   '/api/account/delete': typeof ApiAccountDeleteRoute
   '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -196,6 +268,7 @@ export interface FileRoutesById {
   '/api/progress': typeof ApiProgressRoute
   '/api/render': typeof ApiRenderRoute
   '/api/render-letter': typeof ApiRenderLetterRoute
+  '/api/result': typeof ApiResultRoute
   '/api/resume': typeof ApiResumeRoute
   '/api/rewrite': typeof ApiRewriteRoute
   '/api/share': typeof ApiShareRoute
@@ -203,6 +276,14 @@ export interface FileRoutesById {
   '/api/target': typeof ApiTargetRoute
   '/api/translate': typeof ApiTranslateRoute
   '/s/$token': typeof STokenRoute
+  '/v1/capabilities': typeof V1CapabilitiesRoute
+  '/v1/cover-letter': typeof V1CoverLetterRoute
+  '/v1/cv': typeof V1CvRoute
+  '/v1/render': typeof V1RenderRoute
+  '/v1/render-letter': typeof V1RenderLetterRoute
+  '/v1/rewrite': typeof V1RewriteRoute
+  '/v1/target': typeof V1TargetRoute
+  '/v1/translate': typeof V1TranslateRoute
   '/api/account/delete': typeof ApiAccountDeleteRoute
   '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -221,6 +302,7 @@ export interface FileRouteTypes {
     | '/api/progress'
     | '/api/render'
     | '/api/render-letter'
+    | '/api/result'
     | '/api/resume'
     | '/api/rewrite'
     | '/api/share'
@@ -228,6 +310,14 @@ export interface FileRouteTypes {
     | '/api/target'
     | '/api/translate'
     | '/s/$token'
+    | '/v1/capabilities'
+    | '/v1/cover-letter'
+    | '/v1/cv'
+    | '/v1/render'
+    | '/v1/render-letter'
+    | '/v1/rewrite'
+    | '/v1/target'
+    | '/v1/translate'
     | '/api/account/delete'
     | '/api/account/export'
     | '/api/auth/$'
@@ -244,6 +334,7 @@ export interface FileRouteTypes {
     | '/api/progress'
     | '/api/render'
     | '/api/render-letter'
+    | '/api/result'
     | '/api/resume'
     | '/api/rewrite'
     | '/api/share'
@@ -251,6 +342,14 @@ export interface FileRouteTypes {
     | '/api/target'
     | '/api/translate'
     | '/s/$token'
+    | '/v1/capabilities'
+    | '/v1/cover-letter'
+    | '/v1/cv'
+    | '/v1/render'
+    | '/v1/render-letter'
+    | '/v1/rewrite'
+    | '/v1/target'
+    | '/v1/translate'
     | '/api/account/delete'
     | '/api/account/export'
     | '/api/auth/$'
@@ -267,6 +366,7 @@ export interface FileRouteTypes {
     | '/api/progress'
     | '/api/render'
     | '/api/render-letter'
+    | '/api/result'
     | '/api/resume'
     | '/api/rewrite'
     | '/api/share'
@@ -274,6 +374,14 @@ export interface FileRouteTypes {
     | '/api/target'
     | '/api/translate'
     | '/s/$token'
+    | '/v1/capabilities'
+    | '/v1/cover-letter'
+    | '/v1/cv'
+    | '/v1/render'
+    | '/v1/render-letter'
+    | '/v1/rewrite'
+    | '/v1/target'
+    | '/v1/translate'
     | '/api/account/delete'
     | '/api/account/export'
     | '/api/auth/$'
@@ -291,6 +399,7 @@ export interface RootRouteChildren {
   ApiProgressRoute: typeof ApiProgressRoute
   ApiRenderRoute: typeof ApiRenderRoute
   ApiRenderLetterRoute: typeof ApiRenderLetterRoute
+  ApiResultRoute: typeof ApiResultRoute
   ApiResumeRoute: typeof ApiResumeRoute
   ApiRewriteRoute: typeof ApiRewriteRoute
   ApiShareRoute: typeof ApiShareRoute
@@ -298,6 +407,14 @@ export interface RootRouteChildren {
   ApiTargetRoute: typeof ApiTargetRoute
   ApiTranslateRoute: typeof ApiTranslateRoute
   STokenRoute: typeof STokenRoute
+  V1CapabilitiesRoute: typeof V1CapabilitiesRoute
+  V1CoverLetterRoute: typeof V1CoverLetterRoute
+  V1CvRoute: typeof V1CvRoute
+  V1RenderRoute: typeof V1RenderRoute
+  V1RenderLetterRoute: typeof V1RenderLetterRoute
+  V1RewriteRoute: typeof V1RewriteRoute
+  V1TargetRoute: typeof V1TargetRoute
+  V1TranslateRoute: typeof V1TranslateRoute
   ApiAccountDeleteRoute: typeof ApiAccountDeleteRoute
   ApiAccountExportRoute: typeof ApiAccountExportRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -382,6 +499,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRenderLetterRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/result': {
+      id: '/api/result'
+      path: '/api/result'
+      fullPath: '/api/result'
+      preLoaderRoute: typeof ApiResultRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/resume': {
       id: '/api/resume'
       path: '/api/resume'
@@ -431,6 +555,62 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof STokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/v1/capabilities': {
+      id: '/v1/capabilities'
+      path: '/v1/capabilities'
+      fullPath: '/v1/capabilities'
+      preLoaderRoute: typeof V1CapabilitiesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/v1/cover-letter': {
+      id: '/v1/cover-letter'
+      path: '/v1/cover-letter'
+      fullPath: '/v1/cover-letter'
+      preLoaderRoute: typeof V1CoverLetterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/v1/cv': {
+      id: '/v1/cv'
+      path: '/v1/cv'
+      fullPath: '/v1/cv'
+      preLoaderRoute: typeof V1CvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/v1/render': {
+      id: '/v1/render'
+      path: '/v1/render'
+      fullPath: '/v1/render'
+      preLoaderRoute: typeof V1RenderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/v1/render-letter': {
+      id: '/v1/render-letter'
+      path: '/v1/render-letter'
+      fullPath: '/v1/render-letter'
+      preLoaderRoute: typeof V1RenderLetterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/v1/rewrite': {
+      id: '/v1/rewrite'
+      path: '/v1/rewrite'
+      fullPath: '/v1/rewrite'
+      preLoaderRoute: typeof V1RewriteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/v1/target': {
+      id: '/v1/target'
+      path: '/v1/target'
+      fullPath: '/v1/target'
+      preLoaderRoute: typeof V1TargetRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/v1/translate': {
+      id: '/v1/translate'
+      path: '/v1/translate'
+      fullPath: '/v1/translate'
+      preLoaderRoute: typeof V1TranslateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/account/delete': {
       id: '/api/account/delete'
       path: '/api/account/delete'
@@ -467,6 +647,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiProgressRoute: ApiProgressRoute,
   ApiRenderRoute: ApiRenderRoute,
   ApiRenderLetterRoute: ApiRenderLetterRoute,
+  ApiResultRoute: ApiResultRoute,
   ApiResumeRoute: ApiResumeRoute,
   ApiRewriteRoute: ApiRewriteRoute,
   ApiShareRoute: ApiShareRoute,
@@ -474,6 +655,14 @@ const rootRouteChildren: RootRouteChildren = {
   ApiTargetRoute: ApiTargetRoute,
   ApiTranslateRoute: ApiTranslateRoute,
   STokenRoute: STokenRoute,
+  V1CapabilitiesRoute: V1CapabilitiesRoute,
+  V1CoverLetterRoute: V1CoverLetterRoute,
+  V1CvRoute: V1CvRoute,
+  V1RenderRoute: V1RenderRoute,
+  V1RenderLetterRoute: V1RenderLetterRoute,
+  V1RewriteRoute: V1RewriteRoute,
+  V1TargetRoute: V1TargetRoute,
+  V1TranslateRoute: V1TranslateRoute,
   ApiAccountDeleteRoute: ApiAccountDeleteRoute,
   ApiAccountExportRoute: ApiAccountExportRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
