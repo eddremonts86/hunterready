@@ -455,4 +455,181 @@ describe.skipIf(URL_ENV === '')('persistence, against a real Postgres', () => {
       expect(saved.resume.basics.fullName).toBe('Tom Whitfield')
     })
   })
+  /**
+   * Billing, and the two failures a webhook receiver is shaped around.
+   *
+   * Against a real Postgres because both of them *are* database guarantees. The idempotency comes
+   * from a primary key and the atomicity from a transaction, and a mock would assert my beliefs about
+   * both rather than Postgres's behaviour — which is this suite's whole reason for existing.
+   */
+  describe('billing events are acted on exactly once', () => {
+    it('grants the plan, and a redelivery of the same event changes nothing', async () => {
+      const userId = await seedUser('bill-')
+      const eventId = `evt_${Math.random().toString(36).slice(2, 12)}`
+
+      const first = await repo.applyBillingEvent({
+        eventId,
+        provider: 'test',
+        kind: 'subscription.active',
+        userId,
+        active: true,
+      })
+      expect(first).toEqual({ applied: true, outcome: 'pro' })
+      expect(await repo.getPlan(userId)).toBe('pro')
+
+      // Somebody downgrades by hand. If the replay re-applies, this comes back as `pro`.
+      await sql`UPDATE auth_users SET plan = 'free' WHERE id = ${userId}`
+
+      const replay = await repo.applyBillingEvent({
+        eventId,
+        provider: 'test',
+        kind: 'subscription.active',
+        userId,
+        active: true,
+      })
+      expect(replay.applied, 'a redelivered event was acted on twice').toBe(
+        false,
+      )
+      expect(await repo.getPlan(userId)).toBe('free')
+
+      const rows =
+        await sql`SELECT count(*)::int AS n FROM billing_events WHERE id = ${eventId}`
+      expect(rows[0].n).toBe(1)
+    })
+
+    it('drops the plan when the subscription stops', async () => {
+      const userId = await seedUser('bill-')
+      await repo.applyBillingEvent({
+        eventId: `evt_a_${Math.random().toString(36).slice(2, 10)}`,
+        provider: 'test',
+        kind: 'subscription.active',
+        userId,
+        active: true,
+      })
+      expect(await repo.getPlan(userId)).toBe('pro')
+
+      const off = await repo.applyBillingEvent({
+        eventId: `evt_c_${Math.random().toString(36).slice(2, 10)}`,
+        provider: 'test',
+        kind: 'subscription.cancelled',
+        userId,
+        active: false,
+      })
+      expect(off).toEqual({ applied: true, outcome: 'free' })
+      expect(await repo.getPlan(userId)).toBe('free')
+    })
+
+    it('does not re-grant when a stale active is redelivered after a cancellation', async () => {
+      /*
+        The failure the ledger exists for, and the only one here that costs money in the wrong
+        direction. Providers retry, so a `subscription.active` that was never acknowledged can arrive
+        *after* the cancellation that superseded it. Without the ledger the last write wins and it is
+        the wrong one: somebody who stopped paying keeps the third-party model.
+      */
+      const userId = await seedUser('bill-')
+      const activeId = `evt_stale_${Math.random().toString(36).slice(2, 10)}`
+
+      await repo.applyBillingEvent({
+        eventId: activeId,
+        provider: 'test',
+        kind: 'subscription.active',
+        userId,
+        active: true,
+      })
+      await repo.applyBillingEvent({
+        eventId: `evt_cancel_${Math.random().toString(36).slice(2, 10)}`,
+        provider: 'test',
+        kind: 'subscription.cancelled',
+        userId,
+        active: false,
+      })
+      expect(await repo.getPlan(userId)).toBe('free')
+
+      // The retry arrives late.
+      const late = await repo.applyBillingEvent({
+        eventId: activeId,
+        provider: 'test',
+        kind: 'subscription.active',
+        userId,
+        active: true,
+      })
+      expect(late.applied).toBe(false)
+      expect(
+        await repo.getPlan(userId),
+        'a stale redelivery restored a cancelled plan',
+      ).toBe('free')
+    })
+
+    it('records an unmatched customer as ignored rather than guessing', async () => {
+      const eventId = `evt_orphan_${Math.random().toString(36).slice(2, 10)}`
+      const result = await repo.applyBillingEvent({
+        eventId,
+        provider: 'test',
+        kind: 'subscription.active',
+        // No userId: the provider named a customer we cannot match to an account.
+        active: true,
+      })
+      expect(result).toEqual({ applied: true, outcome: 'ignored' })
+
+      /*
+        Written down anyway. A redelivery of it is then also a no-op, and "we saw it and did nothing"
+        stays distinguishable from "it never arrived" — the only question worth asking when somebody
+        says they paid and nothing happened.
+      */
+      const [row] =
+        await sql`SELECT outcome, user_id FROM billing_events WHERE id = ${eventId}`
+      expect(row.outcome).toBe('ignored')
+      expect(row.user_id).toBeNull()
+
+      await sql`DELETE FROM billing_events WHERE id = ${eventId}`
+    })
+
+    it('writes an audit row naming the event that moved the plan', async () => {
+      const userId = await seedUser('bill-')
+      const eventId = `evt_audit_${Math.random().toString(36).slice(2, 10)}`
+      await repo.applyBillingEvent({
+        eventId,
+        provider: 'test',
+        kind: 'subscription.active',
+        userId,
+        active: true,
+      })
+      const [row] =
+        await sql`SELECT action, record_type, record_id FROM access_log WHERE subject_user_id = ${userId} ORDER BY at DESC LIMIT 1`
+      expect(row.action).toBe('plan.pro')
+      expect(row.record_type).toBe('billing')
+      /*
+        No `record_id`. That column is a `uuid` and a provider's event id is `evt_…`, so the first
+        version of this passed one in, the insert threw, `record` swallowed it — as it must, since an
+        audit failure cannot be allowed to fail a webhook — and the row silently did not exist.
+
+        The link survives in the ledger instead, which is what this asserts next.
+      */
+      expect(row.record_id).toBeNull()
+
+      const [ledger] =
+        await sql`SELECT user_id, outcome FROM billing_events WHERE id = ${eventId}`
+      expect(ledger.user_id).toBe(userId)
+      expect(ledger.outcome).toBe('pro')
+    })
+
+    it('keeps no money and no customer in the ledger', async () => {
+      /*
+        Asserted against the live table rather than trusted to the schema file. A billing table is a
+        tempting place to accumulate a shadow copy of somebody's purchase history, and the defence is
+        for the columns not to exist (ADR-034: the merchant of record holds all of it).
+      */
+      const columns =
+        await sql`SELECT column_name FROM information_schema.columns WHERE table_name = 'billing_events'`
+      const names = columns.map((c) => String(c.column_name)).sort()
+      expect(names).toEqual([
+        'id',
+        'kind',
+        'outcome',
+        'provider',
+        'received_at',
+        'user_id',
+      ])
+    })
+  })
 })

@@ -21,6 +21,7 @@ import { decryptJson, encryptJson } from './crypto'
 import {
   accessLog,
   authUsers,
+  billingEvents,
   RETENTION_DAYS,
   resumes,
   shares,
@@ -118,6 +119,108 @@ export async function setPlan(input: {
   if (changed.length === 0) return false
   await record(input.userId, `plan.${input.plan}`, 'account', undefined)
   return true
+}
+
+/**
+ * Act on one billing event, exactly once, whatever the provider redelivers.
+ *
+ * ## The two failures this is shaped around
+ *
+ * **Redelivery.** Every payment provider retries a webhook it did not get a `2xx` for, and every one
+ * of them warns that an event can arrive twice even when it did. That is what makes at-least-once
+ * delivery reliable, and it puts the burden of idempotency on the receiver. Here the risk is not a
+ * double charge — the merchant of record owns the money (ADR-034) — it is a double *grant*: a stale
+ * redelivered `active` racing a `cancelled` decides whether somebody who stopped paying keeps the
+ * larger model.
+ *
+ * **A crash between the two writes.** Recording the event and then changing the plan is two
+ * statements, and a process that dies between them has remembered the event without acting on it —
+ * so the provider's retry is skipped and the person who paid never gets the plan. The obvious
+ * ordering fails silently and in the direction that costs somebody money.
+ *
+ * So both happen in **one transaction**. It commits together or not at all, and a provider that
+ * retries after a rollback finds no ledger row and is served properly.
+ *
+ * ## Ignored is a result, and it is recorded
+ *
+ * An event about a customer we cannot match to an account is not an error and not a grant. It is
+ * written to the ledger as `ignored` so that a redelivery of it is also a no-op, and so that "we saw
+ * it and did nothing" is distinguishable later from "it never arrived" — which is the only question
+ * worth asking when somebody says they paid and nothing happened.
+ */
+export async function applyBillingEvent(input: {
+  /** The provider's own event id. Uniqueness comes from them, not from us. */
+  eventId: string
+  provider: string
+  kind: string
+  /** Undefined when the event names a customer we cannot match to an account. */
+  userId?: string
+  /**
+   * `true` the subscription is active, `false` it is not, `undefined` this event says nothing about
+   * entitlement — a receipt, an address change, a payment method updated.
+   */
+  active?: boolean
+}): Promise<{ applied: boolean; outcome: 'pro' | 'free' | 'ignored' }> {
+  const outcome =
+    input.userId === undefined || input.active === undefined
+      ? ('ignored' as const)
+      : input.active
+        ? ('pro' as const)
+        : ('free' as const)
+
+  const userId = input.userId
+
+  const applied = await db.transaction(async (tx) => {
+    /*
+      The insert is the lock. `onConflictDoNothing` on the primary key means the second delivery of an
+      id writes nothing and reports it, and because this is inside the transaction, two deliveries
+      racing each other resolve at the database rather than in application code.
+    */
+    const [recorded] = await tx
+      .insert(billingEvents)
+      .values({
+        id: input.eventId,
+        provider: input.provider,
+        kind: input.kind,
+        userId: userId ?? null,
+        outcome,
+      })
+      .onConflictDoNothing()
+      .returning({ id: billingEvents.id })
+
+    if (recorded === undefined) return false
+    if (outcome !== 'ignored' && userId !== undefined) {
+      await tx
+        .update(authUsers)
+        .set({ plan: outcome })
+        .where(eq(authUsers.id, userId))
+    }
+    return true
+  })
+
+  /*
+    Audited after the commit, not inside it. `record` writes through `db` rather than the transaction
+    handle, so calling it from within would commit on its own connection and survive a rollback —
+    leaving an audit row for a plan change that never happened. An audit log that overstates is worse
+    than one that is late.
+  */
+  if (applied && outcome !== 'ignored' && userId !== undefined) {
+    /*
+      No `recordId`, and the reason is a real one rather than an omission.
+
+      `access_log.record_id` is a `uuid` column; a provider's event id is `evt_…` and never will be.
+      Passing it threw, and `record` swallows its own failures — correctly, for the request path — so
+      the audit row simply vanished and the first version of this looked like it worked.
+
+      The trace is not lost. `billing_events` holds the event id, the account, the outcome and the
+      time, which is strictly more than a foreign key would have carried. `access_log` says the plan
+      moved; the ledger says what moved it. Widening a uuid column on an audited table to duplicate
+      that is not worth a migration.
+    */
+    await record(userId, `plan.${outcome}`, 'billing')
+  }
+
+  return { applied, outcome }
 }
 
 export async function saveResume(input: {
