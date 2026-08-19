@@ -501,8 +501,13 @@ off the blocking path, not a faster engine).
 
 ## What is actually open
 
-Checked against the code on 2026-08-18, not against the lists above. **This is the maintained list**;
+Checked against the code on 2026-08-19, not against the lists above. **This is the maintained list**;
 everything higher in this file is the record of a release. When an item here closes, close it here.
+
+The 2026-08-19 pass closed item 14 and cut items 4, 11, 13, 15 and 16 down to the part that is
+genuinely left, which in four of those five is a decision or a credential rather than code. It found
+nothing new. It did find that the list had gone a day stale while the work it describes was landing,
+which is the argument for reading it against `src/` and not against the commit messages.
 
 The 2026-08-18 pass added items 11 to 16, all of them born in the release of that day and none of them
 found by reading this file. Four came out of verifying a deploy rather than out of planning it, which
@@ -531,7 +536,12 @@ is the argument for the verification step and not against the plan.
    ADR-027 already named the lever: **take the model call off the blocking path**, not a faster engine.
    The concern that ADR remained worried about — "`/api/rewrite` already rate-limits; ingestion does
    not" — is closed: `/api/ingest`, `/api/target`, `/api/translate` and `/api/cover-letter` all
-   rate-limit now.
+   rate-limit now. **Blocks 1 and 2 done 2026-08-18, and block 1 changed the reasoning.** Re-measured
+   against production, the local model now _answers_ — `source: model`, three requirements, 52 to
+   101 seconds — where ADR-030 recorded it timing out into the rule engine and matching 0 of 4. The
+   failure that ADR was written about is gone; what is left is latency, which is a request shape.
+   `/api/target` now answers in 3ms with a job id. ⚠️ **The switch stays on until `/api/ingest` does
+   the same** (plan 04, block 3): ingest is the path a first-time visitor meets and it still blocks.
 
 ### Ingestion quality — all three are missing inputs, not missing code
 
@@ -563,6 +573,11 @@ is the argument for the verification step and not against the plan.
     never wired — there is no Sentry in the repo. Either add one and keep the check, or replace the
     check with one that runs against what exists. The rule it protects (no CV content in logs, errors or
     telemetry) is the one rule in CLAUDE.md with no automated proof behind it.
+    **Blocks 1 to 3 done 2026-08-18: the rule now has proof.** `no-cv-in-logs.test.ts` drives a
+    fixture carrying distinctive strings through every path a value can leave by, captures what each
+    one writes, and asserts none of them appear; both guards were verified by breaking them
+    deliberately. **What is still open is only the decision** — adopt an error reporter and keep
+    verifier 5, or retire it and record that the guards replaced it (plan 11, block 4).
 
 ### Found while deploying 2026-08-18, not while planning
 
@@ -577,21 +592,31 @@ is the argument for the verification step and not against the plan.
     `/api/processing`'s list — no error, no log line. Coolify needs `DEEPSEEK_API_KEY`,
     `DEEPSEEK_BASE_URL` and `DEEPSEEK_MODEL`; `docker-compose.yml` already passes all three. Verified
     absent on the 2026-08-18 deploy: `providers` came back with MiniMax alone.
-14. **`/api/processing` reports `provider: "api.minimaxi.chat"`.** `displayName` maps `minimax.io` and
-    `minimaxi.com` to "MiniMax" and production is configured against a `.chat` host, so the hostname
-    falls through. **Not user-visible** — every name on screen comes from `providers[].name`, which is
-    correct — so it is one line and no hurry. Worth fixing before something starts reading that field.
+    **The silence is fixed (plan 13, block 2): startup now logs which providers resolved and which
+    were skipped for a missing key, names only.** The three variables in Coolify are Edd's and are
+    what remains.
+14. ~~**`/api/processing` reports `provider: "api.minimaxi.chat"`.**~~ **Closed 2026-08-18.**
+    `displayName` mapped `minimax.io` and `minimaxi.com` while production runs against a `.chat` host,
+    so the hostname fell through. The host list is now a table with `minimaxi.chat` in it, matched
+    exactly or as a subdomain rather than by `endsWith`, which also matched `evilminimax.io`.
+    `display-name.test.ts` covers both halves.
 15. **Production reports `build: "unknown"`.** Coolify does not pass `HR_COMMIT`, so `/api/health`
     cannot say which commit it is serving and `pnpm stale` is useless against the deployed site. The
     local half of this was solved the same day; the half that matters was not. Three times in one
     session locally, "why don't I see the change" turned out to be a stale image, and production has
-    no such answer available at all.
+    no such answer available at all. **Block 2 done 2026-08-18: `pnpm stale --url` now asks a
+    deployed site and compares against `origin/master` rather than local HEAD.** It is useless until
+    the other half lands, because production still answers `unknown` — and that half is a build arg
+    in Coolify, which the deploy workflow cannot set for it.
 16. **A machine cannot use any of this.** Fifteen routes already cover the whole product — ingest,
     render, rewrite, target, translate, cover letter, share, library — and every one authenticates by
     session cookie. There are no API keys anywhere in the repo. So "build an API" is mostly not
     endpoint work: it is machine authentication, a contract somebody can depend on, quotas, and an
     answer to the question ADR-023 raises, which is **who consents when the caller is not a person**.
-    See the plan in [docs/plans/](plans/).
+    See the plan in [docs/plans/](plans/). **Blocks 1 to 7 done 2026-08-18**: `hr_live_` keys, eight
+    `/v1` routes behind one door, per-key quotas, a contract in [docs/api/](api/README.md), and
+    ADR-032 for the consent question — the caller gets the local model unless it asserts the person's
+    consent on the request. Block 8 is Edd's: pointing his other application at it.
 
 ### Not open, despite appearances
 
