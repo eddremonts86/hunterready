@@ -454,10 +454,25 @@ erasure.
   renders in both PDF and `.docx`, in every template.
 - ⬜ **CJK.** A separate question, and still a real one: no Source face has it and Noto Sans CJK is
   10–16 MB per weight. That is a decision about the deployed image and about which market it is for.
-- ⬜ **Right-to-left.** Not the same item, and listing it inside CJK hid it. A font is the smaller half:
-  the renderer's bidi behaviour is **unverified**, so the honest status is "unknown", not "missing
-  glyphs". Establishing what takumi does with an Arabic or Hebrew string is the first move, and it is
-  cheap — the same probe-before-vendoring order that ADR-022 got right for Cyrillic.
+- ⬜ **Right-to-left. Probed 2026-08-23, and the halves are the other way round.** This entry used to
+  say "a font is the smaller half: the renderer's bidi behaviour is unverified". The probe
+  (`src/render/__tests__/rtl-probe.test.ts`) says the font is the **blocking** half and bidi cannot be
+  asked about at all yet: takumi refuses Hebrew and Arabic with `MissingGlyphs` before it lays anything
+  out, because none of the ten bundled families carries either block. It fails loudly rather than
+  drawing tofu, so no CV of boxes can ship — that part was already right.
+
+  **What the probe found that matters more:** only the PDF needs our fonts. The same CV exports to
+  `.docx` and to the self-contained web page with its text intact, because Word and the browser bring a
+  face of their own. So these markets are not locked out of the product, they are locked out of one of
+  its three downloads — and until 2026-08-23 nothing said so, because `/api/render` answered every
+  failure with "please try again", which for a missing glyph is a button somebody can press forever.
+  That message now names the two downloads that work, and the failure is a `422` with a distinguishable
+  log code rather than a `500` that looked like every other render bug.
+
+  So what is left here is a **decision, and it is now a well-posed one**: bundle a Hebrew and an Arabic
+  face (Noto Sans Hebrew and Noto Sans Arabic are the obvious candidates, and unlike CJK they are
+  small), then find out what takumi does with reading order. The probe goes red the day a face lands,
+  which is the notification that the second question has become askable.
 
 ## v0.10 — "It can be written from nothing" · shipped 2026-08-15
 
@@ -677,8 +692,10 @@ is the argument for the verification step and not against the plan.
 ### Not open, despite appearances
 
 - **CJK and RTL** are v1.0 items on the list above, but neither blocks the release the way pricing
-  does: they are decisions about which market the deployed image is for. RTL's status is _unverified_,
-  not _broken_ — see v1.0.
+  does: they are decisions about which market the deployed image is for. **RTL's status was recorded
+  here as _unverified_ for five days and that was one command away from being an answer** — it is now
+  probed and the answer changed the shape of the item (see v1.0). Two of the three export formats
+  already work in Hebrew and Arabic; the PDF needs a font before bidi is even a question.
 
 ## Deliberately parked
 

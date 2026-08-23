@@ -21,6 +21,7 @@ import { DEFAULT_DESIGN_ID, findDesign, tierOf } from '@/render/designs'
 import { Resume } from '@/schema/resume'
 import { renderResume } from '@/render/render'
 import { renderResumeHtml } from '@/render/html'
+import { classifyRenderFailure } from '@/render/failure'
 import { REGISTERED_FAMILIES } from '@/render/fonts'
 import { normalizeHex } from '@/render/themes/custom'
 import { docxFilename, renderDocx } from '@/render/docx/docx'
@@ -340,22 +341,30 @@ export const Route = createFileRoute('/api/render')({
           )
         } catch (error) {
           /**
-           * The class name, never the message. `renderResume` failures quote the text they could not
-           * lay out, which means the message can carry a line of somebody's CV straight into the log —
-           * the one thing docs/07 forbids without exception. A constructor name is a bounded vocabulary
-           * and `code` is on the log's allowlist for exactly this kind of value.
+           * A code from a closed list, never the message. `renderResume` failures quote the text they
+           * could not lay out, which means the message can carry a line of somebody's CV straight into
+           * the log — the one thing docs/07 forbids without exception.
+           *
+           * It used to log `error.constructor.name`, which was the same instinct and did not work:
+           * takumi throws a plain `Error`, so a CV in a script we have not bundled and a genuine
+           * renderer bug both arrived as `code: "Error"`. `classifyRenderFailure` is the bounded
+           * vocabulary that actually distinguishes them, and it also decides the sentence — because a
+           * missing glyph is permanent, and "please try again" sent somebody back to press the same
+           * button forever while two other downloads would have worked.
            */
+          const failure = classifyRenderFailure(error)
           errorEvent('render.failed', {
             format: wantsFormat(url),
-            code: error instanceof Error ? error.constructor.name : 'unknown',
+            code: failure.code,
           })
           return Response.json(
-            {
-              error: 'render_failed',
-              message:
-                'We could not build the file just now. Your CV is unchanged — please try again.',
-            },
-            { status: 500 },
+            { error: 'render_failed', message: failure.message },
+            /*
+              422 for a refusal the request cannot talk us out of, 500 only for something that might
+              genuinely be us. Not cosmetic: the Dockerfile's health check and whatever watches 5xx
+              should not be woken by a CV written in Hebrew.
+            */
+            { status: failure.retryable ? 500 : 422 },
           )
         }
       },
