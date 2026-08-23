@@ -312,12 +312,19 @@ function UpgradeNote() {
         between employers.
       </p>
       {/*
-        TODO(payments): no gateway yet — Edd's call, and deliberately not urgent. `auth_users.plan` is
-        already the switch; a provider only has to write to it. See docs/08-roadmap.md.
+        The sentence, and deliberately not a button.
 
-        This used to read "Paid plans are not open yet", which was the whole story when the gate was
-        shut. During beta the gate is open (`betaPaidFree`), so that sentence would leave somebody
-        already using the larger model reading that they cannot have it.
+        It used to carry a TODO saying there was no payment gateway. There is one now — a hosted
+        checkout, a signed webhook, and `auth_users.plan` moved by it — so the note is no longer
+        waiting on anything to be built. What it is waiting on is a decision about *this* surface:
+        after release `proNote` reads "Part of the paid plan", which says what the capability is and
+        not how to get it, and the only door is `#pricing` on the landing page. Putting a second
+        checkout entry point inside a panel is a product choice, not a missing wire, so it is recorded
+        in docs/plans/01-pricing-and-payments.md rather than guessed at here.
+
+        The copy before that read "Paid plans are not open yet", which was the whole story when the
+        gate was shut. During beta the gate is open (`betaPaidFree`), so that sentence would leave
+        somebody already using the larger model reading that they cannot have it.
       */}
       <p className="text-[12px] font-medium text-ink">{proNote}</p>
     </div>

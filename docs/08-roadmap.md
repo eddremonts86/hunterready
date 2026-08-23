@@ -504,6 +504,13 @@ off the blocking path, not a faster engine).
 Checked against the code on 2026-08-19, not against the lists above. **This is the maintained list**;
 everything higher in this file is the record of a release. When an item here closes, close it here.
 
+The 2026-08-23 pass read item 1 against the branch that implements it rather than against this file,
+which by then was four days and four commits behind. The code for blocks 2 to 5 is written; what it
+found was three gaps _inside_ it, none visible from the plan — the container passed none of the three
+Stripe variables, nothing read the parameter Stripe sends the browser back with, and a test named in a
+docblock did not exist. All three are fixed on `feat/pricing`, with a guard for the first so the class
+of failure cannot recur silently. That is the argument for this list being read against `src/`, again.
+
 The 2026-08-19 pass closed item 14 and cut items 4, 11, 13, 15 and 16 down to the part that is
 genuinely left, which in four of those five is a decision or a credential rather than code. It found
 nothing new. It did find that the list had gone a day stale while the work it describes was landing,
@@ -515,9 +522,30 @@ is the argument for the verification step and not against the plan.
 
 ### Blocking v1.0
 
-1. **Pricing and payments.** Numbers, provider, and an endpoint that sets `plan`. See v1.0 above and
-   docs/09 question 7 — the shape is decided, so this is now work plus two numbers, not a design
-   question.
+1. **Pricing and payments.** **Built as of 2026-08-19, and the code is not what is left.** €12/month
+   in `src/lib/pricing.ts`, a hosted Stripe checkout, a signature-verified idempotent webhook that is
+   the only writer of `auth_users.plan`, `#pricing` on the landing page, and cancellation through
+   Stripe's own portal from the account panel. Three of the plan's four acceptance criteria are met and
+   tested (plan 01). What remains, in the order it has to happen:
+
+   - **The name, and a trademark search for it** — item 3, promoted to a precondition rather than a
+     parallel task, because the first invoice is the moment a rename stops being 20 lines of
+     documentation.
+   - **One sentence from Edd:** does the free tier keep all twelve designs? It does today and the
+     landing page says so, so changing it is also a copy change.
+   - **Three variables in Coolify**, which nothing but Edd can set: `STRIPE_SECRET_KEY`,
+     `STRIPE_WEBHOOK_SECRET`, `HR_STRIPE_PRICE_ID`. Until then no test-mode payment has been watched
+     through checkout, and nothing in the repo proves Stripe accepts the payload we send.
+   - **`HR_RELEASE=true`**, which is item 2 and item 4 as well — one lever, three entries.
+
+   ⚠️ **Two of those variables reached nothing until 2026-08-23.** `docker-compose.yml` lists its
+   environment explicitly and passed none of the three, so setting them in Coolify would have been
+   inert — and the tell was invisible, because an unset variable and an unreachable one produce the
+   same sentence on the pricing page ("Paid plans are not open yet"). Fixed, along with `HR_REASONING`
+   and `HR_REASONING_BUDGET`, which had the same problem and made `ask.ts`'s "off without a deploy"
+   claim untrue of production. `tests/compose-environment.test.ts` now fails when the code reads a
+   variable the `app` service does not declare.
+
 2. **The exit from beta.** Beta hands every Pro capability to everyone: the larger model, all 103
    designs, the mixed axes, saved CVs. Not a separate decision from item 1 — it is the same switch
    seen from the other side, and the day pricing opens it flips. **Since 2026-08-19 it is one switch,

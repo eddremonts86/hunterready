@@ -29,7 +29,7 @@
  * The answer is remembered in `localStorage` so it is asked once. It is a preference about this
  * browser, not an account, and it is not sent anywhere.
  */
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { useInBeta } from '@/components/pro-tag'
 
@@ -121,6 +121,18 @@ export interface ConsentState {
   choice?: ConsentChoice
   decide: (choice: ConsentChoice) => void
   reset: () => void
+  /**
+   * Ask `/api/processing` again.
+   *
+   * Everything above is a fact about the *server's* view of this caller, fetched once on mount, which
+   * is right for facts that only change when the deployment does. The plan is the exception: it changes
+   * while the page is open, from a webhook the browser never sees, and the person it changed for is
+   * standing right there having just paid for it.
+   *
+   * Without this the answer is a manual reload, and "reload the page" is not something to tell somebody
+   * who has just been charged — it reads as though the payment did not register.
+   */
+  refresh: () => void
 }
 
 function read(): StoredConsent | undefined {
@@ -162,6 +174,14 @@ export function useProcessingConsent(): ConsentState {
   /** The account's plan, for the topbar chip. `anonymous` when there is no session. */
   const [plan, setPlan] = useState<string | undefined>(undefined)
   const [choice, setChoice] = useState<ConsentChoice | undefined>(undefined)
+  /**
+   * Bumped by `refresh()` to re-run the fetch below.
+   *
+   * A counter rather than lifting the fetch into a callback the effect calls: the effect owns the
+   * `cancelled` flag that keeps a slow answer from overwriting a newer one, and moving the request out
+   * of it while leaving the flag behind is how a stale response wins a race nobody knew was there.
+   */
+  const [asked, setAsked] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -215,7 +235,7 @@ export function useProcessingConsent(): ConsentState {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [asked])
 
   const decide = (next: ConsentChoice) => {
     setChoice(next)
@@ -232,6 +252,15 @@ export function useProcessingConsent(): ConsentState {
       // Private browsing. The choice still holds for this session.
     }
   }
+
+  /*
+    Stable across renders, because callers put it in a `useEffect` dependency list — and a `refresh`
+    that changed identity every render would re-run that effect every render, which for a polling
+    caller is an unbounded loop of requests rather than a refresh.
+  */
+  const refresh = useCallback(() => {
+    setAsked((n) => n + 1)
+  }, [])
 
   const reset = () => {
     setChoice(undefined)
@@ -254,6 +283,7 @@ export function useProcessingConsent(): ConsentState {
     choice,
     decide,
     reset,
+    refresh,
   }
 }
 

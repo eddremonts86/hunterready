@@ -43,10 +43,36 @@ export const PANELS: ReadonlyArray<{ id: PanelId; label: string }> = [
   { id: 'account', label: 'Account' },
 ]
 
+/**
+ * The two words Stripe can say back to us.
+ *
+ * `checkout.sessions.create` takes a `success_url` and a `cancel_url` and that is the entire channel:
+ * the person leaves for a hosted page on another origin and comes back through a plain redirect, with
+ * no state of ours surviving the trip. So the acknowledgement has to travel in the address bar.
+ *
+ * Neither value is trusted for anything. `done` means "somebody came back from a checkout", not "a
+ * payment succeeded" — `/api/billing/webhook` is the only thing that moves the `plan` column, and it
+ * is signed. Typing `?billing=done` by hand gets you a toast and a re-read of the server's answer,
+ * which is exactly what it would get you if you had paid nothing.
+ */
+export type BillingReturn = 'done' | 'cancelled'
+
 export interface WorkspaceSearch {
   panel?: PanelId
   compare?: boolean
   cv?: string
+  /**
+   * **A moment, in a file that is otherwise only about places** — and the exception is deliberate.
+   *
+   * The rule above holds: `busy` and the error strings stay out of the URL because we own them and can
+   * keep them in React state. This one we do not own. It is put there by another origin's redirect,
+   * and the alternative to reading it is what shipped first: a person pays, lands back on the front
+   * page, and nothing whatsoever acknowledges it.
+   *
+   * It stops being a place the moment it is read. The handler shows the acknowledgement and navigates
+   * it away with `replace: true`, so it never enters history and a reload cannot replay it.
+   */
+  billing?: BillingReturn
 }
 
 /** The default panel, left out of the URL so the front door stays `/` rather than `/?panel=check`. */
@@ -71,6 +97,14 @@ export function validateWorkspaceSearch(
     // An id is opaque and belongs to the caller; the only thing worth checking is that there is one.
     ...(typeof search.cv === 'string' && search.cv !== ''
       ? { cv: search.cv }
+      : {}),
+    /*
+      Two literals and nothing else. A closed list rather than any string, because this value chooses
+      which sentence a person reads after paying money — and "we could not complete that" shown to
+      somebody who just succeeded is worse than showing them nothing at all.
+    */
+    ...(search.billing === 'done' || search.billing === 'cancelled'
+      ? { billing: search.billing }
       : {}),
   }
 }

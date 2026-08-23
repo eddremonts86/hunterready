@@ -23,10 +23,17 @@ the pricing page.
 
 ## Acceptance criteria
 
-- [ ] A person can pay and reach `plan: 'pro'` without anyone touching the database by hand.
-- [ ] A failed or disputed payment removes the plan, verified by replaying the provider's webhook.
-- [ ] The pricing page states the price, the currency, VAT handling, and what the free tier keeps.
-- [ ] Cancelling is reachable from the account panel in no more than two clicks.
+- [ ] A person can pay and reach `plan: 'pro'` without anyone touching the database by hand. **Built,
+      unverified — the one that needs keys.** Two of its halves were broken and are fixed: the variables
+      could not reach the container at all, and the return from Stripe was acknowledged nowhere. See
+      2026-08-23 below.
+- [x] A failed or disputed payment removes the plan, verified by replaying the provider's webhook.
+      Nine tests against a real Postgres, block 4.
+- [x] The pricing page states the price, the currency, VAT handling, and what the free tier keeps.
+      "VAT added at checkout · cancel any time", and the free column counts `FREE_DESIGNS` rather than
+      claiming a number.
+- [x] Cancelling is reachable from the account panel in no more than two clicks — "Subscription and
+      invoices", which opens Stripe's portal.
 
 ## Non-goals
 
@@ -124,6 +131,52 @@ and the structures they span — 12 across 3 — so the sentence cannot go stale
 ### Block 6: flip beta off (see plan 02)
 
 - [ ] **Verify:** plan 02's end-to-end check.
+
+### Found on 2026-08-23, verifying the branch rather than planning it
+
+Three gaps, all of them inside code the blocks above report as done, and none of them visible from the
+plan. The pattern is the one this repository already has a name for: a layer that works and a path
+nobody can walk.
+
+1. **`docker-compose.yml` passed none of the three Stripe variables.** The `app` service declares its
+   environment as an explicit map with no `env_file:`, so `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
+   and `HR_STRIPE_PRICE_ID` typed into Coolify would have reached nothing. **The two symptoms are the
+   same sentence**, which is what makes it expensive: an unset variable arrives as an empty string,
+   `hasCheckout()` answers false, and the pricing section says "Paid plans are not open yet" — exactly
+   what a deliberately unconfigured deployment says. Block 3's verify would have been debugged in the
+   dashboard.
+
+   `tests/compose-environment.test.ts` is the guard: every variable `src/` reads is declared on the
+   `app` service or listed with the reason it deliberately is not (`HR_UNLOCK_DESIGNS` is in that list,
+   because `entitlements.ts` says never to set it in production). It found two more on its first run —
+   `HR_REASONING` and `HR_REASONING_BUDGET` — which means `ask.ts`'s claim that the narration can be
+   switched off "without a deploy of new code" was not true of the deployment. Broken deliberately to
+   confirm it fails, and it names the file that reads the variable.
+
+2. **Nothing read `?billing=done`.** `checkout.tsx` sends Stripe a `success_url` and a `cancel_url`
+   carrying it, and `validateWorkspaceSearch` recognised `panel`, `compare` and `cv` only — so the
+   router dropped it. A person paid, was returned to the front page, and **the product acknowledged it
+   in no way at all**; the plan chip kept saying Free until they thought to reload, which for somebody
+   who has just been charged reads as a payment that did not register.
+
+   Now: a toast on the way back, and three bounded re-reads of `/api/processing` so the plan appears on
+   its own when the webhook lands a moment later. Verified on a real build at `:3011` — "Checkout
+   complete" and one read plus three at ~2.5s, 5.5s and 8.5s for `done`; "Nothing was charged" and no
+   extra reads at all for `cancelled`; the parameter navigated away with `replace: true` in both, so a
+   reload cannot replay a confirmation. No console errors.
+
+3. **`pricing.test.ts` was documented and did not exist.** `pricing.ts` said in prose that it existed.
+   It does now, and it asserts the two things worth asserting about a constant: that `display` and
+   `amount` cannot disagree, and that a half-configured deployment reads as closed rather than nearly
+   open. `anonymous.test.ts` joins it: neither billing endpoint will act for a caller it cannot name,
+   asserted with Stripe _configured_ so that a 401 rather than a 502 proves the guard ran before the
+   network. Broken deliberately — the identity check removed — and both go red.
+
+**And one thing that is a decision rather than a defect.** After release `proNote` reads "Part of the
+paid plan", which says what a capability is and not how to get it; the only door to the checkout is
+`#pricing` on the landing page, which is not reachable from inside the workspace. Whether the model
+panel should carry a second entry point is Edd's call, and the stale `TODO(payments)` that used to sit
+there — "no gateway yet" — now says so instead of claiming there is nothing to point at.
 
 ## Risks
 

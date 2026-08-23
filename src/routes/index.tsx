@@ -1202,6 +1202,79 @@ function HunterReady({ consent }: { consent: ConsentState }) {
       setError('We could not reach the server. Please try again.')
     }
   }, [])
+
+  /**
+   * How many more times to ask the server whether the plan has moved, after a checkout.
+   *
+   * The other half of `startCheckout`, and the reason it is a countdown rather than a single request:
+   * **the payment and the entitlement arrive by different roads.** Stripe redirects the browser back
+   * here, and separately delivers a signed event to `/api/billing/webhook`, which is the only thing
+   * that writes the `plan` column. Usually the webhook wins that race and one read is enough. When it
+   * does not, a person who has just been charged is looking at a page that still says Free.
+   *
+   * Three tries, stopping the moment the plan is `pro`. Measured on a real build: one read on mount and
+   * three more at roughly 2.5, 5.5 and 8.5 seconds, then silence — and none at all when the checkout
+   * was cancelled, because nothing was paid and there is nothing to wait for.
+   *
+   * Bounded because the failure it covers is a delay of a second or two, not an outage. If the webhook
+   * never arrives, no amount of polling here invents an entitlement; the plan appears on the next page
+   * load once it does.
+   */
+  const [awaitingPlan, setAwaitingPlan] = useState(0)
+
+  /**
+   * Say something when somebody comes back from Stripe.
+   *
+   * The first version of this flow sent people to a hosted checkout with `?billing=done` on the way
+   * back and then read nothing: `validateWorkspaceSearch` dropped the parameter, so a person paid, was
+   * returned to the front page, and the product acknowledged it in no way at all — the plan chip still
+   * said Free until they thought to reload.
+   *
+   * A toast rather than a panel or a banner, for the reason stated at the top of this file: they arrive
+   * at the top of `/`, and the thing that changed is somewhere else on the page entirely. The parameter
+   * is then navigated away with `replace: true`, so it never enters history and a reload cannot replay
+   * a confirmation for a payment that happened once.
+   */
+  useEffect(() => {
+    if (search.billing === undefined) return
+    if (search.billing === 'done') {
+      toast.success('Checkout complete', {
+        description:
+          'Pro unlocks as soon as Stripe confirms the payment — usually a second or two.',
+      })
+      setAwaitingPlan(3)
+    } else {
+      // Not an error, and drawn as one it would read like a failed payment rather than a changed mind.
+      toast('Nothing was charged', {
+        description: 'You left the checkout before paying.',
+      })
+    }
+    void navigate({
+      replace: true,
+      search: (prev) => ({ ...prev, billing: undefined }),
+    })
+  }, [search.billing, navigate])
+
+  /*
+    The countdown itself, in its own effect on purpose. Sharing one with the acknowledgement above
+    would mean the navigate that clears `?billing=done` re-runs it and its cleanup cancels the very
+    timers it just set — a poll that silently only ever fires once, which is exactly the bug this is
+    here to fix, hidden one level deeper.
+  */
+  useEffect(() => {
+    if (awaitingPlan === 0) return
+    if (consent.plan === 'pro') {
+      setAwaitingPlan(0)
+      return
+    }
+    const timer = setTimeout(() => {
+      setAwaitingPlan((left) => left - 1)
+      consent.refresh()
+    }, 2_000)
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [awaitingPlan, consent.plan, consent.refresh])
   const [rewrites, setRewrites] = useState<Array<BulletRewrite> | undefined>()
   const [rewriting, setRewriting] = useState(false)
   /**
