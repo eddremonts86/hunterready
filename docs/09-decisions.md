@@ -1512,5 +1512,13 @@ Still open:
    nothing, and `auth_users.plan` decides. What is still open is only the numbers and the payment
    provider. _Needed by: v1.0._
 
-8. **Name and domain.** "HunterReady" — `.dev`/`.app`/`.com` availability and
-   trademark not checked. _Needed by: v1.0._
+8. **Name and domain.** "HunterReady". **Availability answered 2026-08-19:** free on all seven of
+   `.com` `.dev` `.app` `.dk` `.io` `.co` `.net`, each checked against a control domain that is
+   certainly registered. `.dev` is the one being bought.
+
+   **The trademark half is still open, and its trigger moved.** It is no longer "needed by v1.0" but a
+   precondition of pricing (plan 03), because the moment a collision stops being cheap is the first
+   invoice, not the release. Attempted programmatically on 2026-08-23 and abandoned on purpose: WIPO's
+   database answers with an anti-bot challenge, and defeating one to obtain a legal fact would make the
+   record worth less than no record. TMview and EUIPO's public query paths did not answer at all. Plan
+   03 block 2 carries the two register URLs and the exact queries. _Needed by: the first payment._

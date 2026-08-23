@@ -599,6 +599,14 @@ is the argument for the verification step and not against the plan.
    the moment it stops being cheap is the first payment, not the release. Today a rename is 20
    occurrences across 7 files, all documentation and none in `src/`.
 
+   **Attempted programmatically 2026-08-23 and stopped on purpose.** WIPO's Global Brand Database
+   answers with an anti-bot challenge, and TMview and EUIPO's public query paths do not answer at all.
+   A bot challenge is a request not to automate, and defeating one to obtain a legal fact would make
+   the record worth less than no record — so this stays a ten-minute manual job, and plan 03 block 2
+   now carries the two register URLs, the two queries and the Nice classes (9 and 42) so it is not
+   research. A web search finds no mark of that name, only unrelated `Hunter*` marks in firearms and
+   optics; that is **not** a register search and must not be filed as one.
+
 ### Costing money today
 
 4. **The exit from ADR-030.** `HR_THIRD_PARTY_FOR_ALL=true` means every anonymous visitor spends

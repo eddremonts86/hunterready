@@ -60,12 +60,43 @@ after payments open touches all of those plus the thing customers recognise.
 - [ ] Check `hunterready` on `.com`, `.dev`, `.app`, and `.dk` given the market. Record prices.
 - [ ] **Verify:** the answer is a list with prices and dates, not an impression.
 
-### Block 2: trademark (30 min)
+### Block 2: trademark (30 min) — **attempted 2026-08-23 and it cannot be done from here**
 
 - [ ] Search EUIPO and the Danish register for "HunterReady" and near neighbours in the software and
       recruitment classes.
 - [ ] **Verify:** a recorded search with the register, the classes and the date. A clean search that
       nobody can date is not evidence.
+
+**Why it is still unchecked, recorded so nobody repeats the attempt.** All three registers were tried
+programmatically and none is reachable:
+
+| register                   | result                                                                               |
+| -------------------------- | ------------------------------------------------------------------------------------ |
+| WIPO Global Brand Database | Answers with an **altcha anti-bot challenge** instead of results.                    |
+| TMview (`tmdn.org`)        | The documented search endpoint does not answer (connection failure, no HTTP status). |
+| EUIPO eSearch plus         | Same — the public query path does not answer, and its open API needs an OAuth key.   |
+
+The WIPO block is the decisive one and it is not a technical obstacle to work around: **a bot
+challenge is a request not to automate this**, and defeating one to obtain a legal fact would make the
+resulting record worth less than no record. So this block stays open and it stays Edd's.
+
+**What is worth knowing anyway, clearly labelled as not a search.** A general web search for
+`"HunterReady" trademark` surfaces no mark of that name — only unrelated `Hunter*` marks in firearms
+and optics (`HUNTER`, `HUNTER UP`, `HUNTER SELECT`, `HUNTER HANK`), none of them in the classes that
+matter here. **That is absence of evidence from a search engine, not evidence of absence from a
+register**, and it must not be recorded as a clean search. It does suggest the exact-match risk is
+low and the real question is confusing similarity to `Hunter`, which is a lawyer's judgement rather
+than a query.
+
+**The ten-minute version, for whoever does it.** Both are free and neither needs an account:
+
+1. **EUIPO** — <https://euipo.europa.eu/eSearch/> → Trade marks → basic search `HunterReady`, then
+   again as `Hunter*` filtered to **Nice class 9** (software) and **class 42** (SaaS, software design).
+   Class 35 is worth a look too if the product is ever described as recruitment services.
+2. **Denmark** — <https://onlineweb.dkpto.dk/> (Patent- og Varemærkestyrelsen), same two queries.
+
+Record for each: the register, the query, the classes, the date, and the count. A screenshot per
+register is enough, and the date is the part that makes it evidence.
 
 ### Block 3: decide and buy (20 min)
 
