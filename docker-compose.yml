@@ -93,6 +93,13 @@ services:
       # The Stripe Price the checkout charges, and the authority for the amount — `src/lib/pricing.ts`
       # holds only the display copy of it.
       HR_STRIPE_PRICE_ID: ${HR_STRIPE_PRICE_ID:-}
+      # Coolify's own predefined variable: the commit of the source it deployed. Read at run time by
+      # `/api/health` (see src/lib/build-stamp.ts), which is what lets production answer "which commit
+      # am I serving" without anybody setting a build arg — and which sidesteps the documented caveat
+      # that Coolify withholds SOURCE_COMMIT from Docker *builds* to preserve layer caching.
+      #
+      # Empty everywhere else, including `pnpm app`, where the build arg above is the better answer.
+      SOURCE_COMMIT: ${SOURCE_COMMIT:-}
       # Coolify's convention for a compose stack: `SERVICE_FQDN_<SERVICE>_<PORT>` tells its proxy which
       # container and port back this domain. It has to be declared **on the service**, not only as a
       # stack-level variable — with it missing, the deploy reports `running:healthy` (it is) while

@@ -667,14 +667,24 @@ is the argument for the verification step and not against the plan.
     so the hostname fell through. The host list is now a table with `minimaxi.chat` in it, matched
     exactly or as a subdomain rather than by `endsWith`, which also matched `evilminimax.io`.
     `display-name.test.ts` covers both halves.
-15. **Production reports `build: "unknown"`.** Coolify does not pass `HR_COMMIT`, so `/api/health`
-    cannot say which commit it is serving and `pnpm stale` is useless against the deployed site. The
-    local half of this was solved the same day; the half that matters was not. Three times in one
-    session locally, "why don't I see the change" turned out to be a stale image, and production has
-    no such answer available at all. **Block 2 done 2026-08-18: `pnpm stale --url` now asks a
-    deployed site and compares against `origin/master` rather than local HEAD.** It is useless until
-    the other half lands, because production still answers `unknown` — and that half is a build arg
-    in Coolify, which the deploy workflow cannot set for it.
+15. ~~**Production reports `build: "unknown"`.**~~ **Code done 2026-08-23, and it was never Edd's.**
+    This item sat under "needs a credential or a click from Edd" on the belief that the only way in was
+    a build arg somebody sets in Coolify. It is not: **Coolify already injects `SOURCE_COMMIT`**, its
+    own variable naming the commit it deployed, and `/api/health` reads it at run time — which also
+    steps around the documented caveat that Coolify withholds `SOURCE_COMMIT` from Docker _builds_ to
+    preserve layer caching, because nothing needs it at build time.
+
+    **The obvious version of this fix would have shipped and changed nothing.** The Dockerfile declares
+    `ARG HR_COMMIT=unknown` and promotes it to `ENV`, so in any build without the arg the variable is
+    _present_ and equal to the string `"unknown"` — `process.env.HR_COMMIT ?? process.env.SOURCE_COMMIT`
+    can never reach the second operand. `src/lib/build-stamp.ts` treats `unknown` and empty as the
+    absences they are, and `build-stamp.test.ts` has that case as its centre.
+
+    Verified on a real build: with no build arg and `SOURCE_COMMIT` alone, `/api/health` reported the
+    exact SHA of `HEAD`. Rehearse it with `.claude/launch.json` → `hunterready-release-configured`.
+    **Still unverified against the live site**, which needs one deploy — the acceptance criterion in
+    plan 15 stays unchecked until `pnpm stale --url https://hunterready.eduardoinerarte.dk` answers.
+
 16. **A machine cannot use any of this.** Fifteen routes already cover the whole product — ingest,
     render, rewrite, target, translate, cover letter, share, library — and every one authenticates by
     session cookie. There are no API keys anywhere in the repo. So "build an API" is mostly not

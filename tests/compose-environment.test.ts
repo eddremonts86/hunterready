@@ -48,9 +48,12 @@ const ROOT = join(import.meta.dirname, '..')
  * name binaries that are installed in the image with working defaults (ADR-012) — none of them is a
  * deployment decision anybody makes in Coolify, so none of them belongs in this contract. Adding a
  * prefix here is how a new family of variables joins it.
+ *
+ * `SOURCE_COMMIT` is the one name in here that is not ours at all — it is Coolify's, and it is listed
+ * because depending on somebody else's variable is exactly as silent a failure as forgetting your own.
  */
 const OURS =
-  /^(HR_|STRIPE_|MINIMAX_|DEEPSEEK_|OLLAMA_|DATABASE_|DATA_|BETTER_AUTH_)[A-Z0-9_]*$/
+  /^((HR_|STRIPE_|MINIMAX_|DEEPSEEK_|OLLAMA_|DATABASE_|DATA_|BETTER_AUTH_)[A-Z0-9_]*|SOURCE_COMMIT)$/
 
 /**
  * Read by the code and deliberately absent from the production compose file, each with the reason.

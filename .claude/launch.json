@@ -20,6 +20,19 @@
       "port": 3012
     },
     {
+      "//": "The state production will be in the day pricing opens, which is the one state nobody has ever looked at. `hunterready-release` above shows released-but-unconfigured; this adds the two Stripe variables and Coolify's commit variable, so the pricing card shows `Get Pro` instead of `Paid plans are not open yet` and `/api/health` reports a commit instead of `unknown`.",
+      "//2": "The Stripe values are deliberately not credentials and are shaped so a scanner cannot mistake them for any — the same fixtures the tests use. So the button renders and the checkout it starts fails at Stripe with a 502, which is the honest limit of what can be rehearsed without an account: everything up to the network is real, and whether Stripe accepts our payload is plan 01 block 3's verify and needs Edd's keys.",
+      "//3": "SOURCE_COMMIT stands in for what Coolify injects. `pnpm host` passes no build arg, so this is also the only local way to exercise the fallback in src/lib/build-stamp.ts — with neither variable, `/api/health` correctly says `unknown` and proves nothing.",
+      "//4": "3013 so it can sit beside beta on 3011 and plain release on 3012.",
+      "name": "hunterready-release-configured",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "HR_RELEASE=true STRIPE_SECRET_KEY=sk_test_fixture_not_a_credential_0000 HR_STRIPE_PRICE_ID=price_fixture_not_a_credential_0000 SOURCE_COMMIT=$(git rev-parse HEAD) PORT=3013 pnpm host"
+      ],
+      "port": 3013
+    },
+    {
       "//": "The one that ships. Attaches to the real stack — the app image plus Postgres plus the model — started with `pnpm app` (Compose builds `hunterready-app:latest`; NOT `pnpm docker:run`, which starts the app alone with no database and no model, so persistence reports itself off and every generated text silently falls back to regular expressions).",
       "//2": "Reach for it for exactly three things: `.doc` ingestion, OCR of a scan, and confirming the shipping image itself is sound before a release. Otherwise it costs 2 minutes warm and 10+ when the apt layer falls out of cache, for nothing the entry above does not already give you.",
       "//3": "3100 because Hermes' WhatsApp bridge holds 127.0.0.1:3000 while Docker publishes on *:3000, and a URL that resolves to one of two servers depending on v4/v6 order is not something to debug twice.",

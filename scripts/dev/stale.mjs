@@ -81,7 +81,9 @@ if (built === 'unknown') {
     `? ${URL_BASE} is serving a build with no commit stamp, so it cannot answer this.\n` +
       (isLocal
         ? `  Rebuild once and it will be able to:\n  pnpm app`
-        : `  The deploy passes no HR_COMMIT. See docs/plans/15-production-commit-stamp.md.`),
+        : `  Coolify should be supplying SOURCE_COMMIT, which /api/health reads when there is no\n` +
+          `  build arg. Getting \`unknown\` from a deployed site means it is not arriving — check that\n` +
+          `  the compose file still declares it. See docs/plans/15-production-commit-stamp.md.`),
   )
   process.exit(1)
 }

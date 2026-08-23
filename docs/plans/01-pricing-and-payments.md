@@ -116,12 +116,23 @@ intact and writes a row claiming otherwise.
       cancellation people are unsure worked is a cancellation they call their bank about.
 - [x] **Verified in the browser, in both states that exist today:**
 
-| build              | heading                                              | button                               |
-| ------------------ | ---------------------------------------------------- | ------------------------------------ |
-| beta               | "Free while we are in beta, and one plan afterwards" | none — "Included for everyone"       |
-| release, no Stripe | "One plan, and a free tier that is a real product"   | none — "Paid plans are not open yet" |
+| build                | heading                                              | button                               |
+| -------------------- | ---------------------------------------------------- | ------------------------------------ |
+| beta                 | "Free while we are in beta, and one plan afterwards" | none — "Included for everyone"       |
+| release, no Stripe   | "One plan, and a free tier that is a real product"   | none — "Paid plans are not open yet" |
+| release, **with** it | "One plan, and a free tier that is a real product"   | **"Get Pro"**                        |
 
-The third state — released **and** configured, which shows "Get Pro" — needs keys.
+**The third row was added 2026-08-23 and this block said it "needs keys".** It needed two variables
+that are not empty, which is a different thing: `hasCheckout()` reads the environment, not Stripe, so
+the whole path from `process.env` through `/api/processing` to the button is exercisable with the same
+fixtures the tests use. `.claude/launch.json` → `hunterready-release-configured` is that rehearsal, and
+on it `/api/processing` answers `beta: false, checkoutOpen: true, price: "€12"` while the section
+renders the heading above and exactly one button, "Get Pro", with the VAT line under it.
+
+What still needs real keys is strictly narrower than "the third state": whether Stripe accepts the
+payload `checkout.sessions.create` sends. With a fixture key the button reaches the network and gets a
+`502`, which proves the wiring and nothing about the payload. That is the open verify in block 3 and
+this rehearsal does not close it.
 
 **The free column is first and the numbers are derived.** The first version read `4 designs` because
 it used `VOICES`, the curated strip further up the page, instead of the catalogue. On a pricing page
