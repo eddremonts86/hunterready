@@ -599,13 +599,17 @@ is the argument for the verification step and not against the plan.
    the moment it stops being cheap is the first payment, not the release. Today a rename is 20
    occurrences across 7 files, all documentation and none in `src/`.
 
-   **Attempted programmatically 2026-08-23 and stopped on purpose.** WIPO's Global Brand Database
-   answers with an anti-bot challenge, and TMview and EUIPO's public query paths do not answer at all.
-   A bot challenge is a request not to automate, and defeating one to obtain a legal fact would make
-   the record worth less than no record — so this stays a ten-minute manual job, and plan 03 block 2
-   now carries the two register URLs, the two queries and the Nice classes (9 and 42) so it is not
-   research. A web search finds no mark of that name, only unrelated `Hunter*` marks in firearms and
-   optics; that is **not** a register search and must not be filed as one.
+   **Searched 2026-08-23 and the exact name is free.** EUIPO's own register: `HunterReady` returns 0
+   trade marks, 0 designs, 0 owners, 0 representatives, against a **control of 802** for `Hunter` — and
+   its basic search matches substrings, so nothing in the register contains the string. TMview agrees
+   across 83 offices and 142.4 M marks. Plan 03 block 2 has every query with a reproducible URL.
+
+   Two things it did not settle. **The official Danish register is unsearched**: DKPTO's PVSonline puts
+   a reCAPTCHA on the search form, so the form was filled and left unsubmitted rather than defeat it —
+   ten minutes of Edd's time, and TMview's Danish slice is a cross-check rather than a substitute,
+   because its EUIPO slice reads 704 where EUIPO's own register reads 802. And **the residual risk is
+   `Hunter`, not `HunterReady`** — 333 marks in Nice class 9, 137 in class 42 — which is a lawyer's
+   judgement about confusing similarity and not a query anybody can run.
 
 ### Costing money today
 

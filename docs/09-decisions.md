@@ -1516,9 +1516,20 @@ Still open:
    `.com` `.dev` `.app` `.dk` `.io` `.co` `.net`, each checked against a control domain that is
    certainly registered. `.dev` is the one being bought.
 
-   **The trademark half is still open, and its trigger moved.** It is no longer "needed by v1.0" but a
-   precondition of pricing (plan 03), because the moment a collision stops being cheap is the first
-   invoice, not the release. Attempted programmatically on 2026-08-23 and abandoned on purpose: WIPO's
-   database answers with an anti-bot challenge, and defeating one to obtain a legal fact would make the
-   record worth less than no record. TMview and EUIPO's public query paths did not answer at all. Plan
-   03 block 2 carries the two register URLs and the exact queries. _Needed by: the first payment._
+   **Trademark searched 2026-08-23, and the exact name is free.** EUIPO's own register returns nothing
+   for `HunterReady` — 0 across trade marks, designs, owners and representatives — against a control of
+   **802** for `Hunter`, and its basic search matches substrings, so nothing in the register contains the
+   string at all. TMview agrees across 83 offices and 142.4 M marks, including its Danish slice.
+
+   **What is not settled**, and both halves are recorded in plan 03 block 2 with reproducible URLs:
+
+   - **The official Danish register was not searched.** DKPTO's PVSonline puts a reCAPTCHA on the form;
+     the form was filled and left unsubmitted rather than defeat it, because a legal fact obtained that
+     way is worth less than no record. TMview's DK slice is a cross-check, not a substitute — its EUIPO
+     slice is 704 where EUIPO's own register says 802. Ten minutes of Edd's time.
+   - **The residual risk is `Hunter`, not `HunterReady`**: 333 marks in Nice class 9 and 137 in class 42
+     at EUIPO. Whether a coined compound is confusingly similar to that family is a judgement and not a
+     query, which is what "a clean search is not a legal opinion" means in practice.
+
+   The trigger also moved: this is no longer "needed by v1.0" but a precondition of pricing, because the
+   moment a collision stops being cheap is the first invoice. _Needed by: the first payment._

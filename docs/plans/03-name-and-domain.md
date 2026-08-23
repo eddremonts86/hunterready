@@ -60,43 +60,90 @@ after payments open touches all of those plus the thing customers recognise.
 - [ ] Check `hunterready` on `.com`, `.dev`, `.app`, and `.dk` given the market. Record prices.
 - [ ] **Verify:** the answer is a list with prices and dates, not an impression.
 
-### Block 2: trademark (30 min) — **attempted 2026-08-23 and it cannot be done from here**
+### Block 2, searched 2026-08-23 — clean on the exact name, and the residual risk is `Hunter` itself
 
-- [ ] Search EUIPO and the Danish register for "HunterReady" and near neighbours in the software and
+- [x] Search EUIPO and the Danish register for "HunterReady" and near neighbours in the software and
       recruitment classes.
-- [ ] **Verify:** a recorded search with the register, the classes and the date. A clean search that
-      nobody can date is not evidence.
+- [x] **Verify:** recorded below with the register, the query, the classes and the date.
+- [ ] **The official Danish register is still unsearched, and it is the one gap.** See below.
 
-**Why it is still unchecked, recorded so nobody repeats the attempt.** All three registers were tried
-programmatically and none is reachable:
+**This is a search, not a legal opinion**, exactly as this plan said before it was run. It establishes
+that the exact name is unoccupied. It does not establish that the name is defensible, because the
+question a lawyer would ask is not about `HunterReady` — it is about confusing similarity to `Hunter`,
+and the numbers below are the size of that question rather than an answer to it.
 
-| register                   | result                                                                               |
-| -------------------------- | ------------------------------------------------------------------------------------ |
-| WIPO Global Brand Database | Answers with an **altcha anti-bot challenge** instead of results.                    |
-| TMview (`tmdn.org`)        | The documented search endpoint does not answer (connection failure, no HTTP status). |
-| EUIPO eSearch plus         | Same — the public query path does not answer, and its open API needs an OAuth key.   |
+#### EUIPO — eSearch plus, the official EU register · 2026-08-23
 
-The WIPO block is the decisive one and it is not a technical obstacle to work around: **a bot
-challenge is a request not to automate this**, and defeating one to obtain a legal fact would make the
-resulting record worth less than no record. So this block stays open and it stays Edd's.
+| query                                                                  | result                                                    |
+| ---------------------------------------------------------------------- | --------------------------------------------------------- |
+| Basic search, all tabs: `HunterReady`                                  | **0 trade marks, 0 designs, 0 owners, 0 representatives** |
+| Advanced: mark name **contains** `HunterReady`                         | **no results**                                            |
+| _Control_: mark name **contains** `Hunter`                             | **802**                                                   |
+| Mark name contains `Hunter`, Nice class **9** (software)               | **333**                                                   |
+| Mark name contains `Hunter`, Nice class **42** (SaaS, software design) | **137**                                                   |
 
-**What is worth knowing anyway, clearly labelled as not a search.** A general web search for
-`"HunterReady" trademark` surfaces no mark of that name — only unrelated `Hunter*` marks in firearms
-and optics (`HUNTER`, `HUNTER UP`, `HUNTER SELECT`, `HUNTER HANK`), none of them in the classes that
-matter here. **That is absence of evidence from a search engine, not evidence of absence from a
-register**, and it must not be recorded as a clean search. It does suggest the exact-match risk is
-low and the real question is confusing similarity to `Hunter`, which is a lawyer's judgement rather
-than a query.
+The control is the point. A zero from a search nobody has proved can return a number is worth nothing —
+the same reasoning as checking domain availability against a domain that is certainly registered. 802
+also matches what the basic search reports across its trade-mark tab, from a different code path.
 
-**The ten-minute version, for whoever does it.** Both are free and neither needs an account:
+**The basic search matches substrings**, which makes the zero stronger than an exact-match zero would
+be: querying `Hunter` returns `HunterDouglas` and `DERBI-HUNTER`, so nothing anywhere in the register
+contains the string `HunterReady`.
 
-1. **EUIPO** — <https://euipo.europa.eu/eSearch/> → Trade marks → basic search `HunterReady`, then
-   again as `Hunter*` filtered to **Nice class 9** (software) and **class 42** (SaaS, software design).
-   Class 35 is worth a look too if the product is ever described as recruitment services.
-2. **Denmark** — <https://onlineweb.dkpto.dk/> (Patent- og Varemærkestyrelsen), same two queries.
+Reproducible URLs, which is what makes this evidence rather than an assertion:
 
-Record for each: the register, the query, the classes, the date, and the count. A screenshot per
-register is enough, and the date is the part that makes it evidence.
+```
+https://euipo.europa.eu/eSearch/#basic/1+1+1+1/100+100+100+100/HunterReady
+https://euipo.europa.eu/eSearch/#advanced/trademarks/1/100/n1=MarkVerbalElementText&v1=Hunter&o1=AND&c1=CONTAINS&n2=GoodsServicesClassNumber&v2=9&o2=AND&sf=ApplicationNumber&so=asc
+```
+
+⚠️ **Changing the hash does not re-run the search** — the page keeps showing the previous result, which
+is how a stale zero can be mistaken for an answer. Paste the URL and **reload**, then check that the
+form fields actually hold the values before believing the count. This cost one wrong reading during
+this search: `Hunter*` appeared to return 0, which was the previous query's zero still on screen, not a
+statement about wildcards.
+
+#### Denmark — the official register was **not** searched, and this is deliberate
+
+DKPTO's PVSonline (<https://onlineweb.dkpto.dk/pvsonline/Varemaerke>) puts a **reCAPTCHA on the search
+form**. That is the site asking for a human, and defeating it to obtain a legal fact would produce a
+record worth less than no record — so the form was filled and left unsubmitted. Two things worth
+keeping from having got that far:
+
+- Its trademark data was current to **2026-08-21**, so it is not a stale register.
+- It states that it **excludes EU trade marks** by design. So DKPTO and EUIPO are genuinely two
+  searches, not one with a fallback.
+
+**What ten minutes of Edd's time closes:** open that URL, tick both `DKvaremærke` and `MPvaremærke`
+(they default on), set `Mærketekst` to `Indeholder` + `HunterReady`, solve the check, press `Søg`.
+Then again with `Hunter` and `Klasse (Nice)` 9, and once more with 42.
+
+#### TMview — the EUIPN's own federated tool, as a cross-check · 2026-08-23
+
+<https://www.tmdn.org/tmview/#/tmview/results?page=1&pageSize=30&criteria=C&basicSearch=Hunter>
+
+| query                                                  | result     |
+| ------------------------------------------------------ | ---------- |
+| `HunterReady`, all offices (142.4 M marks, 83 offices) | **0 rows** |
+| _Control_: `Hunter`, all offices                       | **19,133** |
+| ⤷ of which **Dinamarca – DKPTO**                       | **59**     |
+| ⤷ of which EUIPO                                       | 704        |
+| ⤷ Germany 463 · Sweden 105 · Norway 69                 | context    |
+
+**TMview says of itself that it is not an official register and has no legal effect**, and the numbers
+show why that matters: its EUIPO slice is **704** where EUIPO's own register says **802**, about 12%
+short. So the Danish zero above is real but weaker evidence than the EUIPO zero, and it does not
+replace the official search.
+
+#### What this leaves
+
+- **The exact name is free** in the EU register and in every office TMview federates. That was the
+  question blocking plan 01, and on the exact name it is answered.
+- **The residual risk is `Hunter`**, with 333 marks in class 9 and 137 in class 42 at EUIPO alone. None
+  of the ones surfaced in passing is in this market — `Hunter Douglas` (blinds), `Hunter Fan Company`,
+  `Hunter Boots`, `DERBI-HUNTER` — but 470 marks is not a list to eyeball, and whether a coined compound
+  ending in a common English word is confusingly similar to that family is a judgement, not a query.
+- **One official register is unsearched**, and it is Edd's ten minutes.
 
 ### Block 3: decide and buy (20 min)
 
