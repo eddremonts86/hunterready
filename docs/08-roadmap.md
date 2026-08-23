@@ -469,10 +469,31 @@ erasure.
   That message now names the two downloads that work, and the failure is a `422` with a distinguishable
   log code rather than a `500` that looked like every other render bug.
 
-  So what is left here is a **decision, and it is now a well-posed one**: bundle a Hebrew and an Arabic
-  face (Noto Sans Hebrew and Noto Sans Arabic are the obvious candidates, and unlike CJK they are
-  small), then find out what takumi does with reading order. The probe goes red the day a face lands,
-  which is the notification that the second question has become askable.
+  **The second question was then asked too, the same day, and it is the one that matters — ADR-035.** A
+  real `NotoSansHebrew-Regular.ttf` was put in front of the renderer rather than reasoned about:
+
+  - **Glyphs are the easy half.** Register the face and it renders. takumi falls back across every
+    registered family on its own — the `fontFamilies` chain option changed nothing and produced a
+    byte-identical PDF.
+  - **The layout is correct.** Bidi applied, the RTL paragraph auto-aligned right, `12` keeping its LTR
+    run inside the Hebrew sentence. Looked at, not inferred.
+  - **The text layer comes back in visual order.** `דוד כהן` extracts as `כהן דוד` — surname first. Every
+    token survives; the sequence within a line is reversed. `tagged: true` produces a structure tree with
+    no text in it, so nothing can recover logical order from it either.
+
+  So the blocker is neither the font nor bidi: **a PDF stores glyphs in the order they are painted, and
+  this product's spine is an extraction.** Bundling the faces would ship a document that looks perfect
+  and silently fails the ATS round-trip — the rule CLAUDE.md says has no exceptions — which is strictly
+  worse than a refusal somebody can see.
+
+  **And the `.docx` keeps logical order exactly**, verified by reading our own output back with the same
+  library ingestion uses. For RTL that makes the Word download the format with the _better_ ATS
+  guarantee, so the sentence `/api/render` now returns is advice rather than an apology.
+
+  What is left is a decision with the cost on the table, and it is Edd's: ship RTL PDFs with the ATS
+  claim narrowed for those scripts, wait for a renderer that writes a logical-order text layer, or keep
+  today's behaviour. ADR-035 has the three options. The probe test goes red the day a face is bundled,
+  deliberately — that is a decision, not a font drop.
 
 ## v0.10 — "It can be written from nothing" · shipped 2026-08-15
 
@@ -704,8 +725,10 @@ is the argument for the verification step and not against the plan.
 - **CJK and RTL** are v1.0 items on the list above, but neither blocks the release the way pricing
   does: they are decisions about which market the deployed image is for. **RTL's status was recorded
   here as _unverified_ for five days and that was one command away from being an answer** — it is now
-  probed and the answer changed the shape of the item (see v1.0). Two of the three export formats
-  already work in Hebrew and Arabic; the PDF needs a font before bidi is even a question.
+  probed twice over and the answer changed the shape of the item (see v1.0 and ADR-035). Two of the
+  three export formats already work in Hebrew and Arabic, and the `.docx` has the better ATS guarantee
+  of the two. The PDF's blocker is not the font and not bidi — both work — it is that its text layer
+  comes back in visual order.
 
 ## Deliberately parked
 

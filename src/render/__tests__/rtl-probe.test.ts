@@ -5,13 +5,15 @@
  *
  * The roadmap listed right-to-left as *unverified, not broken* — "a font is the smaller half: the
  * renderer's bidi behaviour is unknown" — and named the cheap first move, which is this probe. Run on
- * 2026-08-23, it turns out the halves are the other way round. **The font is the blocking half and
- * bidi cannot be asked about at all yet**, because takumi refuses before it lays anything out: none of
- * the ten bundled families carries a Hebrew or an Arabic block, and the renderer's answer is
- * `MissingGlyphs`, not a reversed line.
+ * 2026-08-23, and **neither half was where the entry thought it was.**
  *
- * That is the ADR-022 order holding up a second time. Bundling an Arabic face and *then* asking about
- * bidi is the same mistake as adding fontsource's `cyrillic` subset and assuming the glyphs arrived.
+ * As shipped, takumi refuses before it lays anything out: none of the ten bundled families carries a
+ * Hebrew or an Arabic block, so the answer is `MissingGlyphs` rather than a reversed line. That is what
+ * the cases below assert, and it is the state of the product.
+ *
+ * But the font turns out to be the *easy* half, not the blocking one — see ADR-035 below — and bidi
+ * turns out to be supported. What blocks RTL is neither: it is that a PDF's text layer comes back in
+ * visual order, and an extraction is this product's spine.
  *
  * ## The part that was worth finding
  *
@@ -21,12 +23,29 @@
  * so: `/api/render` answered every failure with "please try again", which for a missing glyph is a
  * button somebody can press forever.
  *
+ * ## The second question, asked and answered — ADR-035
+ *
+ * Do not read the above as "so bundle the font and see". That was tried, on 2026-08-23, with a real
+ * `NotoSansHebrew-Regular.ttf` in the fallback chain, and the answer is why no face is bundled:
+ *
+ *   glyphs        register the face and it renders. `fontFamilies` is not even needed — takumi falls
+ *                 back across every registered family on its own, byte-identically.
+ *   layout        **correct.** Bidi applied, RTL paragraph right-aligned, `12` keeping its LTR run
+ *                 inside the Hebrew sentence. Looked at, not inferred.
+ *   text layer    **visual order.** Every token intact, the sequence within a line reversed.
+ *                 `דוד כהן` extracts as `כהן דוד` — surname first.
+ *   tagged: true  a structure tree with no text in it. Cannot restore logical order; identical
+ *                 extraction either way.
+ *
+ * A PDF stores glyphs in the order they are painted, and for RTL that is visual order. This product's
+ * spine is an extraction, so bundling the face would produce **a document that looks perfect and
+ * silently fails the one thing the product sells** — which is worse than a visible refusal.
+ *
  * ## Why this stays as a test
  *
  * It is a characterisation test, like `deepseek-schema.test.ts`: it records an answer that is true
  * today and is **notification when it stops being true**. Bundle a Hebrew or Arabic face and the first
- * two cases go red — which is precisely the moment somebody has to go and find out what takumi does
- * with bidi, and the moment this file should be replaced by a test that asserts reading order.
+ * cases go red — deliberately, because that is a decision with ADR-035 attached and not a font drop.
  *
  * It also holds the one string `classifyRenderFailure` depends on. That prefix is another library's
  * `Display` output; the classifier goes blind the day takumi rewords it, and a test that hardcoded the
@@ -149,6 +168,24 @@ describe('the two downloads that do not use our fonts', () => {
   it('exports Hebrew to .docx, because Word brings its own face', () => {
     const bytes = renderDocx(cv('hebrew'))
     expect(bytes.length).toBeGreaterThan(0)
+  })
+
+  it('keeps Hebrew in logical order in the .docx, which the PDF cannot', async () => {
+    /*
+      The assertion the interface's sentence rests on. `/api/render` tells somebody with an RTL CV that
+      the Word download works, and for that to be advice rather than an apology the `.docx` has to be
+      *better* than the PDF for the thing this product sells — not merely available.
+
+      It is. Word applies bidi at display time, so the file keeps the order the person typed, and an
+      extractor reading it gets `דוד כהן` rather than `כהן דוד`. Read back with mammoth, which is the
+      same library our own ingestion uses, so this is the round trip a screener's parser makes.
+    */
+    const mammoth = await import('mammoth')
+    const { value } = await mammoth.extractRawText({
+      buffer: Buffer.from(renderDocx(cv('hebrew'))),
+    })
+    expect(value).toContain(CVS.hebrew.fullName)
+    expect(value).toContain(CVS.hebrew.bullet)
   })
 
   it('exports Hebrew to a web page, with the name still in it', async () => {
