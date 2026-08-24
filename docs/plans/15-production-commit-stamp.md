@@ -59,7 +59,7 @@ earlier moment.
       read correctly in review, shipped, and changed nothing. `src/lib/build-stamp.ts` treats `unknown`
       and empty string as absent; that is the third case in `build-stamp.test.ts` and the reason the
       file is worth having.
-- [x] **Verified on a real build.** `.claude/launch.json` → `hunterready-release-configured` serves with
+- [x] **Verified on a real build.** `.claude/launch.json`'s single entry serves with
       `SOURCE_COMMIT=$(git rev-parse HEAD)` and no build arg, and `/api/health` answered
       `"build": "532e0d79315445d2c50c5241271e937b8c61f342"` — the exact SHA of `HEAD`.
 - [ ] **Verify against production:** deploy and read `/api/health`. The SHA must equal

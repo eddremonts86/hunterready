@@ -125,7 +125,7 @@ intact and writes a row claiming otherwise.
 **The third row was added 2026-08-23 and this block said it "needs keys".** It needed two variables
 that are not empty, which is a different thing: `hasCheckout()` reads the environment, not Stripe, so
 the whole path from `process.env` through `/api/processing` to the button is exercisable with the same
-fixtures the tests use. `.claude/launch.json` → `hunterready-release-configured` is that rehearsal, and
+fixtures the tests use. `.claude/launch.json`'s single entry is that rehearsal, and
 on it `/api/processing` answers `beta: false, checkoutOpen: true, price: "€12"` while the section
 renders the heading above and exactly one button, "Get Pro", with the VAT line under it.
 

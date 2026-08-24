@@ -589,8 +589,9 @@ is the argument for the verification step and not against the plan.
    `HR_UNLOCK_DESIGNS` rather than defaulting them off, and takes the word "beta" out of the interface
    at the same instant. `entitlements.test.ts` and `production-parity.parity.test.ts` both prove the
    released state against a real build — the latter with both older switches set against it — which
-   is the part that would rot silently. Rehearse it with `pnpm host` on `:3012`
-   (`.claude/launch.json` → `hunterready-release`).
+   is the part that would rot silently. Rehearse it with
+   `HR_RELEASE=true PORT=3012 pnpm host`, or with `.claude/launch.json`'s single entry, which sets it
+   along with the Stripe fixtures.
 3. **Name and domain** (docs/09 question 8). **Availability checked 2026-08-19: `hunterready` is free
    on all seven of `.com` `.dev` `.app` `.dk` `.io` `.co` `.net`**, each method controlled against a
    domain that is certainly registered. `.dev` is being bought at Porkbun, where `builderhunt.dev`
@@ -714,7 +715,7 @@ is the argument for the verification step and not against the plan.
     absences they are, and `build-stamp.test.ts` has that case as its centre.
 
     Verified on a real build: with no build arg and `SOURCE_COMMIT` alone, `/api/health` reported the
-    exact SHA of `HEAD`. Rehearse it with `.claude/launch.json` → `hunterready-release-configured`.
+    exact SHA of `HEAD`. Rehearse it with `.claude/launch.json`'s single entry.
     **Still unverified against the live site**, which needs one deploy — the acceptance criterion in
     plan 15 stays unchecked until `pnpm stale --url https://hunterready.eduardoinerarte.dk` answers.
 

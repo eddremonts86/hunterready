@@ -92,10 +92,13 @@ Rehearse it first — this is the one state a laptop otherwise cannot show you, 
 and `HR_UNLOCK_DESIGNS` both open the catalogue in development:
 
 ```bash
-pnpm host   # :3011, beta — then the release view on :3012, in a second tab
+pnpm host                          # :3011, beta — what production serves today
+HR_RELEASE=true PORT=3012 pnpm host   # :3012, released — what it will serve
 ```
 
-`.claude/launch.json` carries `hunterready-release` for the second one. Compare the two.
+Two tabs, compared. `.claude/launch.json` was cut to a single entry on 2026-08-23 and that entry is
+the released view with the Stripe fixtures set, so it covers the second command and a little more; the
+beta view is a bare `pnpm host`.
 
 Then, after the restart, four facts and one refusal:
 

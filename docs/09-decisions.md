@@ -970,7 +970,9 @@ reaches for to answer "are we released" — and `HR_RELEASE` cannot be argued wi
 
 **Making it a code constant flipped at release.** It would make the release a deploy of new code
 rather than a restart, and — more to the point — it could not be rehearsed. `HR_RELEASE=true` on a
-laptop is `pnpm host` on `:3012` beside the beta view on `:3011`, the two compared in two tabs.
+laptop is `HR_RELEASE=true PORT=3012 pnpm host` beside a plain `pnpm host` on `:3011`, the two
+compared in two tabs. `.claude/launch.json` carries the released view as its single entry; the beta one
+is a bare `pnpm host`, which is what CLAUDE.md documents as the default loop.
 
 ### The exit from ADR-030, restated
 
