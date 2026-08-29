@@ -7,7 +7,26 @@
  * would pass that trivially while a dangling row sat in production.
  *
  * Skips itself when no database is reachable, so CI without one is not red for the wrong reason.
- * `pnpm db:test:up` starts one; the deploy runbook says how.
+ *
+ * **`pnpm db:test:up` does not exist, and this line used to say it did.** There is no such script and
+ * there deliberately is not one now: the `db` service the dev loop already needs is the same database,
+ * and a second name for it is the thing four launch entries were just cut down to one to avoid. What
+ * works, run and confirmed on 2026-08-23 — 40 tests, this file and `webhook.test.ts`:
+ *
+ *     docker compose -f docker-compose.yml -f docker-compose.local.yml up -d db
+ *     DATA_ENCRYPTION_KEY=$(openssl rand -hex 32) \
+ *     DATABASE_MIGRATION_URL="postgres://hunterready_owner:$POSTGRES_PASSWORD@localhost:5433/hunterready" \
+ *       pnpm vitest run src/db src/routes/api/billing
+ *
+ * `POSTGRES_PASSWORD` is the one in `.env`; `scripts/dev/host.mjs` composes the same URL from the same
+ * file, so if `pnpm host` reaches the database this will too.
+ *
+ * **Bring the key, or two tests fail rather than skip.** Without `DATA_ENCRYPTION_KEY` the rows are
+ * stored in plaintext by design (ADR-021: unset means plaintext, announced rather than assumed), so the
+ * two ADR-021 assertions below go red and look like a persistence bug. They are deliberately not
+ * skipped when the key is absent — a privacy guarantee that quietly opts out of being checked in
+ * exactly the runs equipped to check it is worth less than a confusing red — which is why the key is
+ * named here rather than left to be discovered.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Sql } from 'postgres'
