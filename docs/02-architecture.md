@@ -111,7 +111,7 @@ Docker image → Coolify on Hetzner (existing setup, see the `coolify-deploy` an
 - `takumi-pdf` needs no Chromium — the image stays small (~200 MB) and cold start
   is fast. This is the main practical win over a Puppeteer/`html-pdf` approach.
 - **The WASM must be copied into the server output.** `pnpm build` runs
-  `scripts/copy-wasm.mjs`, which places `takumi_pdf_wasm_bg.wasm` at
+  `scripts/copy-assets.mjs`, which places `takumi_pdf_wasm_bg.wasm` at
   `.output/server/pkg/`. Rollup does not emit it, and without it the built server 500s
   on the first render while `vite dev` works fine (ADR-005 spike, Block 1). This is why
   the image can ship `.output/` alone with no `node_modules`.

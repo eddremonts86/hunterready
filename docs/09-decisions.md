@@ -100,7 +100,7 @@ _Cost:_ no saved versions, no application tracking until v0.5.
 > `ENOENT .output/server/pkg/takumi_pdf_wasm_bg.wasm`. Cause: Rollup bundles
 > `takumi-pdf` into `.output/server/_libs/`, but the module loads its WASM at runtime
 > via `readFileSync(new URL("../pkg/…wasm", import.meta.url))`, which Rollup does not
-> see as an import, so the 3.7 MB binary is never emitted. Fix: `scripts/copy-wasm.mjs`
+> see as an import, so the 3.7 MB binary is never emitted. Fix: `scripts/copy-assets.mjs`
 > copies it to `.output/server/pkg/` as part of `pnpm build`, keeping the output
 > self-contained (no `node_modules` needed in the image). Verified: production server
 > returns `200 application/pdf`, 2 pages, text extracted in reading order by an
