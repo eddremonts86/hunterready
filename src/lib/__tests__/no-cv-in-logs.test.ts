@@ -91,6 +91,16 @@ describe('the allowlist is a reviewed list', () => {
     expect(names.sort()).toEqual(
       [
         'attempt',
+        /*
+          Added 2026-08-19 with plan 01's webhook, and this is the diff the pin exists to produce.
+
+          `billingKind` is Stripe's event type — `customer.subscription.updated` — and
+          `billingOutcome` is one of `pro`, `free`, `ignored`. The handler passes exactly these two
+          and nothing else from the event, and the ledger they describe holds no amount, no currency,
+          no card and no customer (ADR-034), so there is no personal value in reach of either name.
+        */
+        'billingKind',
+        'billingOutcome',
         'code',
         'event',
         'format',

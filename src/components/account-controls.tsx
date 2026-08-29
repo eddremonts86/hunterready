@@ -29,11 +29,56 @@ import { ButtonLabel } from '@/components/working'
  * Naming the operation lets the confirmation stay on screen and say what it is doing.
  */
 type State =
-  'idle' | 'exporting' | 'deleting' | 'confirming' | 'done' | 'none' | 'error'
+  | 'idle'
+  | 'exporting'
+  | 'deleting'
+  | 'confirming'
+  | 'done'
+  | 'none'
+  | 'error'
+  | 'billing'
 
 export function AccountControls() {
   const [state, setState] = useState<State>('idle')
   const [message, setMessage] = useState<string | undefined>()
+
+  /**
+   * Cancelling, in two clicks: this one, then Stripe's.
+   *
+   * The plan's criterion is "reachable from the account panel in no more than two clicks", and
+   * Stripe's billing portal is the shortest honest route — it cancels, shows invoices and updates
+   * the card, and it is the same page whatever we change here later.
+   *
+   * **`404` is the ordinary answer, not an error.** Almost everybody reading this panel has never
+   * paid, and the button says so rather than opening a page about a subscription that does not
+   * exist. Nothing here touches the plan: the portal emits webhooks like anything else, and
+   * `/api/billing/webhook` stays the only path to that column.
+   */
+  const manageBilling = async () => {
+    setState('billing')
+    setMessage(undefined)
+    try {
+      const response = await fetch('/api/billing/portal', { method: 'POST' })
+      if (response.status === 404) {
+        setState('idle')
+        setMessage('There is no subscription on this account.')
+        return
+      }
+      const payload = (await response.json().catch(() => ({}))) as {
+        url?: string
+        message?: string
+      }
+      if (!response.ok || typeof payload.url !== 'string') {
+        setState('idle')
+        setMessage(payload.message ?? 'We could not open the billing page.')
+        return
+      }
+      window.location.href = payload.url
+    } catch {
+      setState('idle')
+      setMessage('We could not reach the server. Please try again.')
+    }
+  }
 
   const exportEverything = async () => {
     setState('exporting')
@@ -158,7 +203,25 @@ export function AccountControls() {
           </button>
           <button
             type="button"
-            disabled={state === 'exporting'}
+            disabled={state === 'exporting' || state === 'billing'}
+            aria-busy={state === 'billing'}
+            onClick={() => void manageBilling()}
+            className="btn btn-quiet flex-1 px-4 py-2.5 text-[14px]"
+          >
+            {/*
+              "Subscription", not "Cancel". Somebody who wants to cancel finds it here, and somebody
+              who wants an invoice or a new card finds it in the same place — and a button labelled
+              Cancel is one nobody presses to check a receipt.
+            */}
+            <ButtonLabel
+              busy={state === 'billing'}
+              idle="Subscription and invoices"
+              working="Opening…"
+            />
+          </button>
+          <button
+            type="button"
+            disabled={state === 'exporting' || state === 'billing'}
             onClick={() => setState('confirming')}
             className="btn btn-quiet flex-1 px-4 py-2.5 text-[14px]"
           >

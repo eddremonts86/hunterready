@@ -100,7 +100,7 @@ _Cost:_ no saved versions, no application tracking until v0.5.
 > `ENOENT .output/server/pkg/takumi_pdf_wasm_bg.wasm`. Cause: Rollup bundles
 > `takumi-pdf` into `.output/server/_libs/`, but the module loads its WASM at runtime
 > via `readFileSync(new URL("../pkg/…wasm", import.meta.url))`, which Rollup does not
-> see as an import, so the 3.7 MB binary is never emitted. Fix: `scripts/copy-wasm.mjs`
+> see as an import, so the 3.7 MB binary is never emitted. Fix: `scripts/copy-assets.mjs`
 > copies it to `.output/server/pkg/` as part of `pnpm build`, keeping the output
 > self-contained (no `node_modules` needed in the image). Verified: production server
 > returns `200 application/pdf`, 2 pages, text extracted in reading order by an
@@ -756,6 +756,149 @@ line.
 
 ---
 
+## ADR-035 — Right-to-left: the layout is right, the text layer is not, and the `.docx` is the ATS-safe format
+
+**2026-08-23 · Accepted for the part that is a measurement. The one branch that changes behaviour is Edd's and is named at the end.**
+
+ADR-022 closed Cyrillic and Greek and left two things open: CJK, and right-to-left. The roadmap carried
+RTL as _unverified, not broken_ — "a font is the smaller half: the renderer's bidi behaviour is
+unknown" — and named the cheap first move. This is that probe, and it found the opposite of what the
+entry assumed twice over.
+
+### What takumi 0.6.4 actually does
+
+| question       | answer                                                                                                                                                                                                                                           |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| glyphs         | Register a Hebrew face and it renders. **No `fontFamilies` chain needed** — takumi falls back across every registered family on its own; the chain option changed nothing and produced a byte-identical PDF.                                     |
+| layout         | **Correct.** Bidi applied, the RTL paragraph auto-aligned to the right, and `12` kept its LTR run inside the Hebrew sentence. Looked at, not inferred — the page is right.                                                                       |
+| text layer     | **Visual order.** `ניהלתי צוות של 12 אחיות` comes back as `אחיות 12 של צוות ניהלתי` — every token intact, the sequence within the line reversed. `דוד כהן` extracts as `כהן דוד`: surname first.                                                 |
+| `tagged: true` | Produces a structure tree, and it does not help. The tree is 378 characters of `role: "P"` nodes pointing at marked-content ids; it carries **no text**, so nothing can recover logical order from it. Identical extraction tagged and untagged. |
+| `.docx`        | **Logical order, exactly.** `mammoth.extractRawText` on our own `renderDocx` output returns the name and the bullet verbatim. Word applies bidi at display time, so the file keeps the order the person typed.                                   |
+
+So the font was never the interesting half, and neither was bidi support — takumi has it. **The interesting
+half is that a PDF stores glyphs in the order they are painted**, which for RTL is visual order, and this
+product's spine is an extraction.
+
+### Why this decides against bundling the faces, for now
+
+`CLAUDE.md`: _"Every template obeys the ATS ruleset and must pass the round-trip test. No exceptions,
+including 'just for this design'."_ An RTL PDF cannot pass that round-trip as written, because the
+round-trip is `unpdf` reading the file back and asserting fields survive **in reading order**.
+
+Bundling Noto Sans Hebrew and Noto Sans Arabic is two entries in `scripts/make-fonts.mjs` and it was
+measured as working. It was deliberately not done, because of what it would produce: **a document that
+looks perfect and silently fails the one thing this product sells.** That is worse than the refusal — the
+refusal is visible. A candidate handed a beautiful Hebrew PDF has no way to know a screener will read
+their surname as their given name, and we would have taken the ATS claim off the only page that carries
+it and left it on the marketing.
+
+The refusal already exists and is now provably the right advice rather than an apology for a missing
+font: `/api/render` answers `422` naming the two downloads that work, and for RTL the `.docx` is not a
+consolation prize — **it is the format with the better ATS guarantee of the two.** `rtl-probe.test.ts`
+asserts that, so the sentence in the interface cannot drift from what the code does.
+
+### What would change it, and what it would cost
+
+This is the branch that is Edd's, not mine:
+
+- **Ship RTL PDFs anyway**, with the limitation documented and the ATS claim narrowed for those scripts.
+  Cost: an explicit exception to the rule that has none, and a paragraph on the pricing and privacy
+  surfaces that is hard to write honestly. Gain: a PDF for two large hiring markets, which every other
+  CV tool also gets wrong in the same way, because they are all writing PDFs.
+- **Wait for a renderer that writes a logical-order text layer for RTL** (a `/ReversedChars` span, or a
+  structure tree carrying text). That is upstream work in takumi, and the probe is the bug report.
+- **Keep today's behaviour**: `.docx` and the web page for RTL, no PDF, and say so plainly. This is what
+  stands until he says otherwise.
+
+CJK is untouched by any of this and stays where ADR-022 left it: no Source face has it, Noto Sans CJK is
+10–16 MB per weight, and it is a decision about the deployed image.
+
+---
+
+## ADR-034 — A merchant of record sells the subscription, not us
+
+**2026-08-19 · Proposed, and _not_ accepted.**
+
+> **Edd chose Stripe, and takes the OSS obligation himself.** The analysis below stands and is left
+> unedited, because it is the reasoning that will be re-read the first quarter a VAT return is due —
+> and because it names the exact volume at which this decision was going to be revisited anyway. It
+> was a business call with the cost on the table, not an oversight.
+>
+> What that decides in code: the checkout is Stripe's hosted Checkout Session with
+> `automatic_tax` on, so the **rate charged** is right from the first sale. **Registering for OSS in
+> Denmark and filing the quarterly return is Edd's**, and no amount of configuration makes it ours.
+> Everything below about the shape of the integration held: a hosted checkout, a signed webhook, one
+> column, and only the first two provider-specific.
+
+_Original proposal follows._
+
+The fee is a business decision and belongs to Edd. The engineering consequences are recorded here
+either way, because they are nearly identical and that is the point.
+
+Plan 01 block 2 said "Stripe unless there is a reason". There is a reason, and it is not technical.
+
+### The question the block was actually asking
+
+"Confirm it supports DK VAT (MOSS/OSS) **without extra work**, because a consumer subscription across
+the EU is a VAT question before it is a code question."
+
+The answer is that it does not, and no payment processor does. **Stripe is a payment processor, not a
+merchant of record.** Stripe Tax will calculate the right rate and can file returns as a paid add-on,
+but the legal obligation to register for OSS, collect, remit and file **stays with the seller**. For a
+Danish company selling a digital subscription to consumers across the EU, VAT is due in the _buyer's_
+country from the first sale, which means an OSS registration in Denmark and a quarterly return.
+
+That is not a line of code. It is a recurring administrative obligation with a penalty attached, and
+this product has one part-time person.
+
+### What it costs to make it go away
+
+A merchant of record — Polar, Lemon Squeezy, Paddle — becomes the **legal seller**. They collect the
+VAT, they hold the registrations, they file. Priced against Edd's range:
+
+| price/month | Stripe 2.9% + €0.30 | MoR 5% + €0.50 | difference | at 100 subs | at 1,000 |
+| ----------- | ------------------- | -------------- | ---------- | ----------- | -------- |
+| €10         | €0.59 (5.9%)        | €1.00 (10.0%)  | €0.41      | €41/mo      | €410/mo  |
+| €15         | €0.73 (4.9%)        | €1.25 (8.3%)   | €0.52      | €52/mo      | €515/mo  |
+| €19         | €0.85 (4.5%)        | €1.45 (7.6%)   | €0.60      | €60/mo      | €599/mo  |
+
+And the Stripe column is understated: it excludes Stripe Tax per transaction, the OSS registration,
+and whatever an accountant charges for four returns a year.
+
+**So the trade is about fifty euros a month at a hundred subscribers to not do EU VAT compliance**,
+and it inverts somewhere in the high hundreds. That is a fine place for it to invert, because a
+product with a thousand subscribers can afford an accountant and a product with ten cannot afford a
+filing deadline it forgot.
+
+### The decision
+
+**Start on a merchant of record. Revisit at the volume where the spread pays for an accountant.**
+
+Not chosen between Polar, Lemon Squeezy and Paddle here — that is Edd's, and the fee tables move. What
+this ADR fixes is the _category_, because the category is what determines whether there is a
+compliance obligation at all.
+
+### Why this is a cheap decision to get wrong
+
+The integration is the same shape under all four options, and that is the argument for not agonising:
+
+1. a **hosted** checkout — a URL we send somebody to, never a card field in this codebase
+2. a **signed webhook** saying a subscription became active or stopped being active
+3. **one column** changing
+
+Only steps 1 and 2 have provider-specific code, and both are small: creating a session, and verifying
+a signature. Everything underneath — the idempotency ledger, the audited plan change, the entitlement
+drop, the pricing surface — is written against the _outcome_, not the provider. Moving from a merchant
+of record to Stripe later is a day, and this ADR is what says so out loud in advance.
+
+### What is not being decided
+
+**Not becoming a merchant of record ourselves**, ever. **Not touching card details**, under any
+provider — the risk that CLAUDE.md's rules protect against is somebody's CV leaking, and a card
+number in this codebase would be a second class of that mistake with a regulator attached.
+
+---
+
 ## ADR-033 — One switch takes the product out of beta, and it overrides the others
 
 **2026-08-19 · Accepted**
@@ -827,7 +970,9 @@ reaches for to answer "are we released" — and `HR_RELEASE` cannot be argued wi
 
 **Making it a code constant flipped at release.** It would make the release a deploy of new code
 rather than a restart, and — more to the point — it could not be rehearsed. `HR_RELEASE=true` on a
-laptop is `pnpm host` on `:3012` beside the beta view on `:3011`, the two compared in two tabs.
+laptop is `HR_RELEASE=true PORT=3012 pnpm host` beside a plain `pnpm host` on `:3011`, the two
+compared in two tabs. `.claude/launch.json` carries the released view as its single entry; the beta one
+is a bare `pnpm host`, which is what CLAUDE.md documents as the default loop.
 
 ### The exit from ADR-030, restated
 
@@ -1369,5 +1514,24 @@ Still open:
    nothing, and `auth_users.plan` decides. What is still open is only the numbers and the payment
    provider. _Needed by: v1.0._
 
-8. **Name and domain.** "HunterReady" — `.dev`/`.app`/`.com` availability and
-   trademark not checked. _Needed by: v1.0._
+8. **Name and domain.** "HunterReady". **Availability answered 2026-08-19:** free on all seven of
+   `.com` `.dev` `.app` `.dk` `.io` `.co` `.net`, each checked against a control domain that is
+   certainly registered. `.dev` is the one being bought.
+
+   **Trademark searched 2026-08-23, and the exact name is free.** EUIPO's own register returns nothing
+   for `HunterReady` — 0 across trade marks, designs, owners and representatives — against a control of
+   **802** for `Hunter`, and its basic search matches substrings, so nothing in the register contains the
+   string at all. TMview agrees across 83 offices and 142.4 M marks, including its Danish slice.
+
+   **What is not settled**, and both halves are recorded in plan 03 block 2 with reproducible URLs:
+
+   - **The official Danish register was not searched.** DKPTO's PVSonline puts a reCAPTCHA on the form;
+     the form was filled and left unsubmitted rather than defeat it, because a legal fact obtained that
+     way is worth less than no record. TMview's DK slice is a cross-check, not a substitute — its EUIPO
+     slice is 704 where EUIPO's own register says 802. Ten minutes of Edd's time.
+   - **The residual risk is `Hunter`, not `HunterReady`**: 333 marks in Nice class 9 and 137 in class 42
+     at EUIPO. Whether a coined compound is confusingly similar to that family is a judgement and not a
+     query, which is what "a clean search is not a legal opinion" means in practice.
+
+   The trigger also moved: this is no longer "needed by v1.0" but a precondition of pricing, because the
+   moment a collision stops being cheap is the first invoice. _Needed by: the first payment._

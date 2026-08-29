@@ -7,7 +7,7 @@
  *
  * ⚠️ Server-only. `takumi-pdf` is a WASM module, imported lazily so it never enters the
  * client bundle, and its binary must be copied into the build output — see
- * `scripts/copy-wasm.mjs` and the Block 1 finding in ADR-005.
+ * `scripts/copy-assets.mjs` and the Block 1 finding in ADR-005.
  */
 import type { Resume } from '@/schema/resume'
 import { documentFilename } from './filename'

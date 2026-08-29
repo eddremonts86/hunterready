@@ -2,30 +2,18 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "//": "THE DEFAULT. A real build without the image: same Postgres, same models, same WASM renderer, same bundled fonts, and `/api/render` returns a byte-identical PDF to the container's. 5 seconds end to end on this Mac — 3s to build, 2s to boot.",
-      "//2": "What it does NOT have is LibreOffice and Tesseract, which live in the image and deliberately not on a laptop (ADR-012). So `.doc` ingestion and OCR of a scan fail here and only here. Those two paths, and the last check before a release, belong to the entry below.",
-      "//3": "Needs db and llm, which are separate services and cheap: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d db llm",
-      "name": "hunterready-host",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["host"],
-      "port": 3011
-    },
-    {
-      "//": "The same build, seen the way a visitor sees it the day pricing opens. `HR_RELEASE=true` is the single switch out of beta: no Beta chip, no 'free while we are in beta' anywhere, paid designs and the mixed axes locked behind a 402, and an anonymous visitor's CV read on our own machine.",
-      "//2": "It exists because the state a switch produces has to be lookable-at before the switch is flipped in production, and this one cannot be rehearsed any other way — `NODE_ENV=development` and `HR_UNLOCK_DESIGNS` both unlock the catalogue, so a laptop always shows the beta view. `HR_RELEASE` deliberately overrides both, and it overrides `HR_THIRD_PARTY_FOR_ALL` too, which is still set in production on purpose.",
-      "//3": "3012 so it can run beside the beta view on 3011 and the two can be compared in two tabs.",
-      "name": "hunterready-release",
-      "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "HR_RELEASE=true PORT=3012 pnpm host"],
-      "port": 3012
-    },
-    {
-      "//": "The one that ships. Attaches to the real stack — the app image plus Postgres plus the model — started with `pnpm app` (Compose builds `hunterready-app:latest`; NOT `pnpm docker:run`, which starts the app alone with no database and no model, so persistence reports itself off and every generated text silently falls back to regular expressions).",
-      "//2": "Reach for it for exactly three things: `.doc` ingestion, OCR of a scan, and confirming the shipping image itself is sound before a release. Otherwise it costs 2 minutes warm and 10+ when the apt layer falls out of cache, for nothing the entry above does not already give you.",
-      "//3": "3100 because Hermes' WhatsApp bridge holds 127.0.0.1:3000 while Docker publishes on *:3000, and a URL that resolves to one of two servers depending on v4/v6 order is not something to debug twice.",
-      "//4": "There used to be a third entry here, `hunterready-ui` on 3007: Vite with HMR, proxying /api to this container. It was removed on 2026-08-18 once `pnpm host` was measured at 5 seconds. It saved two of those and required this container to be running to answer a single API call, which is the cost it existed to avoid. What was lost is HMR preserving app state across an edit; if that turns out to matter, bring it back pointing at 3011, not here.",
+      "//": "ONE environment, deliberately. There were four — :3011 beta, :3012 released, :3013 released-and-configured, :3100 attaching to the shipping container — and three of them were the same build with different switches in front of it, which is a picker with four rows and one real entry. Edd cut it to this one on 2026-08-23.",
+      "//2": "This is the most complete of them: a real build (`pnpm host`, ~5s, same Postgres and same models as production), plus `HR_RELEASE=true` so it shows the product as it will be the day pricing opens, plus the two Stripe fixtures so the pricing card renders `Get Pro`, plus `SOURCE_COMMIT` so `/api/health` reports a commit instead of `unknown`.",
+      "//3": "⚠️ It is therefore NOT what production serves today. Production is in beta: the word appears in the interface, every Pro capability is included, and an anonymous visitor's CV goes to the third-party model. To see that instead, run `pnpm host` in a terminal — no switches, port 3011 — which is what CLAUDE.md documents as the default loop and is unaffected by this file.",
+      "//4": "The Stripe values are fixtures, not credentials, and are shaped so a scanner cannot mistake them for any. So the button renders and the checkout it starts fails at Stripe with a 502: everything up to the network is real, and whether Stripe accepts our payload needs Edd's keys (plan 01 block 3).",
+      "//5": "What the deleted entries were, each one line if you want it back: released but unconfigured — `HR_RELEASE=true PORT=3012 pnpm host`. The shipping image, for .doc, OCR and the last check before a release — `pnpm app`, then browse http://localhost:3100. And before those there was a `hunterready-ui` on 3007 running Vite with HMR and proxying /api to the container; it went on 2026-08-18 once `pnpm host` was measured at five seconds.",
       "name": "hunterready",
-      "url": "http://localhost:3100"
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "HR_RELEASE=true STRIPE_SECRET_KEY=sk_test_fixture_not_a_credential_0000 HR_STRIPE_PRICE_ID=price_fixture_not_a_credential_0000 SOURCE_COMMIT=$(git rev-parse HEAD) PORT=3013 pnpm host"
+      ],
+      "port": 3013
     }
   ]
 }

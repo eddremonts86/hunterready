@@ -37,7 +37,7 @@ caller reads yet, which is exactly why it should be fixed before one does — it
 ### Block 1: the host and its test (20 min)
 
 - [ ] Add `minimaxi.chat` to the `endsWith` chain in `displayName`.
-- [ ] Write `src/routes/api/__tests__/processing-display-name.test.ts` covering
+- [x] Write `src/routes/api/__tests__/display-name.test.ts` covering
       `api.minimax.io`, `api.minimaxi.com`, `api.minimaxi.chat`, `api.deepseek.com`, and an unknown
       host that must fall through to itself.
 - [ ] **Verify:** delete one host from the map and watch the new test go red, then put it back.

@@ -52,11 +52,24 @@ Whether that is good enough is block 3's question, added below.
 
 ## Plan
 
-### Block 1: confirm the test still guards (15 min)
+### Block 1: confirm the test still guards (15 min) — **and it currently cannot, see below**
 
 - [ ] Run `pnpm test deepseek-schema` and read what it asserts.
 - [ ] **Verify:** point it at `deepseek-v4-flash` instead and watch it go red, then put pro back. A
       test skipped when the key is absent must say `skipped`, never pass quietly.
+
+⚠️ **Checked 2026-08-23: this test has never run, and the roadmap describes it as a notification it
+cannot deliver.** It is `describe.skipIf(KEY === '')` on `DEEPSEEK_API_KEY`, and that variable is set
+in no environment — not in CI, not on a laptop, and not in production, which is roadmap item 13 and
+still open. So "it goes red the day the vendor fixes it" is true only of a machine that has a key,
+and no such machine runs the suite today.
+
+That makes this block's own verify the thing to do first, and it makes **items 12 and 13 the same
+credential** rather than two items blocked on different things. The plans README lists them as
+"the vendor" and "Coolify, Edd"; one `DEEPSEEK_API_KEY` unblocks both.
+
+It skips loudly rather than passing quietly, which is what this block asked for and is the reason
+nothing here is wrong — only overstated one file away, in the roadmap.
 
 ### Block 2: when it turns (30 min, later)
 
