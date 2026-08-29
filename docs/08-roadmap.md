@@ -584,7 +584,14 @@ is the argument for the verification step and not against the plan.
 
 2. **The exit from beta.** Beta hands every Pro capability to everyone: the larger model, all 103
    designs, the mixed axes, saved CVs. Not a separate decision from item 1 — it is the same switch
-   seen from the other side, and the day pricing opens it flips. **Since 2026-08-19 it is one switch,
+   seen from the other side, and the day pricing opens it flips.
+
+   ⚠️ **The switch is not all of it, and folding this into item 1 hid the other half.** Plan 02 block 1
+   is a notice to the people already using a Pro capability for nothing: what becomes paid, when, what
+   stays free, and through which channel — signed-in accounts have addresses, anonymous visitors have
+   none, so the landing page carries it for the second group. **It is not blocked on pricing and can be
+   drafted today**, and its verify is a real check: read the notice against the copy the app has been
+   showing, and if any of it is a surprise, the Pro-tag work missed a surface. **Since 2026-08-19 it is one switch,
    `HR_RELEASE=true` (ADR-033)**, which overrides `HR_BETA_PAID_FREE`, `HR_THIRD_PARTY_FOR_ALL` and
    `HR_UNLOCK_DESIGNS` rather than defaulting them off, and takes the word "beta" out of the interface
    at the same instant. `entitlements.test.ts` and `production-parity.parity.test.ts` both prove the
@@ -592,6 +599,7 @@ is the argument for the verification step and not against the plan.
    is the part that would rot silently. Rehearse it with
    `HR_RELEASE=true PORT=3012 pnpm host`, or with `.claude/launch.json`'s single entry, which sets it
    along with the Stripe fixtures.
+
 3. **Name and domain** (docs/09 question 8). **Availability checked 2026-08-19: `hunterready` is free
    on all seven of `.com` `.dev` `.app` `.dk` `.io` `.co` `.net`**, each method controlled against a
    domain that is certainly registered. `.dev` is being bought at Porkbun, where `builderhunt.dev`
@@ -686,7 +694,10 @@ is the argument for the verification step and not against the plan.
     7,303-character schema v4-pro calls the tool with `{}` while `deepseek-v4-flash` fills it in 1.8s.
     Both were measured on the same prompt through the same Anthropic-compatible endpoint, with
     `thinking: {type: 'disabled'}` (v4-pro rejects a forced `tool_choice` otherwise). Flash ships.
-    `deepseek-schema.test.ts` goes red the day the vendor fixes it, which is the notification.
+    `deepseek-schema.test.ts` goes red the day the vendor fixes it — **on a machine that has a key.**
+    Checked 2026-08-23: it is `skipIf` on `DEEPSEEK_API_KEY`, which is set in no environment at all, so
+    the test has never run and the notification cannot arrive on its own. That makes this item and item
+    13 **the same credential**, not two items waiting on different things.
     **Decide, once it is fixed:** pro by default, or leave flash and keep pro as a choice.
 13. **DeepSeek is configured nowhere in production.** `deepseek()` returns `undefined` without
     `DEEPSEEK_API_KEY`, so the app starts clean and the model is simply absent from
