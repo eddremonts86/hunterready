@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DocsRouteImport } from './routes/docs'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ApiApplicationRouteImport } from './routes/api/application'
 import { Route as ApiCoverLetterRouteImport } from './routes/api/cover-letter'
@@ -31,6 +32,7 @@ import { Route as STokenRouteImport } from './routes/s.$token'
 import { Route as V1CapabilitiesRouteImport } from './routes/v1/capabilities'
 import { Route as V1CoverLetterRouteImport } from './routes/v1/cover-letter'
 import { Route as V1CvRouteImport } from './routes/v1/cv'
+import { Route as V1OpenapiDotjsonRouteImport } from './routes/v1/openapi[.]json'
 import { Route as V1RenderRouteImport } from './routes/v1/render'
 import { Route as V1RenderLetterRouteImport } from './routes/v1/render-letter'
 import { Route as V1RewriteRouteImport } from './routes/v1/rewrite'
@@ -39,10 +41,18 @@ import { Route as V1TranslateRouteImport } from './routes/v1/translate'
 import { Route as ApiAccountDeleteRouteImport } from './routes/api/account/delete'
 import { Route as ApiAccountExportRouteImport } from './routes/api/account/export'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiBillingCheckoutRouteImport } from './routes/api/billing/checkout'
+import { Route as ApiBillingPortalRouteImport } from './routes/api/billing/portal'
+import { Route as ApiBillingWebhookRouteImport } from './routes/api/billing/webhook'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsRoute = DocsRouteImport.update({
+  id: '/docs',
+  path: '/docs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -150,6 +160,11 @@ const V1CvRoute = V1CvRouteImport.update({
   path: '/v1/cv',
   getParentRoute: () => rootRouteImport,
 } as any)
+const V1OpenapiDotjsonRoute = V1OpenapiDotjsonRouteImport.update({
+  id: '/v1/openapi.json',
+  path: '/v1/openapi.json',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const V1RenderRoute = V1RenderRouteImport.update({
   id: '/v1/render',
   path: '/v1/render',
@@ -190,9 +205,25 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBillingCheckoutRoute = ApiBillingCheckoutRouteImport.update({
+  id: '/api/billing/checkout',
+  path: '/api/billing/checkout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBillingPortalRoute = ApiBillingPortalRouteImport.update({
+  id: '/api/billing/portal',
+  path: '/api/billing/portal',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBillingWebhookRoute = ApiBillingWebhookRouteImport.update({
+  id: '/api/billing/webhook',
+  path: '/api/billing/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/docs': typeof DocsRoute
   '/privacy': typeof PrivacyRoute
   '/api/application': typeof ApiApplicationRoute
   '/api/cover-letter': typeof ApiCoverLetterRoute
@@ -214,6 +245,7 @@ export interface FileRoutesByFullPath {
   '/v1/capabilities': typeof V1CapabilitiesRoute
   '/v1/cover-letter': typeof V1CoverLetterRoute
   '/v1/cv': typeof V1CvRoute
+  '/v1/openapi.json': typeof V1OpenapiDotjsonRoute
   '/v1/render': typeof V1RenderRoute
   '/v1/render-letter': typeof V1RenderLetterRoute
   '/v1/rewrite': typeof V1RewriteRoute
@@ -222,9 +254,13 @@ export interface FileRoutesByFullPath {
   '/api/account/delete': typeof ApiAccountDeleteRoute
   '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/billing/checkout': typeof ApiBillingCheckoutRoute
+  '/api/billing/portal': typeof ApiBillingPortalRoute
+  '/api/billing/webhook': typeof ApiBillingWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/docs': typeof DocsRoute
   '/privacy': typeof PrivacyRoute
   '/api/application': typeof ApiApplicationRoute
   '/api/cover-letter': typeof ApiCoverLetterRoute
@@ -246,6 +282,7 @@ export interface FileRoutesByTo {
   '/v1/capabilities': typeof V1CapabilitiesRoute
   '/v1/cover-letter': typeof V1CoverLetterRoute
   '/v1/cv': typeof V1CvRoute
+  '/v1/openapi.json': typeof V1OpenapiDotjsonRoute
   '/v1/render': typeof V1RenderRoute
   '/v1/render-letter': typeof V1RenderLetterRoute
   '/v1/rewrite': typeof V1RewriteRoute
@@ -254,10 +291,14 @@ export interface FileRoutesByTo {
   '/api/account/delete': typeof ApiAccountDeleteRoute
   '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/billing/checkout': typeof ApiBillingCheckoutRoute
+  '/api/billing/portal': typeof ApiBillingPortalRoute
+  '/api/billing/webhook': typeof ApiBillingWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/docs': typeof DocsRoute
   '/privacy': typeof PrivacyRoute
   '/api/application': typeof ApiApplicationRoute
   '/api/cover-letter': typeof ApiCoverLetterRoute
@@ -279,6 +320,7 @@ export interface FileRoutesById {
   '/v1/capabilities': typeof V1CapabilitiesRoute
   '/v1/cover-letter': typeof V1CoverLetterRoute
   '/v1/cv': typeof V1CvRoute
+  '/v1/openapi.json': typeof V1OpenapiDotjsonRoute
   '/v1/render': typeof V1RenderRoute
   '/v1/render-letter': typeof V1RenderLetterRoute
   '/v1/rewrite': typeof V1RewriteRoute
@@ -287,11 +329,15 @@ export interface FileRoutesById {
   '/api/account/delete': typeof ApiAccountDeleteRoute
   '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/billing/checkout': typeof ApiBillingCheckoutRoute
+  '/api/billing/portal': typeof ApiBillingPortalRoute
+  '/api/billing/webhook': typeof ApiBillingWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/docs'
     | '/privacy'
     | '/api/application'
     | '/api/cover-letter'
@@ -313,6 +359,7 @@ export interface FileRouteTypes {
     | '/v1/capabilities'
     | '/v1/cover-letter'
     | '/v1/cv'
+    | '/v1/openapi.json'
     | '/v1/render'
     | '/v1/render-letter'
     | '/v1/rewrite'
@@ -321,9 +368,13 @@ export interface FileRouteTypes {
     | '/api/account/delete'
     | '/api/account/export'
     | '/api/auth/$'
+    | '/api/billing/checkout'
+    | '/api/billing/portal'
+    | '/api/billing/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/docs'
     | '/privacy'
     | '/api/application'
     | '/api/cover-letter'
@@ -345,6 +396,7 @@ export interface FileRouteTypes {
     | '/v1/capabilities'
     | '/v1/cover-letter'
     | '/v1/cv'
+    | '/v1/openapi.json'
     | '/v1/render'
     | '/v1/render-letter'
     | '/v1/rewrite'
@@ -353,9 +405,13 @@ export interface FileRouteTypes {
     | '/api/account/delete'
     | '/api/account/export'
     | '/api/auth/$'
+    | '/api/billing/checkout'
+    | '/api/billing/portal'
+    | '/api/billing/webhook'
   id:
     | '__root__'
     | '/'
+    | '/docs'
     | '/privacy'
     | '/api/application'
     | '/api/cover-letter'
@@ -377,6 +433,7 @@ export interface FileRouteTypes {
     | '/v1/capabilities'
     | '/v1/cover-letter'
     | '/v1/cv'
+    | '/v1/openapi.json'
     | '/v1/render'
     | '/v1/render-letter'
     | '/v1/rewrite'
@@ -385,10 +442,14 @@ export interface FileRouteTypes {
     | '/api/account/delete'
     | '/api/account/export'
     | '/api/auth/$'
+    | '/api/billing/checkout'
+    | '/api/billing/portal'
+    | '/api/billing/webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DocsRoute: typeof DocsRoute
   PrivacyRoute: typeof PrivacyRoute
   ApiApplicationRoute: typeof ApiApplicationRoute
   ApiCoverLetterRoute: typeof ApiCoverLetterRoute
@@ -410,6 +471,7 @@ export interface RootRouteChildren {
   V1CapabilitiesRoute: typeof V1CapabilitiesRoute
   V1CoverLetterRoute: typeof V1CoverLetterRoute
   V1CvRoute: typeof V1CvRoute
+  V1OpenapiDotjsonRoute: typeof V1OpenapiDotjsonRoute
   V1RenderRoute: typeof V1RenderRoute
   V1RenderLetterRoute: typeof V1RenderLetterRoute
   V1RewriteRoute: typeof V1RewriteRoute
@@ -418,6 +480,9 @@ export interface RootRouteChildren {
   ApiAccountDeleteRoute: typeof ApiAccountDeleteRoute
   ApiAccountExportRoute: typeof ApiAccountExportRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiBillingCheckoutRoute: typeof ApiBillingCheckoutRoute
+  ApiBillingPortalRoute: typeof ApiBillingPortalRoute
+  ApiBillingWebhookRoute: typeof ApiBillingWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -427,6 +492,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs': {
+      id: '/docs'
+      path: '/docs'
+      fullPath: '/docs'
+      preLoaderRoute: typeof DocsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -576,6 +648,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof V1CvRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/v1/openapi.json': {
+      id: '/v1/openapi.json'
+      path: '/v1/openapi.json'
+      fullPath: '/v1/openapi.json'
+      preLoaderRoute: typeof V1OpenapiDotjsonRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/v1/render': {
       id: '/v1/render'
       path: '/v1/render'
@@ -632,11 +711,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/billing/checkout': {
+      id: '/api/billing/checkout'
+      path: '/api/billing/checkout'
+      fullPath: '/api/billing/checkout'
+      preLoaderRoute: typeof ApiBillingCheckoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/billing/portal': {
+      id: '/api/billing/portal'
+      path: '/api/billing/portal'
+      fullPath: '/api/billing/portal'
+      preLoaderRoute: typeof ApiBillingPortalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/billing/webhook': {
+      id: '/api/billing/webhook'
+      path: '/api/billing/webhook'
+      fullPath: '/api/billing/webhook'
+      preLoaderRoute: typeof ApiBillingWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DocsRoute: DocsRoute,
   PrivacyRoute: PrivacyRoute,
   ApiApplicationRoute: ApiApplicationRoute,
   ApiCoverLetterRoute: ApiCoverLetterRoute,
@@ -658,6 +759,7 @@ const rootRouteChildren: RootRouteChildren = {
   V1CapabilitiesRoute: V1CapabilitiesRoute,
   V1CoverLetterRoute: V1CoverLetterRoute,
   V1CvRoute: V1CvRoute,
+  V1OpenapiDotjsonRoute: V1OpenapiDotjsonRoute,
   V1RenderRoute: V1RenderRoute,
   V1RenderLetterRoute: V1RenderLetterRoute,
   V1RewriteRoute: V1RewriteRoute,
@@ -666,6 +768,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAccountDeleteRoute: ApiAccountDeleteRoute,
   ApiAccountExportRoute: ApiAccountExportRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiBillingCheckoutRoute: ApiBillingCheckoutRoute,
+  ApiBillingPortalRoute: ApiBillingPortalRoute,
+  ApiBillingWebhookRoute: ApiBillingWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

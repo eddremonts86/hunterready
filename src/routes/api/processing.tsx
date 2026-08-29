@@ -16,6 +16,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { availableProviders, resolveProvider } from '@/structure/provider'
 import { encryptionEnabled } from '@/db/crypto'
+import { PRICING, hasCheckout } from '@/lib/pricing'
 import { designsUnlocked, entitlementFor, inBeta } from '@/lib/entitlements'
 
 /**
@@ -135,6 +136,20 @@ export const Route = createFileRoute('/api/processing')({
              * entitlements above together — see `releaseMode` in `src/lib/entitlements.ts`.
              */
             beta: inBeta(),
+            /**
+             * Whether this deployment can take money at all, and what it would charge.
+             *
+             * Both travel over the wire rather than being imported into the bundle, because
+             * `hasCheckout()` reads `process.env` and a client build has no such thing — the price
+             * would be right and the boolean would be a crash or a quiet `false`. One source, and it
+             * is the server, exactly like `provider` and `encryptsAtRest` above.
+             *
+             * `false` is the normal state today: beta shipped before pricing did. The surface reads
+             * this and says so plainly instead of rendering a button that answers 503.
+             */
+            checkoutOpen: hasCheckout(),
+            price: PRICING.display,
+            pricePeriod: PRICING.period,
             /**
              * Whether this caller may use the paid designs.
              *

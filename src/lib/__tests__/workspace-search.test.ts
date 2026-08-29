@@ -48,17 +48,51 @@ describe('the workspace search params', () => {
     expect(parse({ panel: 'check' })).toEqual({ panel: 'check' })
   })
 
-  it('reads the three together and ignores anything else in the URL', () => {
+  it('reads the four together and ignores anything else in the URL', () => {
     expect(
       parse({
         panel: 'design',
         compare: 'true',
         cv: 'abc',
+        billing: 'done',
         // Analytics junk, a stale param from an older build, or somebody's tracking tag.
         utm_source: 'newsletter',
         step: '3',
       }),
-    ).toEqual({ panel: 'design', compare: true, cv: 'abc' })
+    ).toEqual({
+      panel: 'design',
+      compare: true,
+      cv: 'abc',
+      billing: 'done',
+    })
+  })
+
+  it('reads the two words Stripe can say on the way back', () => {
+    expect(parse({ billing: 'done' })).toEqual({ billing: 'done' })
+    expect(parse({ billing: 'cancelled' })).toEqual({ billing: 'cancelled' })
+  })
+
+  it('drops any other billing value rather than guessing which sentence to show', () => {
+    /*
+      This one chooses what a person reads immediately after paying money. Anything but the two literals
+      is dropped, because the alternative — a loose truthy read, or treating unknown as failure — shows
+      "we could not complete that" to somebody whose payment went through.
+
+      `cancel` and `canceled` are in here deliberately: both are plausible things to write from memory,
+      and `success_url` is written in exactly one place, so a near miss means the link was not ours.
+    */
+    for (const value of [
+      'cancel',
+      'canceled',
+      'DONE',
+      'true',
+      '',
+      1,
+      true,
+      null,
+    ]) {
+      expect(parse({ billing: value })).toEqual({})
+    }
   })
 
   it('never carries the CV itself', () => {

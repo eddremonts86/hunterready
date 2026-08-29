@@ -2,7 +2,13 @@
 
 - **Date:** 2026-08-18 · **Status:** draft · **Blocks:** 2 · **Author:** Edd
 
-> **2026-08-18: Block 2 done. Block 1 needs Coolify to pass HR_COMMIT, which the deploy workflow cannot do for it.** See the commit for what changed and how it was verified.
+> **2026-08-18: Block 2 done.**
+>
+> **2026-08-23: Block 1 done in code, and its premise was wrong.** It said "Block 1 needs Coolify to
+> pass HR_COMMIT, which the deploy workflow cannot do for it", which parked the item behind Edd for
+> five days. Nobody has to pass anything: Coolify injects `SOURCE_COMMIT` on its own and `/api/health`
+> reads it at run time. Verified on a real build; **unverified against the live site**, which needs one
+> deploy.
 
 ## Objective
 
@@ -37,14 +43,31 @@ earlier moment.
 
 ## Plan
 
-### Block 1: get the commit into the Coolify build (25 min)
+### Block 1, done in code 2026-08-23 · live verify open (needs one deploy)
 
-- [ ] Read `docs/operations/deploy-runbook.md` §"Coolify configuration" for how build args are set.
-- [ ] Prefer Coolify's own commit variable if it exposes one; fall back to a build arg set by the
-      deploy workflow, which already knows `github.sha`.
-- [ ] **Verify:** deploy and read `/api/health`. The SHA must equal `git rev-parse HEAD` on `master`.
+- [x] **Coolify's own commit variable exists and is the answer**, which is the first bullet this block
+      wrote and the one it then talked itself out of. `SOURCE_COMMIT` — "commit hash of the source
+      code" — is a predefined variable, so no build arg and no workflow change is needed. The build arg
+      stays for `pnpm app`, where it is the more precise of the two.
+- [x] **Read at run time, not baked.** Coolify documents that `SOURCE_COMMIT` is withheld from Docker
+      builds by default to preserve layer caching, and enabling "Include Source Commit in Build" would
+      have been another click for Edd. Reading it from the environment at request time needs neither,
+      and `docker-compose.yml` now passes it through.
+- [x] **The trap that would have made this a no-op.** `ARG HR_COMMIT=unknown` plus `ENV HR_COMMIT=$HR_COMMIT`
+      means the variable exists in every build, holding the string `"unknown"` — so the natural
+      `process.env.HR_COMMIT ?? process.env.SOURCE_COMMIT` never reaches the fallback. It would have
+      read correctly in review, shipped, and changed nothing. `src/lib/build-stamp.ts` treats `unknown`
+      and empty string as absent; that is the third case in `build-stamp.test.ts` and the reason the
+      file is worth having.
+- [x] **Verified on a real build.** `.claude/launch.json`'s single entry serves with
+      `SOURCE_COMMIT=$(git rev-parse HEAD)` and no build arg, and `/api/health` answered
+      `"build": "532e0d79315445d2c50c5241271e937b8c61f342"` — the exact SHA of `HEAD`.
+- [ ] **Verify against production:** deploy and read `/api/health`. The SHA must equal
+      `git rev-parse origin/master`. This is the half no local rehearsal can stand in for, because what
+      it tests is whether Coolify really sets the variable for a compose stack — the docs say
+      predefined variables are injected into the application, and the only proof is the site.
 
-### Block 2: point `pnpm stale` at a URL (20 min)
+### Block 2, done 2026-08-18: point `pnpm stale` at a URL (20 min)
 
 - [ ] Give `scripts/dev/stale.mjs` an optional `--url`, defaulting to `http://localhost:3100`.
 - [ ] Compare against `origin/master` rather than local HEAD when the target is not localhost, because

@@ -13,6 +13,7 @@ import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createFileRoute } from '@tanstack/react-router'
 import { REGISTERED_FAMILIES } from '@/render/fonts'
+import { buildStamp } from '@/lib/build-stamp'
 
 const WASM = join(process.cwd(), '.output/server/pkg/takumi_pdf_wasm_bg.wasm')
 
@@ -66,10 +67,11 @@ export const Route = createFileRoute('/api/health')({
              * CLAUDE.md already warns about that in another context — so it says it here, and
              * `pnpm stale` turns it into one line.
              *
-             * `unknown` when the build arg was not passed, which is honest: a missing stamp must not
-             * read as "up to date".
+             * Two sources, resolved by `buildStamp`: the build arg `pnpm app` passes, and Coolify's
+             * own `SOURCE_COMMIT` for the deploy that has no build arg at all. `unknown` when neither
+             * knows, which is honest — a missing stamp must not read as "up to date".
              */
-            build: process.env.HR_COMMIT ?? 'unknown',
+            build: buildStamp(),
           },
           { status: ok ? 200 : 503, headers: { 'cache-control': 'no-store' } },
         )

@@ -3,3 +3,10 @@ allowBuilds:
   lightningcss: true
   # eslint-plugin-import-x resolver, pulled in by @tanstack/eslint-config.
   unrs-resolver: true
+  # Denied, deliberately. Scalar's core is Vue, so the API reference page drags `vue-demi` in, and
+  # its postinstall exists only to copy the Vue 2 or Vue 3 shim over `lib/`. Vue 3.5 is the only Vue
+  # in this tree and the published `lib/index.mjs` already declares `isVue3 = true`, so the script
+  # has nothing to decide. Granting a transitive dependency of a docs page the right to execute code
+  # at install time, to reach a state it is already in, is the wrong trade.
+  # If Scalar ever breaks with "isVue2", this is the first line to look at.
+  vue-demi: false

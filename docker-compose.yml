@@ -72,6 +72,34 @@ services:
       # Which one answers when several are configured. Unset, the resolution order in provider.ts
       # applies and nothing changes for an existing deployment.
       HR_PROVIDER: ${HR_PROVIDER:-}
+      # The waiting screen's narration, off without a deploy of new code (`src/structure/ask.ts`).
+      # That claim is only true if the variable reaches the process, which is what these two lines are.
+      HR_REASONING: ${HR_REASONING:-}
+      HR_REASONING_BUDGET: ${HR_REASONING_BUDGET:-}
+      # Payments. Absent is a supported state and the normal one until pricing opens: the app boots
+      # clean, `/api/processing` answers `checkoutOpen: false`, and the pricing section says paid plans
+      # are not open rather than offering a button that 503s.
+      #
+      # ⚠️ **Declared here or set nowhere.** This service lists its environment explicitly and has no
+      # `env_file:`, so a variable absent from this map does not reach the process however carefully it
+      # is typed into Coolify. That is not hypothetical — it is the shape of the failure recorded
+      # against `HR_THIRD_PARTY_FOR_ALL` in CLAUDE.md, seen from the other side, and
+      # `tests/compose-environment.test.ts` now fails when a variable the code reads is missing here.
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      # The webhook's signing secret, separate from the API key and separately absent. Without it
+      # `/api/billing/webhook` refuses every delivery, which is the safe direction: an unverified
+      # webhook is an unauthenticated request that moves the `plan` column.
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      # The Stripe Price the checkout charges, and the authority for the amount — `src/lib/pricing.ts`
+      # holds only the display copy of it.
+      HR_STRIPE_PRICE_ID: ${HR_STRIPE_PRICE_ID:-}
+      # Coolify's own predefined variable: the commit of the source it deployed. Read at run time by
+      # `/api/health` (see src/lib/build-stamp.ts), which is what lets production answer "which commit
+      # am I serving" without anybody setting a build arg — and which sidesteps the documented caveat
+      # that Coolify withholds SOURCE_COMMIT from Docker *builds* to preserve layer caching.
+      #
+      # Empty everywhere else, including `pnpm app`, where the build arg above is the better answer.
+      SOURCE_COMMIT: ${SOURCE_COMMIT:-}
       # Coolify's convention for a compose stack: `SERVICE_FQDN_<SERVICE>_<PORT>` tells its proxy which
       # container and port back this domain. It has to be declared **on the service**, not only as a
       # stack-level variable — with it missing, the deploy reports `running:healthy` (it is) while

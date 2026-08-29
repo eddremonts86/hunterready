@@ -454,10 +454,46 @@ erasure.
   renders in both PDF and `.docx`, in every template.
 - ⬜ **CJK.** A separate question, and still a real one: no Source face has it and Noto Sans CJK is
   10–16 MB per weight. That is a decision about the deployed image and about which market it is for.
-- ⬜ **Right-to-left.** Not the same item, and listing it inside CJK hid it. A font is the smaller half:
-  the renderer's bidi behaviour is **unverified**, so the honest status is "unknown", not "missing
-  glyphs". Establishing what takumi does with an Arabic or Hebrew string is the first move, and it is
-  cheap — the same probe-before-vendoring order that ADR-022 got right for Cyrillic.
+- ⬜ **Right-to-left. Probed 2026-08-23, and the halves are the other way round.** This entry used to
+  say "a font is the smaller half: the renderer's bidi behaviour is unverified". The probe
+  (`src/render/__tests__/rtl-probe.test.ts`) says the font is the **blocking** half and bidi cannot be
+  asked about at all yet: takumi refuses Hebrew and Arabic with `MissingGlyphs` before it lays anything
+  out, because none of the ten bundled families carries either block. It fails loudly rather than
+  drawing tofu, so no CV of boxes can ship — that part was already right.
+
+  **What the probe found that matters more:** only the PDF needs our fonts. The same CV exports to
+  `.docx` and to the self-contained web page with its text intact, because Word and the browser bring a
+  face of their own. So these markets are not locked out of the product, they are locked out of one of
+  its three downloads — and until 2026-08-23 nothing said so, because `/api/render` answered every
+  failure with "please try again", which for a missing glyph is a button somebody can press forever.
+  That message now names the two downloads that work, and the failure is a `422` with a distinguishable
+  log code rather than a `500` that looked like every other render bug.
+
+  **The second question was then asked too, the same day, and it is the one that matters — ADR-035.** A
+  real `NotoSansHebrew-Regular.ttf` was put in front of the renderer rather than reasoned about:
+
+  - **Glyphs are the easy half.** Register the face and it renders. takumi falls back across every
+    registered family on its own — the `fontFamilies` chain option changed nothing and produced a
+    byte-identical PDF.
+  - **The layout is correct.** Bidi applied, the RTL paragraph auto-aligned right, `12` keeping its LTR
+    run inside the Hebrew sentence. Looked at, not inferred.
+  - **The text layer comes back in visual order.** `דוד כהן` extracts as `כהן דוד` — surname first. Every
+    token survives; the sequence within a line is reversed. `tagged: true` produces a structure tree with
+    no text in it, so nothing can recover logical order from it either.
+
+  So the blocker is neither the font nor bidi: **a PDF stores glyphs in the order they are painted, and
+  this product's spine is an extraction.** Bundling the faces would ship a document that looks perfect
+  and silently fails the ATS round-trip — the rule CLAUDE.md says has no exceptions — which is strictly
+  worse than a refusal somebody can see.
+
+  **And the `.docx` keeps logical order exactly**, verified by reading our own output back with the same
+  library ingestion uses. For RTL that makes the Word download the format with the _better_ ATS
+  guarantee, so the sentence `/api/render` now returns is advice rather than an apology.
+
+  What is left is a decision with the cost on the table, and it is Edd's: ship RTL PDFs with the ATS
+  claim narrowed for those scripts, wait for a renderer that writes a logical-order text layer, or keep
+  today's behaviour. ADR-035 has the three options. The probe test goes red the day a face is bundled,
+  deliberately — that is a decision, not a font drop.
 
 ## v0.10 — "It can be written from nothing" · shipped 2026-08-15
 
@@ -504,6 +540,13 @@ off the blocking path, not a faster engine).
 Checked against the code on 2026-08-19, not against the lists above. **This is the maintained list**;
 everything higher in this file is the record of a release. When an item here closes, close it here.
 
+The 2026-08-23 pass read item 1 against the branch that implements it rather than against this file,
+which by then was four days and four commits behind. The code for blocks 2 to 5 is written; what it
+found was three gaps _inside_ it, none visible from the plan — the container passed none of the three
+Stripe variables, nothing read the parameter Stripe sends the browser back with, and a test named in a
+docblock did not exist. All three are fixed on `feat/pricing`, with a guard for the first so the class
+of failure cannot recur silently. That is the argument for this list being read against `src/`, again.
+
 The 2026-08-19 pass closed item 14 and cut items 4, 11, 13, 15 and 16 down to the part that is
 genuinely left, which in four of those five is a decision or a credential rather than code. It found
 nothing new. It did find that the list had gone a day stale while the work it describes was landing,
@@ -515,21 +558,67 @@ is the argument for the verification step and not against the plan.
 
 ### Blocking v1.0
 
-1. **Pricing and payments.** Numbers, provider, and an endpoint that sets `plan`. See v1.0 above and
-   docs/09 question 7 — the shape is decided, so this is now work plus two numbers, not a design
-   question.
+1. **Pricing and payments.** **Built as of 2026-08-19, and the code is not what is left.** €12/month
+   in `src/lib/pricing.ts`, a hosted Stripe checkout, a signature-verified idempotent webhook that is
+   the only writer of `auth_users.plan`, `#pricing` on the landing page, and cancellation through
+   Stripe's own portal from the account panel. Three of the plan's four acceptance criteria are met and
+   tested (plan 01). What remains, in the order it has to happen:
+
+   - **The name, and a trademark search for it** — item 3, promoted to a precondition rather than a
+     parallel task, because the first invoice is the moment a rename stops being 20 lines of
+     documentation.
+   - **One sentence from Edd:** does the free tier keep all twelve designs? It does today and the
+     landing page says so, so changing it is also a copy change.
+   - **Three variables in Coolify**, which nothing but Edd can set: `STRIPE_SECRET_KEY`,
+     `STRIPE_WEBHOOK_SECRET`, `HR_STRIPE_PRICE_ID`. Until then no test-mode payment has been watched
+     through checkout, and nothing in the repo proves Stripe accepts the payload we send.
+   - **`HR_RELEASE=true`**, which is item 2 and item 4 as well — one lever, three entries.
+
+   ⚠️ **Two of those variables reached nothing until 2026-08-23.** `docker-compose.yml` lists its
+   environment explicitly and passed none of the three, so setting them in Coolify would have been
+   inert — and the tell was invisible, because an unset variable and an unreachable one produce the
+   same sentence on the pricing page ("Paid plans are not open yet"). Fixed, along with `HR_REASONING`
+   and `HR_REASONING_BUDGET`, which had the same problem and made `ask.ts`'s "off without a deploy"
+   claim untrue of production. `tests/compose-environment.test.ts` now fails when the code reads a
+   variable the `app` service does not declare.
+
 2. **The exit from beta.** Beta hands every Pro capability to everyone: the larger model, all 103
    designs, the mixed axes, saved CVs. Not a separate decision from item 1 — it is the same switch
-   seen from the other side, and the day pricing opens it flips. **Since 2026-08-19 it is one switch,
+   seen from the other side, and the day pricing opens it flips.
+
+   ⚠️ **The switch is not all of it, and folding this into item 1 hid the other half.** Plan 02 block 1
+   is a notice to the people already using a Pro capability for nothing: what becomes paid, when, what
+   stays free, and through which channel — signed-in accounts have addresses, anonymous visitors have
+   none, so the landing page carries it for the second group. **It is not blocked on pricing and can be
+   drafted today**, and its verify is a real check: read the notice against the copy the app has been
+   showing, and if any of it is a surprise, the Pro-tag work missed a surface. **Since 2026-08-19 it is one switch,
    `HR_RELEASE=true` (ADR-033)**, which overrides `HR_BETA_PAID_FREE`, `HR_THIRD_PARTY_FOR_ALL` and
    `HR_UNLOCK_DESIGNS` rather than defaulting them off, and takes the word "beta" out of the interface
    at the same instant. `entitlements.test.ts` and `production-parity.parity.test.ts` both prove the
    released state against a real build — the latter with both older switches set against it — which
-   is the part that would rot silently. Rehearse it with `pnpm host` on `:3012`
-   (`.claude/launch.json` → `hunterready-release`).
-3. **Name and domain** (docs/09 question 8). `.dev`/`.app`/`.com` availability and trademark never
-   checked, and it was always marked "needed by v1.0". Cheap, and it gets more expensive the later it
-   is asked.
+   is the part that would rot silently. Rehearse it with
+   `HR_RELEASE=true PORT=3012 pnpm host`, or with `.claude/launch.json`'s single entry, which sets it
+   along with the Stripe fixtures.
+
+3. **Name and domain** (docs/09 question 8). **Availability checked 2026-08-19: `hunterready` is free
+   on all seven of `.com` `.dev` `.app` `.dk` `.io` `.co` `.net`**, each method controlled against a
+   domain that is certainly registered. `.dev` is being bought at Porkbun, where `builderhunt.dev`
+   already lives. **The trademark search is deliberately deferred** — Edd is not sure the name
+   survives beta — and it has **moved from "needed by v1.0" to a precondition of item 1**, because
+   the moment it stops being cheap is the first payment, not the release. Today a rename is 20
+   occurrences across 7 files, all documentation and none in `src/`.
+
+   **Searched 2026-08-23 and the exact name is free.** EUIPO's own register: `HunterReady` returns 0
+   trade marks, 0 designs, 0 owners, 0 representatives, against a **control of 802** for `Hunter` — and
+   its basic search matches substrings, so nothing in the register contains the string. TMview agrees
+   across 83 offices and 142.4 M marks. Plan 03 block 2 has every query with a reproducible URL.
+
+   Two things it did not settle. **The official Danish register is unsearched**: DKPTO's PVSonline puts
+   a reCAPTCHA on the search form, so the form was filled and left unsubmitted rather than defeat it —
+   ten minutes of Edd's time, and TMview's Danish slice is a cross-check rather than a substitute,
+   because its EUIPO slice reads 704 where EUIPO's own register reads 802. And **the residual risk is
+   `Hunter`, not `HunterReady`** — 333 marks in Nice class 9, 137 in class 42 — which is a lawyer's
+   judgement about confusing similarity and not a query anybody can run.
 
 ### Costing money today
 
@@ -554,15 +643,24 @@ is the argument for the verification step and not against the plan.
    literally one. **Deliberately not flipped:** Edd, 2026-08-19, the spend is capped by a monthly plan,
    so there is no hurry and the switch waits for pricing.
 
-### Ingestion quality — all three are missing inputs, not missing code
+### Ingestion quality — the three that are left are missing inputs, not missing code
 
 5. **A real Canva/Enhancv export** with genuinely _overlapping_ column spans. Interleaved ordering is
    covered by `two-column-interleaved.pdf`; overlap defeats a different rule.
 6. **A real photographed CV** — perspective skew, uneven lighting, shadow. `scanned.pdf` is a clean
    rasterization and cannot fake any of it.
 7. **A genuine multi-page CV**, still owed to Block 4's page-break verifier.
-8. **MiniMax sometimes returns no provenance**, which costs the review step its "where did this come
-   from" answer on the affected fields.
+8. ~~**MiniMax sometimes returns no provenance**, which costs the review step its "where did this
+   come from" answer on the affected fields.~~ **Closed 2026-08-19, and it was never the providers.**
+   `provenance` was **optional in the JSON Schema we sent** — `.default([])` on the Zod side — while
+   the prompt in the same call asked the model to cite a line for every field it filled. The prompt
+   asked and the schema excused, and provenance is the one part of the answer with no visible
+   consequence if dropped. Requiring it in the tool contract, while keeping the runtime parse
+   lenient, took the aggregate from **45% to 96%** and the worst single pass from **0% to 67%**.
+   MiniMax was the better of the two providers throughout; DeepSeek cited nothing at all on a
+   75-field document, three passes running, and now cites 67–96%. A floor holds it
+   (`provenance-coverage.test.ts`, opt-in) and a free hermetic test holds the `required` entry itself
+   (`provenance-is-required.test.ts`), because the paid one never runs in CI.
 
 ### Needs one sentence from Edd
 
@@ -596,7 +694,10 @@ is the argument for the verification step and not against the plan.
     7,303-character schema v4-pro calls the tool with `{}` while `deepseek-v4-flash` fills it in 1.8s.
     Both were measured on the same prompt through the same Anthropic-compatible endpoint, with
     `thinking: {type: 'disabled'}` (v4-pro rejects a forced `tool_choice` otherwise). Flash ships.
-    `deepseek-schema.test.ts` goes red the day the vendor fixes it, which is the notification.
+    `deepseek-schema.test.ts` goes red the day the vendor fixes it — **on a machine that has a key.**
+    Checked 2026-08-23: it is `skipIf` on `DEEPSEEK_API_KEY`, which is set in no environment at all, so
+    the test has never run and the notification cannot arrive on its own. That makes this item and item
+    13 **the same credential**, not two items waiting on different things.
     **Decide, once it is fixed:** pro by default, or leave flash and keep pro as a choice.
 13. **DeepSeek is configured nowhere in production.** `deepseek()` returns `undefined` without
     `DEEPSEEK_API_KEY`, so the app starts clean and the model is simply absent from
@@ -611,14 +712,24 @@ is the argument for the verification step and not against the plan.
     so the hostname fell through. The host list is now a table with `minimaxi.chat` in it, matched
     exactly or as a subdomain rather than by `endsWith`, which also matched `evilminimax.io`.
     `display-name.test.ts` covers both halves.
-15. **Production reports `build: "unknown"`.** Coolify does not pass `HR_COMMIT`, so `/api/health`
-    cannot say which commit it is serving and `pnpm stale` is useless against the deployed site. The
-    local half of this was solved the same day; the half that matters was not. Three times in one
-    session locally, "why don't I see the change" turned out to be a stale image, and production has
-    no such answer available at all. **Block 2 done 2026-08-18: `pnpm stale --url` now asks a
-    deployed site and compares against `origin/master` rather than local HEAD.** It is useless until
-    the other half lands, because production still answers `unknown` — and that half is a build arg
-    in Coolify, which the deploy workflow cannot set for it.
+15. ~~**Production reports `build: "unknown"`.**~~ **Code done 2026-08-23, and it was never Edd's.**
+    This item sat under "needs a credential or a click from Edd" on the belief that the only way in was
+    a build arg somebody sets in Coolify. It is not: **Coolify already injects `SOURCE_COMMIT`**, its
+    own variable naming the commit it deployed, and `/api/health` reads it at run time — which also
+    steps around the documented caveat that Coolify withholds `SOURCE_COMMIT` from Docker _builds_ to
+    preserve layer caching, because nothing needs it at build time.
+
+    **The obvious version of this fix would have shipped and changed nothing.** The Dockerfile declares
+    `ARG HR_COMMIT=unknown` and promotes it to `ENV`, so in any build without the arg the variable is
+    _present_ and equal to the string `"unknown"` — `process.env.HR_COMMIT ?? process.env.SOURCE_COMMIT`
+    can never reach the second operand. `src/lib/build-stamp.ts` treats `unknown` and empty as the
+    absences they are, and `build-stamp.test.ts` has that case as its centre.
+
+    Verified on a real build: with no build arg and `SOURCE_COMMIT` alone, `/api/health` reported the
+    exact SHA of `HEAD`. Rehearse it with `.claude/launch.json`'s single entry.
+    **Still unverified against the live site**, which needs one deploy — the acceptance criterion in
+    plan 15 stays unchecked until `pnpm stale --url https://hunterready.eduardoinerarte.dk` answers.
+
 16. **A machine cannot use any of this.** Fifteen routes already cover the whole product — ingest,
     render, rewrite, target, translate, cover letter, share, library — and every one authenticates by
     session cookie. There are no API keys anywhere in the repo. So "build an API" is mostly not
@@ -628,12 +739,20 @@ is the argument for the verification step and not against the plan.
     `/v1` routes behind one door, per-key quotas, a contract in [docs/api/](api/README.md), and
     ADR-032 for the consent question — the caller gets the local model unless it asserts the person's
     consent on the request. Block 8 is Edd's: pointing his other application at it.
+    **2026-08-19: the contract is browsable.** `/v1/openapi.json` is generated from the Zod schemas
+    the runtime validates against — so a field list cannot drift from what the API accepts — and
+    `/docs` renders it. A test reads `src/routes/v1/` off disk and fails in both directions: a route
+    nobody described, and a description of a route nobody can reach.
 
 ### Not open, despite appearances
 
 - **CJK and RTL** are v1.0 items on the list above, but neither blocks the release the way pricing
-  does: they are decisions about which market the deployed image is for. RTL's status is _unverified_,
-  not _broken_ — see v1.0.
+  does: they are decisions about which market the deployed image is for. **RTL's status was recorded
+  here as _unverified_ for five days and that was one command away from being an answer** — it is now
+  probed twice over and the answer changed the shape of the item (see v1.0 and ADR-035). Two of the
+  three export formats already work in Hebrew and Arabic, and the `.docx` has the better ATS guarantee
+  of the two. The PDF's blocker is not the font and not bidi — both work — it is that its text layer
+  comes back in visual order.
 
 ## Deliberately parked
 

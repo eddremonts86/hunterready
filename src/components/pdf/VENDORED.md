@@ -29,7 +29,21 @@ Not installed (add when a template needs them): alert, badge, card, data-table, 
 graph, key-value, page-footer, page-header, pdf-image, qr-code, signature, table,
 watermark. `pdf-image` will be needed by `modern-eu` for the photo slot.
 
-## Rule
+### `pdf-svg.tsx` is imported by nothing, and that is not a reason to delete it
+
+Found on 2026-08-23 by running CLAUDE.md's reachability check over all 189 modules instead of one at a
+time: of the three shims listed above, `pdf-primitives` has 26 importers, `resolve-color` has 5, and
+**`pdf-svg` has none** — not in the app, not in a test, not in the vendored components themselves.
+105 lines that nothing reaches.
+
+It arrived with the install rather than with our code, and several of the components listed as *not
+installed* — `graph`, `qr-code`, `signature`, `pdf-image` — are the kind that would want an SVG
+primitive. **That last part is an inference and not a fact**: it was not verified against upstream,
+because doing so means fetching the registry to answer a question nobody is asking yet.
+
+So the honest status is *unreferenced, deliberately kept*. Delete it and the next `shadcn add` may
+reinstall it or may fail on a missing import, and either way the answer would have to be rediscovered.
+If it is ever removed, check upstream first and record the answer here.
 
 **Do not edit these files to change behavior.** Wrap them in `src/render/templates/`
 instead — hand edits destroy the ability to diff against upstream. The one exception is a

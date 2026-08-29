@@ -1,6 +1,6 @@
 # 01 — Pricing and payments
 
-- **Date:** 2026-08-18 · **Status:** price range decided, exact figure open · **Blocks:** 6 · **Author:** Edd
+- **Date:** 2026-08-18 · **Status:** price range decided, exact figure open · **blocks 6 → 7** · **Blocks:** 6 · **Author:** Edd
 
 ## Objective
 
@@ -23,10 +23,17 @@ the pricing page.
 
 ## Acceptance criteria
 
-- [ ] A person can pay and reach `plan: 'pro'` without anyone touching the database by hand.
-- [ ] A failed or disputed payment removes the plan, verified by replaying the provider's webhook.
-- [ ] The pricing page states the price, the currency, VAT handling, and what the free tier keeps.
-- [ ] Cancelling is reachable from the account panel in no more than two clicks.
+- [ ] A person can pay and reach `plan: 'pro'` without anyone touching the database by hand. **Built,
+      unverified — the one that needs keys.** Two of its halves were broken and are fixed: the variables
+      could not reach the container at all, and the return from Stripe was acknowledged nowhere. See
+      2026-08-23 below.
+- [x] A failed or disputed payment removes the plan, verified by replaying the provider's webhook.
+      Nine tests against a real Postgres, block 4.
+- [x] The pricing page states the price, the currency, VAT handling, and what the free tier keeps.
+      "VAT added at checkout · cancel any time", and the free column counts `FREE_DESIGNS` rather than
+      claiming a number.
+- [x] Cancelling is reachable from the account panel in no more than two clicks — "Subscription and
+      invoices", which opens Stripe's portal.
 
 ## Non-goals
 
@@ -36,45 +43,151 @@ the pricing page.
 
 ## Plan
 
+### Block 0: the name is settled and searched (Edd, added 2026-08-19)
+
+- [ ] The name that will be on the invoice is decided.
+- [ ] A trademark search against EUIPO and the Danish register for that name, in classes 9 and 42,
+      recorded with the register, the classes and the date.
+- [ ] **Verify:** the search is in [plan 03](03-name-and-domain.md), with its date.
+
+Moved here from plan 03, where it sat behind "needed by v1.0" — too late and too vague. **This is
+the last moment a rename is cheap.** Once somebody pays, the name is on an invoice, on a payment
+provider's account and on a card statement, and changing it stops being a find-and-replace. Today it
+is 20 occurrences across 7 files, all documentation.
+
+A clean search is not a legal opinion, and this block does not pretend otherwise. It is the
+difference between an unknown and a known.
+
 ### Block 1: the two numbers (30 min, Edd)
 
 - [x] **2026-08-18: EUR 10-19 per month.** Edd's range, chosen as professional-tool rather than
       consumption pricing, which sets an expectation about what the plan has to include.
-- [ ] Pick the exact figure inside that range. A range is enough to write the plan; a pricing page
-      needs one number.
+- [x] **2026-08-19: EUR 12 per month.** The low end of the range — less friction for a product whose
+      name is not known yet, and it leaves room to go up when the plan visibly includes more than it
+      does today. Written into `PRICING` in `src/lib/pricing.ts`, not into any page's copy.
 - [ ] Decide whether the free tier keeps all twelve designs. Currently it does, and the catalogue
       section on the landing page says so out loud, so changing it is a copy change too.
 - [ ] **Verify:** the exact price is written into this file, and the free-tier answer with it.
 
-### Block 2: choose the provider (30 min)
+### Block 2, done 2026-08-19: Stripe, with the VAT obligation named out loud
 
-- [ ] Stripe unless there is a reason. Confirm it supports DK VAT (MOSS/OSS) without extra work,
-      because a consumer subscription across the EU is a VAT question before it is a code question.
-- [ ] **Verify:** an ADR naming the provider and why, appended not rewritten.
+- [x] **The block's premise was wrong and that is the finding.** "Stripe unless there is a reason,
+      confirm it supports DK VAT without extra work" — it does not, and no payment _processor_ does.
+      Stripe is not a merchant of record: Stripe Tax calculates and can file, but registering for
+      OSS, remitting and filing stays with the seller, from the first consumer sale into the EU.
+- [x] **Verify:** ADR-034, which priced the alternative at about €0.50 per subscriber per month
+      (€52/month at a hundred) and recommended a merchant of record.
+- [x] **Edd chose Stripe and takes the OSS obligation.** Recorded in the ADR rather than hidden in a
+      commit, with the volume at which it was going to be revisited anyway.
 
-### Block 3: checkout (30 min)
+`automatic_tax` is enabled on the checkout session so the **rate charged** is correct from the first
+sale. The registration and the quarterly return are Edd's, and no configuration makes them ours.
 
-- [ ] A hosted checkout, not a card form. **Never handle card details in this codebase.**
-- [ ] `POST /api/billing/checkout` creates a session for the signed-in user and returns its URL.
-- [ ] **Verify:** a test-mode payment reaches the provider's success page.
+### Block 3, built 2026-08-19 · verify open (needs keys)
 
-### Block 4: the webhook that sets the plan (30 min)
+- [x] A hosted checkout, not a card form. **No card field exists anywhere in this codebase.**
+- [x] `POST /api/billing/checkout` creates a session for the signed-in user and returns its URL.
+      `automatic_tax` on; `client_reference_id` carries our user id out and back.
+- [ ] **Verify:** a test-mode payment reaches Stripe's success page. **Needs `STRIPE_SECRET_KEY` and
+      `HR_STRIPE_PRICE_ID`, which is Edd's.** Nothing here proves Stripe accepts the payload.
 
-- [ ] `POST /api/billing/webhook`, signature-verified, idempotent by event id.
-- [ ] On subscription active → `plan = 'pro'`. On cancelled, expired or disputed → `plan = 'free'`.
-- [ ] **Verify:** replay the same event twice and confirm one row change. Replay a cancellation and
-      confirm the entitlement drops on the next `/api/processing`.
+### Block 4, done 2026-08-19
 
-### Block 5: the pricing surface (30 min)
+- [x] `POST /api/billing/webhook`, signature-verified, idempotent by event id.
+- [x] Active or trialing → `pro`. Cancelled, paused, `past_due` or disputed → `free`.
+- [x] **Verified:** nine tests against a real Postgres, with signatures computed in the test —
+      `t=<unix>,v1=hmac-sha256("t.body")` is arithmetic, so the signature built there is the one
+      Stripe builds. Replay changes nothing; a stale `active` redelivered after a cancellation does
+      not restore the plan; a forged secret and a body edited after signing are both `400` with the
+      plan untouched.
 
-- [ ] A pricing section that names the price and what free keeps. The Pro tags already tell somebody
-      what they are buying, so this is the number and the list, not a sales page.
-- [ ] Cancel from the account panel.
-- [ ] **Verify:** in the browser, signed in, on a phone width.
+Broken deliberately: `constructEventAsync` → `JSON.parse` turns the two forgery tests red, and adding
+`past_due` to the paying set turns the third red.
+
+**`Stripe.Dispute` carries no customer.** The first version passed `payment_intent` through as one,
+which resolves to no account and files the event as `ignored` — a chargeback that leaves the plan
+intact and writes a row claiming otherwise.
+
+### Block 5, done 2026-08-19
+
+- [x] `#pricing` on the landing page: €12, and what free keeps.
+- [x] Cancel from the account panel — "Subscription and invoices", which opens Stripe's billing
+      portal. Not "Cancel": somebody wanting an invoice or a new card looks in the same place, and a
+      cancellation people are unsure worked is a cancellation they call their bank about.
+- [x] **Verified in the browser, in both states that exist today:**
+
+| build                | heading                                              | button                               |
+| -------------------- | ---------------------------------------------------- | ------------------------------------ |
+| beta                 | "Free while we are in beta, and one plan afterwards" | none — "Included for everyone"       |
+| release, no Stripe   | "One plan, and a free tier that is a real product"   | none — "Paid plans are not open yet" |
+| release, **with** it | "One plan, and a free tier that is a real product"   | **"Get Pro"**                        |
+
+**The third row was added 2026-08-23 and this block said it "needs keys".** It needed two variables
+that are not empty, which is a different thing: `hasCheckout()` reads the environment, not Stripe, so
+the whole path from `process.env` through `/api/processing` to the button is exercisable with the same
+fixtures the tests use. `.claude/launch.json`'s single entry is that rehearsal, and
+on it `/api/processing` answers `beta: false, checkoutOpen: true, price: "€12"` while the section
+renders the heading above and exactly one button, "Get Pro", with the VAT line under it.
+
+What still needs real keys is strictly narrower than "the third state": whether Stripe accepts the
+payload `checkout.sessions.create` sends. With a fixture key the button reaches the network and gets a
+`502`, which proves the wiring and nothing about the payload. That is the open verify in block 3 and
+this rehearsal does not close it.
+
+**The free column is first and the numbers are derived.** The first version read `4 designs` because
+it used `VOICES`, the curated strip further up the page, instead of the catalogue. On a pricing page
+that is not an off-by-one: it understates the free tier by two thirds. It now counts `FREE_DESIGNS`
+and the structures they span — 12 across 3 — so the sentence cannot go stale when a design is added.
 
 ### Block 6: flip beta off (see plan 02)
 
 - [ ] **Verify:** plan 02's end-to-end check.
+
+### Found on 2026-08-23, verifying the branch rather than planning it
+
+Three gaps, all of them inside code the blocks above report as done, and none of them visible from the
+plan. The pattern is the one this repository already has a name for: a layer that works and a path
+nobody can walk.
+
+1. **`docker-compose.yml` passed none of the three Stripe variables.** The `app` service declares its
+   environment as an explicit map with no `env_file:`, so `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
+   and `HR_STRIPE_PRICE_ID` typed into Coolify would have reached nothing. **The two symptoms are the
+   same sentence**, which is what makes it expensive: an unset variable arrives as an empty string,
+   `hasCheckout()` answers false, and the pricing section says "Paid plans are not open yet" — exactly
+   what a deliberately unconfigured deployment says. Block 3's verify would have been debugged in the
+   dashboard.
+
+   `tests/compose-environment.test.ts` is the guard: every variable `src/` reads is declared on the
+   `app` service or listed with the reason it deliberately is not (`HR_UNLOCK_DESIGNS` is in that list,
+   because `entitlements.ts` says never to set it in production). It found two more on its first run —
+   `HR_REASONING` and `HR_REASONING_BUDGET` — which means `ask.ts`'s claim that the narration can be
+   switched off "without a deploy of new code" was not true of the deployment. Broken deliberately to
+   confirm it fails, and it names the file that reads the variable.
+
+2. **Nothing read `?billing=done`.** `checkout.tsx` sends Stripe a `success_url` and a `cancel_url`
+   carrying it, and `validateWorkspaceSearch` recognised `panel`, `compare` and `cv` only — so the
+   router dropped it. A person paid, was returned to the front page, and **the product acknowledged it
+   in no way at all**; the plan chip kept saying Free until they thought to reload, which for somebody
+   who has just been charged reads as a payment that did not register.
+
+   Now: a toast on the way back, and three bounded re-reads of `/api/processing` so the plan appears on
+   its own when the webhook lands a moment later. Verified on a real build at `:3011` — "Checkout
+   complete" and one read plus three at ~2.5s, 5.5s and 8.5s for `done`; "Nothing was charged" and no
+   extra reads at all for `cancelled`; the parameter navigated away with `replace: true` in both, so a
+   reload cannot replay a confirmation. No console errors.
+
+3. **`pricing.test.ts` was documented and did not exist.** `pricing.ts` said in prose that it existed.
+   It does now, and it asserts the two things worth asserting about a constant: that `display` and
+   `amount` cannot disagree, and that a half-configured deployment reads as closed rather than nearly
+   open. `anonymous.test.ts` joins it: neither billing endpoint will act for a caller it cannot name,
+   asserted with Stripe _configured_ so that a 401 rather than a 502 proves the guard ran before the
+   network. Broken deliberately — the identity check removed — and both go red.
+
+**And one thing that is a decision rather than a defect.** After release `proNote` reads "Part of the
+paid plan", which says what a capability is and not how to get it; the only door to the checkout is
+`#pricing` on the landing page, which is not reachable from inside the workspace. Whether the model
+panel should carry a second entry point is Edd's call, and the stale `TODO(payments)` that used to sit
+there — "no gateway yet" — now says so instead of claiming there is nothing to point at.
 
 ## Risks
 

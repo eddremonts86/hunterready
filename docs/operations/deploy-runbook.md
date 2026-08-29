@@ -21,6 +21,67 @@ post-deployment command in the Coolify table, which exists precisely because the
 > (gitignored) and nowhere else; in production it would give the paid catalogue away silently.
 > _Since ADR-033, `HR_RELEASE=true` overrides it — a safety net, not a licence to set it._
 
+## Moving the domain
+
+Written while buying `hunterready.dev`, because the first thing this repository will do if the steps
+are taken in the wrong order is **refuse to deploy** — and the error will look like a broken pipeline
+rather than a half-finished DNS change.
+
+### Why the order matters
+
+The deploy workflow resolves the Coolify application by name and then asserts, independently, that it
+answers on `vars.PRODUCTION_URL`. Two facts have to agree before anything ships, because a name
+collision across environments is how the wrong app gets restarted and **Coolify reports success**.
+
+Change the domain in Coolify first and the next release stops with:
+
+```
+"hunterready" (dockercompose) answers on [hunterready.dev],
+but PRODUCTION_URL is https://hunterready.eduardoinerarte.dk
+ — one of the two is wrong, so nothing was deployed
+```
+
+That is the guard working. The way through it is not to hurry.
+
+### The order that works
+
+The workflow collects **every** host the application answers on into a set and checks membership, so
+an application carrying both domains satisfies either value of `PRODUCTION_URL`. That is what makes
+this a switch rather than a cutover.
+
+1. **Buy the domain.** `builderhunt.dev` is at Porkbun, and so are its nameservers, so the new one
+   belongs there too — same panel, same DNS.
+2. **Point it at the box.** An `A` record for the apex at **`178.105.106.79`**, which is where
+   `hunterready.eduardoinerarte.dk` resolves today. No `AAAA`: the VPS answers on v4 only, and a
+   `AAAA` that resolves to nothing is a site that fails for exactly the users whose network prefers
+   v6. Add `www` as a `CNAME` to the apex if you want it, or leave it off.
+3. **Add it in Coolify _beside_ the old one, not instead of it.** This is a docker-compose
+   application, so the host lives per service in `docker_compose_domains` and it is comma-separated.
+   Both domains, both live. Wait for the certificate.
+4. **Verify the new host before touching anything in GitHub.**
+   ```bash
+   curl -s https://hunterready.dev/api/health
+   pnpm stale --url https://hunterready.dev
+   ```
+5. **Now** set `PRODUCTION_URL` to `https://hunterready.dev` in GitHub → Settings → Variables. Until
+   this moment the old value is still true, so a release in the middle of the move still deploys.
+6. **`BETTER_AUTH_URL` in Coolify, and this one is not cosmetic.** It is the auth base URL _and_ the
+   thing `session.ts` reads to decide whether cookies are `secure`. Left pointing at the old host,
+   sign-in breaks in a way that looks like an account bug: the cookie is issued for an origin nobody
+   is on. Restart after changing it.
+7. **Deploy once and read `/api/processing`**, not just `/api/health` — a session that cannot be read
+   reports `plan: "anonymous"` for a signed-in account, which is the symptom step 6 produces.
+8. **Leave the old domain answering for a while.** It costs nothing, and it is what a bookmark, a
+   share link somebody already sent, and an integration's hardcoded base URL will keep using.
+
+⚠️ **`.dev` is HSTS-preloaded at the TLD.** Every `.dev` is HTTPS-only in every browser, with no
+plaintext fallback and no way to click through a certificate warning. Nothing to do — Coolify issues
+the certificate — but if step 4 fails, it will fail as a hard error rather than as a warning.
+
+**What does not need touching:** nothing in `src/`. The OpenAPI document reports the origin the reader
+reached rather than a constant, so `/v1/openapi.json` is correct on both domains from the first
+minute, and no share link or e-mail builds an absolute URL from a configured host.
+
 ## Going out of beta
 
 **One variable, one restart.** Set `HR_RELEASE=true` in Coolify and restart. That is the whole
@@ -31,10 +92,13 @@ Rehearse it first — this is the one state a laptop otherwise cannot show you, 
 and `HR_UNLOCK_DESIGNS` both open the catalogue in development:
 
 ```bash
-pnpm host   # :3011, beta — then the release view on :3012, in a second tab
+pnpm host                          # :3011, beta — what production serves today
+HR_RELEASE=true PORT=3012 pnpm host   # :3012, released — what it will serve
 ```
 
-`.claude/launch.json` carries `hunterready-release` for the second one. Compare the two.
+Two tabs, compared. `.claude/launch.json` was cut to a single entry on 2026-08-23 and that entry is
+the released view with the Stripe fixtures set, so it covers the second command and a little more; the
+beta view is a bare `pnpm host`.
 
 Then, after the restart, four facts and one refusal:
 
