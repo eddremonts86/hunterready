@@ -814,20 +814,32 @@ tab open since before today, or an API caller holding an old record, still sends
 stays on our own hardware. It falls out of checking against `KNOWN` rather than needing a rule, which
 is the argument for that list existing, and `chosen-provider.test.ts` now pins it.
 
-### ⚠️ The ordering constraint, and it is not optional
+### The ordering constraint, resolved by choosing the consequence
 
-**Production runs MiniMax and has no DeepSeek credentials.** That is roadmap item 13, open since
-2026-08-18 and verified again on the 2026-08-29 deploy: `/api/processing` answered `provider:
-"MiniMax"`.
+This section warned that shipping without DeepSeek credentials would leave production with **no
+third-party model at all** — no provider reported, no consent gate because there is no transfer to
+agree to, and every read on the container's 3B local model, which ADR-030 measured at around 57
+seconds.
 
-So shipping this to `master` before `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL` and `DEEPSEEK_MODEL` are
-set in Coolify leaves production **with no third-party model at all** — no provider reported, no
-consent gate (there is no transfer to agree to), and every read on the container's 3B local model,
-which ADR-030 measured at around 57 seconds. A working product and a much slower one, and not what
-the deployment is for.
+**Edd chose exactly that, on 2026-08-31: "por el momento solo déjalo en el modelo local (el docker con
+Ollama)."** So it is the intent rather than an accident, and the warning above is kept only to record
+what was traded.
 
-The variables first, the merge second. Item 13 stops being a nice-to-have and becomes this change's
-precondition.
+What that took, and what it did not:
+
+- **`MINIMAX_API_KEY` was deleted from Coolify** (both rows — every variable on this compose app is
+  stored twice). That alone is enough: without the key `minimax()` returned `undefined` even before
+  this change removed the function.
+- **No code was needed.** Verified rather than assumed: with every third-party credential unset,
+  `resolveProvider()` is `undefined`, `availableProviders()` is `[]`, and the local provider resolves
+  to `qwen2.5:3b-instruct` at `http://llm:11434` with `locality: 'local'`. The consent gate does not
+  appear because there is nothing to consent to, which is the behaviour ADR-023 built.
+- **`DEEPSEEK_*` are declared in Coolify and empty**, which is what roadmap item 13 meant. `MINIMAX_BASE_URL`
+  and `MINIMAX_MODEL` still hold values and are now inert — they are read by nothing.
+
+The slowness is the whole trade and it is not hidden: the waiting screen narrates a long read and was
+watched doing it for 126 seconds (plan 04), so a two-minute wait is a narrated wait rather than a dead
+end. Setting the three DeepSeek variables reverses this at any time, with no deploy of new code.
 
 ---
 
