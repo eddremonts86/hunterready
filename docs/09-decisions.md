@@ -756,6 +756,93 @@ line.
 
 ---
 
+## ADR-036 — DeepSeek is the only third-party model, and MiniMax is removed rather than left configured
+
+**2026-08-29 · Accepted. Edd's decision; the engineering consequences are recorded here, including the one that contradicts it.**
+
+Instruction, verbatim: _"anteriormente habíamos usado minimax como llm externo por def, debemos
+eliminarlo y usar solo deepseek como llm externo."_ This supersedes the "for now" in
+[ADR-013](#adr-013--model-provider-is-configurable-minimax-m3-for-now), which chose MiniMax on
+2026-08-13 and said so provisionally.
+
+### The measurement points the other way, and that is not a reason to ignore the decision
+
+The only head-to-head this project has actually run is plan 08's provenance scoring, and **MiniMax
+won it**:
+
+| provider | fixture          | fields | before | after |
+| -------- | ---------------- | ------ | ------ | ----- |
+| DeepSeek | plain.txt        | 33     | 0%     | 70%   |
+| DeepSeek | nurse-senior.pdf | 75     | 0%     | 0→67% |
+| MiniMax  | plain.txt        | 35     | 34%    | 97%   |
+| MiniMax  | nurse-senior.pdf | 72     | 86%    | 100%  |
+
+Plan 08's own words: _"the item's title understates it — 'MiniMax sometimes returns no provenance'
+describes the better of the two providers."_ The schema fix closed the gap without reversing it.
+
+Provenance is one axis and not the important one — nobody has scored the two on extraction accuracy,
+which is what a CV reader is for. So this table does not say the decision is wrong. It says the
+decision was **not made on these numbers**, and it is written down so that whoever reads
+`provider.ts` in six months does not infer that the surviving provider won on quality. There is a
+`provider-accuracy.test.ts` if the question is ever worth settling.
+
+### Removed, not left configured-but-unused
+
+`MINIMAX_API_KEY` and the `minimax()` provider are gone from the code and from `docker-compose.yml`.
+Leaving them would have been less work and would have created exactly the state this repository keeps
+finding at the wrong end of a debugging session: a credential present in the deployment, a code path
+present in the bundle, and no agreement between them about which is live.
+
+**Kept, deliberately:**
+
+- **The multi-provider machinery.** `BY_ID`, `NAMES`, `HR_PROVIDER` and the consent gate that names a
+  company all stay. The choice they carry was never really _which_ company — it is whether the CV
+  leaves this machine at all, and that question survives having one answer on the other side of it.
+  ADR-023 built that line and it is unchanged.
+- **The MiniMax row in the display-name table** (`processing.tsx`). That is a host-to-name lookup, not
+  a provider registry, and resolution steps 1 to 3 accept any base URL — including a MiniMax gateway
+  reached through `HUNTERREADY_LLM_*`. Deleting it would report a bare hostname to somebody deciding
+  whether to send that company their CV.
+- **Every historical mention.** ADR-013, plan 08, and the note in `provider.ts` that `extract.ts`
+  guards response shapes "because MiniMax taught it to" are records of how the code got here.
+
+### The privacy consequence, which is the part with a test
+
+A name that is no longer offered is a **refusal**, never consent to whatever replaced it. A browser
+tab open since before today, or an API caller holding an old record, still sends
+`X-HunterReady-Consent: minimax` — and the person named a company that is not on offer, so the CV
+stays on our own hardware. It falls out of checking against `KNOWN` rather than needing a rule, which
+is the argument for that list existing, and `chosen-provider.test.ts` now pins it.
+
+### The ordering constraint, resolved by choosing the consequence
+
+This section warned that shipping without DeepSeek credentials would leave production with **no
+third-party model at all** — no provider reported, no consent gate because there is no transfer to
+agree to, and every read on the container's 3B local model, which ADR-030 measured at around 57
+seconds.
+
+**Edd chose exactly that, on 2026-08-31: "por el momento solo déjalo en el modelo local (el docker con
+Ollama)."** So it is the intent rather than an accident, and the warning above is kept only to record
+what was traded.
+
+What that took, and what it did not:
+
+- **`MINIMAX_API_KEY` was deleted from Coolify** (both rows — every variable on this compose app is
+  stored twice). That alone is enough: without the key `minimax()` returned `undefined` even before
+  this change removed the function.
+- **No code was needed.** Verified rather than assumed: with every third-party credential unset,
+  `resolveProvider()` is `undefined`, `availableProviders()` is `[]`, and the local provider resolves
+  to `qwen2.5:3b-instruct` at `http://llm:11434` with `locality: 'local'`. The consent gate does not
+  appear because there is nothing to consent to, which is the behaviour ADR-023 built.
+- **`DEEPSEEK_*` are declared in Coolify and empty**, which is what roadmap item 13 meant. `MINIMAX_BASE_URL`
+  and `MINIMAX_MODEL` still hold values and are now inert — they are read by nothing.
+
+The slowness is the whole trade and it is not hidden: the waiting screen narrates a long read and was
+watched doing it for 126 seconds (plan 04), so a two-minute wait is a narrated wait rather than a dead
+end. Setting the three DeepSeek variables reverses this at any time, with no deploy of new code.
+
+---
+
 ## ADR-035 — Right-to-left: the layout is right, the text layer is not, and the `.docx` is the ATS-safe format
 
 **2026-08-23 · Accepted for the part that is a measurement. The one branch that changes behaviour is Edd's and is named at the end.**

@@ -699,14 +699,25 @@ is the argument for the verification step and not against the plan.
     the test has never run and the notification cannot arrive on its own. That makes this item and item
     13 **the same credential**, not two items waiting on different things.
     **Decide, once it is fixed:** pro by default, or leave flash and keep pro as a choice.
-13. **DeepSeek is configured nowhere in production.** `deepseek()` returns `undefined` without
-    `DEEPSEEK_API_KEY`, so the app starts clean and the model is simply absent from
-    `/api/processing`'s list — no error, no log line. Coolify needs `DEEPSEEK_API_KEY`,
-    `DEEPSEEK_BASE_URL` and `DEEPSEEK_MODEL`; `docker-compose.yml` already passes all three. Verified
-    absent on the 2026-08-18 deploy: `providers` came back with MiniMax alone.
+13. **DeepSeek is configured nowhere in production — and since 2026-08-29 that blocks a release.**
+    `deepseek()` returns `undefined` without `DEEPSEEK_API_KEY`, so the app starts clean and the model
+    is simply absent from `/api/processing`'s list — no error, no log line. Coolify needs
+    `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL` and `DEEPSEEK_MODEL`; `docker-compose.yml` already passes
+    all three. Verified absent on the 2026-08-18 deploy and again on 2026-08-29: `providers` came back
+    with MiniMax alone.
+
+    **2026-08-31: checked directly against Coolify, and "configured nowhere" is precise.** The three
+    rows exist on the application and all three are **empty** — created by the compose file's own
+    `${DEEPSEEK_API_KEY:-}` interpolation, not by anybody setting them.
+
+    **This stopped blocking anything, because Edd chose the consequence.** MiniMax was removed from the
+    code (ADR-036) and `MINIMAX_API_KEY` deleted from Coolify, so production runs on the local model
+    alone — deliberately, "por el momento solo el modelo local". Filling these three reverses it with no
+    deploy of new code, which is why the item stays open rather than closing.
     **The silence is fixed (plan 13, block 2): startup now logs which providers resolved and which
     were skipped for a missing key, names only.** The three variables in Coolify are Edd's and are
     what remains.
+
 14. ~~**`/api/processing` reports `provider: "api.minimaxi.chat"`.**~~ **Closed 2026-08-18.**
     `displayName` mapped `minimax.io` and `minimaxi.com` while production runs against a `.chat` host,
     so the hostname fell through. The host list is now a table with `minimaxi.chat` in it, matched
@@ -727,8 +738,21 @@ is the argument for the verification step and not against the plan.
 
     Verified on a real build: with no build arg and `SOURCE_COMMIT` alone, `/api/health` reported the
     exact SHA of `HEAD`. Rehearse it with `.claude/launch.json`'s single entry.
-    **Still unverified against the live site**, which needs one deploy — the acceptance criterion in
-    plan 15 stays unchecked until `pnpm stale --url https://hunterready.eduardoinerarte.dk` answers.
+
+    ⚠️ **Deployed 2026-08-29 and it did not work — and 2026-08-31 found why.** Production still answers
+    `build: "unknown"`, and reading Coolify's API rather than guessing at it gives the reason: the
+    `SOURCE_COMMIT` row **exists on the application and is empty**. Coolify created it from the compose
+    file's own interpolation and does not populate it. The code reads it correctly; there is nothing
+    there to read.
+
+    `HR_COMMIT` is separately a red herring: it holds a 7-character value in Coolify and never reaches
+    the image, because `docker-compose.yml` uses it as a **build arg** and none of this app's variables
+    are flagged build-time. The Dockerfile's `ARG HR_COMMIT=unknown` wins.
+
+    So the remaining fix is a **value**, not plumbing: either have the deploy workflow PATCH
+    `SOURCE_COMMIT` with `github.sha` before triggering (it already holds a Coolify token and the SHA),
+    or flag `HR_COMMIT` build-time and set it the same way. The first is one API call on a path that
+    already reaches the container.
 
 16. **A machine cannot use any of this.** Fifteen routes already cover the whole product — ingest,
     render, rewrite, target, translate, cover letter, share, library — and every one authenticates by

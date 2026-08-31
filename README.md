@@ -47,7 +47,7 @@ Dev server runs at http://localhost:3000.
 **Extraction needs a model provider.** Put one in `.env` (gitignored):
 
 ```bash
-MINIMAX_API_KEY=...        # or ANTHROPIC_API_KEY, or HUNTERREADY_LLM_TOKEN + _BASE_URL + _MODEL
+DEEPSEEK_API_KEY=...       # or ANTHROPIC_API_KEY, or HUNTERREADY_LLM_TOKEN + _BASE_URL + _MODEL
 ```
 
 Without one the app still works: it falls back to rule-based extraction, reports lower confidence,
@@ -59,7 +59,7 @@ Every system dependency lives in the image, nothing is expected from the host (A
 
 ```bash
 pnpm docker:build
-docker run --rm -p 3100:3000 -e MINIMAX_API_KEY=... hunterready:local
+docker run --rm -p 3100:3000 -e DEEPSEEK_API_KEY=... hunterready:local
 ```
 
 **Never trust `pnpm dev` or a green `pnpm build` for the render path.** The WASM

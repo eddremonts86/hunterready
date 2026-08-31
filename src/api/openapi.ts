@@ -137,7 +137,7 @@ const CONSENT_PARAM = {
   required: false,
   description:
     "The company the **person whose CV this is** consented to. Send it only if you hold that record; a key is not a standing permission to send anybody's CV anywhere. Omit it and the document is read on our own hardware and does not leave. Anything unrecognised is treated as no consent.",
-  schema: { type: 'string', enum: ['minimax', 'deepseek', 'local'] },
+  schema: { type: 'string', enum: ['deepseek', 'local'] },
 } as const
 
 /** `/v1/render`'s query string. The last four are paid and refused without a plan. */
