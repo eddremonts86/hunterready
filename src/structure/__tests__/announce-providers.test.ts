@@ -54,7 +54,6 @@ describe('the boot line names what resolved and what did not', () => {
   it('reports a configured provider and a skipped one', async () => {
     const lines = await boot({
       DEEPSEEK_API_KEY: SECRET,
-      MINIMAX_API_KEY: undefined,
       ANTHROPIC_API_KEY: undefined,
       HUNTERREADY_LLM_TOKEN: undefined,
     })
@@ -66,13 +65,15 @@ describe('the boot line names what resolved and what did not', () => {
       providersSkipped: string
     }
     expect(parsed.providersConfigured).toContain('deepseek')
-    expect(parsed.providersSkipped).toContain('minimax')
+    // The skipped one is Anthropic now. MiniMax was removed as a provider on 2026-08-29 (ADR-036),
+    // so it cannot be reported as skipped — there is nothing left to skip.
+    expect(parsed.providersSkipped).toContain('anthropic')
+    expect(parsed.providersSkipped).not.toContain('minimax')
   })
 
   it('says so plainly when nothing is configured', async () => {
     const lines = await boot({
       DEEPSEEK_API_KEY: undefined,
-      MINIMAX_API_KEY: undefined,
       ANTHROPIC_API_KEY: undefined,
       HUNTERREADY_LLM_TOKEN: undefined,
     })

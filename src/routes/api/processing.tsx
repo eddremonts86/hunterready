@@ -36,7 +36,15 @@ import { designsUnlocked, entitlementFor, inBeta } from '@/lib/entitlements'
  */
 const VENDORS: ReadonlyArray<readonly [string, ReadonlyArray<string>]> = [
   ['Anthropic', ['anthropic.com', 'anthropic']],
-  // Three MiniMax hosts. The `.chat` one was found in production, not in a doc: see the test.
+  /*
+    Three MiniMax hosts. The `.chat` one was found in production, not in a doc: see the test.
+
+    **Kept after MiniMax stopped being a provider (ADR-036), on purpose.** This is a host-to-name
+    lookup, not the provider registry — and resolution steps 1 to 3 (`HUNTERREADY_LLM_*`, an
+    Anthropic-compatible gateway) accept any base URL at all, including one of these. Deleting the row
+    would make such a deployment report a bare hostname to somebody in the middle of deciding whether
+    to send that company their CV, which is the exact failure `display-name.test.ts` exists for.
+  */
   ['MiniMax', ['minimax.io', 'minimaxi.com', 'minimaxi.chat']],
   ['DeepSeek', ['deepseek.com']],
   ['OpenAI', ['openai.com']],

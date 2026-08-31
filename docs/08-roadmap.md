@@ -699,14 +699,22 @@ is the argument for the verification step and not against the plan.
     the test has never run and the notification cannot arrive on its own. That makes this item and item
     13 **the same credential**, not two items waiting on different things.
     **Decide, once it is fixed:** pro by default, or leave flash and keep pro as a choice.
-13. **DeepSeek is configured nowhere in production.** `deepseek()` returns `undefined` without
-    `DEEPSEEK_API_KEY`, so the app starts clean and the model is simply absent from
-    `/api/processing`'s list — no error, no log line. Coolify needs `DEEPSEEK_API_KEY`,
-    `DEEPSEEK_BASE_URL` and `DEEPSEEK_MODEL`; `docker-compose.yml` already passes all three. Verified
-    absent on the 2026-08-18 deploy: `providers` came back with MiniMax alone.
+13. **DeepSeek is configured nowhere in production — and since 2026-08-29 that blocks a release.**
+    `deepseek()` returns `undefined` without `DEEPSEEK_API_KEY`, so the app starts clean and the model
+    is simply absent from `/api/processing`'s list — no error, no log line. Coolify needs
+    `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL` and `DEEPSEEK_MODEL`; `docker-compose.yml` already passes
+    all three. Verified absent on the 2026-08-18 deploy and again on 2026-08-29: `providers` came back
+    with MiniMax alone.
+
+    ⚠️ **MiniMax has been removed from the code (ADR-036), so this stopped being a nice-to-have.** The
+    branch that removes it must not reach `master` before these three variables are set, or production
+    is left with **no third-party model at all**: no provider reported, no consent gate — there is no
+    transfer left to agree to — and every read on the container's 3B local model, which ADR-030
+    measured at about 57 seconds. Working, much slower, and not what the deployment is for.
     **The silence is fixed (plan 13, block 2): startup now logs which providers resolved and which
     were skipped for a missing key, names only.** The three variables in Coolify are Edd's and are
     what remains.
+
 14. ~~**`/api/processing` reports `provider: "api.minimaxi.chat"`.**~~ **Closed 2026-08-18.**
     `displayName` mapped `minimax.io` and `minimaxi.com` while production runs against a `.chat` host,
     so the hostname fell through. The host list is now a table with `minimaxi.chat` in it, matched

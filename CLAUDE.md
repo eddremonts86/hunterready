@@ -155,7 +155,7 @@ and serves on `:3011` against the same Postgres and the same models, and it is t
 | build                    | seconds     | 2 min warm, **10+ min** when the apt layer falls out of cache |
 | `checks.wasm` / 60 fonts | ✔           | ✔                                                             |
 | `encryptsAtRest: true`   | ✔           | ✔                                                             |
-| DeepSeek + MiniMax       | ✔           | ✔                                                             |
+| DeepSeek (ADR-036)       | ✔           | ✔                                                             |
 | `/api/render` PDF        | ✔ 19,742 B  | ✔ 19,742 B (identical)                                        |
 | **LibreOffice (`.doc`)** | ✖           | ✔                                                             |
 | **Tesseract (OCR)**      | ✖           | ✔                                                             |

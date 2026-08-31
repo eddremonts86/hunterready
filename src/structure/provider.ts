@@ -3,24 +3,25 @@
  *
  * Configurable rather than hardcoded, because the endpoint is an operational decision and the
  * extraction code should not care: any provider exposing an Anthropic-compatible Messages API with
- * tool use works. MiniMax publishes one at `https://api.minimax.io/anthropic`, which is what this
- * project is currently pointed at (Edd's instruction, 2026-08-13).
+ * tool use works. DeepSeek publishes one at `https://api.deepseek.com/anthropic`, which is what this
+ * project is pointed at (Edd, 2026-08-29, ADR-036).
  *
- * ## Choosing one when several are configured
+ * ## One company, and the machinery for several is still here
  *
- * `HR_PROVIDER=deepseek|minimax|anthropic` picks explicitly, and that is the switch to use when the
- * question is "does this one read a CV better than that one". Comparing two models by commenting out
- * a credential is how you end up measuring the wrong one — and this project has already lost a session
- * to running a build that did not contain the code it was being asked about.
+ * MiniMax was the original provider (2026-08-13) and DeepSeek joined it to be measured against it.
+ * **DeepSeek is now the only one** — ADR-036 — and MiniMax is gone from this file rather than left
+ * configured-but-unused, because a provider that is present in the code and absent from the deployment
+ * is the shape this repository keeps finding at the wrong end of a debugging session.
  *
- * Unset, the order below applies and is unchanged, so an existing deployment behaves exactly as it did.
+ * `HR_PROVIDER=deepseek|anthropic` still picks explicitly, and the registry below still takes more than
+ * one entry. That is deliberate: the day another company is added, the consent gate already names each
+ * and the person's answer already records which, and none of that has to be rebuilt.
  *
  * Resolution order, first complete set wins:
  *   1. `HUNTERREADY_LLM_*`      — explicit, and what the Docker image should set
  *   2. `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` (+ `ANTHROPIC_MODEL`)
  *   3. `ANTHROPIC_API_KEY`      — Anthropic proper
- *   4. `MINIMAX_API_KEY` + `MINIMAX_BASE_URL` + `MINIMAX_MODEL`
- *   5. `DEEPSEEK_API_KEY` + `DEEPSEEK_BASE_URL` + `DEEPSEEK_MODEL`
+ *   4. `DEEPSEEK_API_KEY` + `DEEPSEEK_BASE_URL` + `DEEPSEEK_MODEL`
  *
  * Nothing here logs a token, and nothing writes one to disk.
  */
@@ -28,11 +29,8 @@ import Anthropic from '@anthropic-ai/sdk'
 
 import { event } from '@/lib/log'
 
-/** MiniMax's Anthropic-compatible endpoint, used when only the OpenAI-style vars are present. */
-const MINIMAX_ANTHROPIC_BASE = 'https://api.minimax.io/anthropic'
-
 /**
- * DeepSeek's, the same idea.
+ * DeepSeek's Anthropic-compatible endpoint, used when only the OpenAI-style vars are present.
  *
  * They publish it for Claude Code, which is why it exists and why it takes the same tool-call shapes
  * this file already speaks. `extract.ts` still reads defensively at the boundary — compatible is not
@@ -74,7 +72,7 @@ export interface Provider {
  * The local model — Ollama, in this stack's `llm` service.
  *
  * This exists because "the user declined" used to mean "fall back to regular expressions", and that
- * is not a satisfactory product. Declining a transfer to MiniMax should cost accuracy, not the
+ * is not a satisfactory product. Declining a transfer to the third party should cost accuracy, not the
  * feature: a 3B instruct model on our own box reads a CV far better than a rule engine, and the
  * document still never leaves our infrastructure.
  *
@@ -108,7 +106,18 @@ function value(name: string): string | undefined {
   return trimmed === '' ? undefined : trimmed
 }
 
-/** DeepSeek, added so it can be measured against MiniMax on the same CVs (Edd, 2026-08-17). */
+/**
+ * DeepSeek — the third-party model, singular, since ADR-036.
+ *
+ * It arrived on 2026-08-17 to be measured against MiniMax on the same CVs, and **it lost the one
+ * comparison that was actually run.** Plan 08 scored provenance across both: MiniMax at 34% and 86%
+ * where DeepSeek produced none at all on a 75-field document, three passes running. The schema fix
+ * lifted DeepSeek to 67–96%, which closes the gap without reversing it.
+ *
+ * That is written here rather than tidied away because the decision to keep this one was Edd's and was
+ * not a quality conclusion (ADR-036). Anybody who finds this file and assumes the surviving provider
+ * won on the numbers will be wrong, and will re-derive the wrong reason for it.
+ */
 function deepseek(): Provider | undefined {
   const key = value('DEEPSEEK_API_KEY')
   if (key === undefined) return undefined
@@ -136,20 +145,6 @@ function deepseek(): Provider | undefined {
   }
 }
 
-function minimax(): Provider | undefined {
-  const key = value('MINIMAX_API_KEY')
-  if (key === undefined) return undefined
-  return {
-    client: new Anthropic({
-      authToken: key,
-      baseURL: value('MINIMAX_BASE_URL') ?? MINIMAX_ANTHROPIC_BASE,
-    }),
-    model: value('MINIMAX_MODEL') ?? 'MiniMax-M3',
-    label: value('MINIMAX_BASE_URL') ?? MINIMAX_ANTHROPIC_BASE,
-    locality: 'third-party',
-  }
-}
-
 function anthropic(): Provider | undefined {
   const key = value('ANTHROPIC_API_KEY')
   if (key === undefined) return undefined
@@ -170,14 +165,15 @@ function anthropic(): Provider | undefined {
  * The named ones.
  *
  * A name that resolves to nothing returns `undefined` rather than falling back, which is deliberate
- * twice over. For `HR_PROVIDER` it is because asking for DeepSeek and silently getting MiniMax is how
- * a comparison produces a confident wrong answer. For a **person's** choice it is far more serious:
- * consent under docs/07 is consent to a *named company*, so sending their CV to a different one than
- * the one they picked is the transfer they did not agree to.
+ * twice over. For `HR_PROVIDER` it is because asking for one company and silently getting another is
+ * how a comparison produces a confident wrong answer — that was a live risk while there were two, and
+ * the rule is kept now that there is one because the day a second returns is not the day to remember
+ * it. For a **person's** choice it is far more serious: consent under docs/07 is consent to a *named
+ * company*, so sending their CV to a different one than the one they picked is the transfer they did
+ * not agree to.
  */
 const BY_ID: Record<string, () => Provider | undefined> = {
   deepseek,
-  minimax,
   anthropic,
 }
 
@@ -186,7 +182,6 @@ export type ProviderId = keyof typeof BY_ID
 /** The name a person would recognise. Not derived from the host, so a new one is named on purpose. */
 const NAMES: Record<string, string> = {
   deepseek: 'DeepSeek',
-  minimax: 'MiniMax',
   anthropic: 'Anthropic',
 }
 
@@ -199,10 +194,14 @@ export interface ProviderChoice {
 /**
  * Every third-party model this deployment could use — the list the person chooses from.
  *
- * It used to be one: whichever the resolution order landed on, offered as "send it" or "do not". Two
- * are configured now and the choice is the person's, so the gate names each and the answer records
- * which. `HR_PROVIDER`, when set, pins the deployment to one and this list narrows to it — a
- * deployment that has decided is not asking.
+ * It used to be one: whichever the resolution order landed on, offered as "send it" or "do not". Then
+ * it was two, and the gate named each because the choice was the person's. It is one again — DeepSeek,
+ * ADR-036 — and the machinery stays, because the choice it carries was never really *which* company: it
+ * is whether the CV leaves this machine at all. That question survives having a single answer on the
+ * other side of it, and the gate still has to name the company for the consent to mean anything.
+ *
+ * `HR_PROVIDER`, when set, pins the deployment to one and this list narrows to it — a deployment that
+ * has decided is not asking.
  */
 export function availableProviders(): Array<ProviderChoice> {
   announceProviders()
@@ -311,9 +310,15 @@ export function resolveProvider(): Provider | undefined {
     }
   }
 
-  // 4 and 5. Both configured the OpenAI-compatible way; both publish an Anthropic-compatible host
-  //          that takes the same credential, so we point at those rather than shipping a second client.
-  return minimax() ?? deepseek()
+  /*
+    4. DeepSeek, the only third-party model this product offers (ADR-036).
+
+    There were two here and the line read `minimax() ?? deepseek()`, which made MiniMax the default by
+    position rather than by decision. One company is now the answer, so there is no order left to get
+    wrong — and nothing silently substitutes another if this one is unconfigured, because consent under
+    docs/07 is consent to a *named* company.
+  */
+  return deepseek()
 }
 
 export function isConfigured(): boolean {
