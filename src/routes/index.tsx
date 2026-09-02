@@ -855,7 +855,16 @@ function StepBar({
   right?: React.ReactNode
 }) {
   return (
-    <header className="sticky top-0 z-20 border-b border-hairline bg-ground/95 backdrop-blur">
+    /*
+      The notch is this element's problem, not the body's. `sticky top-0` means it is the thing that
+      sits under the status bar when installed, so the top inset is padding *inside* it — the bar
+      grows to cover the notch and its background goes all the way up. Put on the body instead, it
+      would push this bar down and leave a white strip above it that scrolls away.
+    */
+    <header
+      className="sticky top-0 z-20 border-b border-hairline bg-ground/95 backdrop-blur"
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+    >
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         {/*
           Always available, never warned about: nothing in this product is destructive.

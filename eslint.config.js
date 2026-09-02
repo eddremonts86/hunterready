@@ -67,6 +67,30 @@ export default [
       'dist/**',
       '.nitro/**',
       '.tanstack/**',
+      /**
+       * `public/` is static assets plus one generated file.
+       *
+       * `public/sw.js` is written by `scripts/make-sw.mjs` before every build and gitignored; linting
+       * a build artefact reports the same findings as its source and fails the run when nobody has
+       * built yet. The source is linted by the block above.
+       */
+      'public/**',
+      /**
+       * The service worker's source, and this one is a trade rather than an artefact.
+       *
+       * It is plain `.js` because `public/sw.js` is generated from it verbatim and a worker script
+       * cannot be bundled — so it is in no tsconfig project, and `@tanstack/eslint-config` is
+       * type-aware throughout. Two attempts at keeping it linted failed: `parserOptions.project:
+       * false` still crashes on the first type-aware rule the preset enables, and the rule list
+       * cannot be derived here because `@typescript-eslint/eslint-plugin` is a transitive dependency
+       * that pnpm's strict layout will not resolve from this file.
+       *
+       * What covers it instead is stronger than lint for this particular file: `sw-privacy.test.ts`
+       * evaluates the source in a constructed worker scope, so a syntax error fails the unit suite,
+       * and thirteen assertions cover the behaviour. The parity suite then checks the *served* bytes
+       * parse — which is the failure mode that actually happened.
+       */
+      'src/pwa/**/*.js',
     ],
   },
 ]
