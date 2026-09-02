@@ -9,7 +9,14 @@
  * the questions to come from provenance rather than from a script (ADR-011). This is the form
  * underneath it: sections collapsed by default, uncertain ones open.
  */
-import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  Fragment,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useId,
+} from 'react'
 import { DateField } from '@/components/date-field'
 import { PhotoField } from '@/components/photo-field'
 import {
@@ -460,47 +467,73 @@ function Section({
   actions?: React.ReactNode
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  /*
+    Stable per instance, so `aria-controls` can point at the region this button opens. `useId` rather
+    than the title: two custom sections may legitimately share a name, and a duplicated id silently
+    makes one of the two point at the other's contents.
+  */
+  const panelId = `${useId()}-body`
   return (
     <div className="card overflow-hidden">
       <div className="flex items-stretch transition-colors hover:bg-band">
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          aria-expanded={open}
-          className="flex min-w-0 flex-1 items-center gap-2.5 py-3 pl-3.5 pr-2 text-left"
-        >
-          {/*
+        {/*
+          An `h2` around the disclosure, not instead of it.
+
+          The button was correct on its own — `aria-expanded` was already right — but the panel had
+          exactly one heading, its `h1`, so a screen reader offered no outline for a form with five
+          collapsed sections in it. The fix is the standard disclosure pattern: a heading whose only
+          child is the button that opens the section, which gives the section a place in the document
+          outline without changing what the control does or how it looks (`contents` keeps the flex row
+          intact).
+        */}
+        <h2 className="flex min-w-0 flex-1" style={{ display: 'contents' }}>
+          <button
+            type="button"
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            /*
+              Only while open, because the region is only rendered while open. An `aria-controls`
+              pointing at an id that is not in the document is an unresolved IDREF, which is worse than
+              omitting it — the APG makes it optional for a disclosure and `aria-expanded` is the part
+              that carries the meaning. The alternative is rendering all five bodies and hiding them,
+              which mounts every field in the form to satisfy an attribute.
+            */
+            {...(open ? { 'aria-controls': panelId } : {})}
+            className="flex min-w-0 flex-1 items-center gap-2.5 py-3 pl-3.5 pr-2 text-left"
+          >
+            {/*
             The disclosure, at the left and next to the title it discloses. It used to sit at the far
             right, a hand's width from the words it belongs to and directly beside three controls that
             do something else entirely.
           */}
-          <svg
-            aria-hidden
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={`h-4 w-4 shrink-0 text-ink-faint transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
-          >
-            <path d="m9 6 6 6-6 6" />
-          </svg>
-          <span className="truncate text-[15px] font-semibold text-ink">
-            {title}
-          </span>
-          {count !== undefined && (
-            <span className="tally shrink-0 text-[12px] font-semibold text-ink-faint">
-              {count}
+            <svg
+              aria-hidden
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={`h-4 w-4 shrink-0 text-ink-faint transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
+            >
+              <path d="m9 6 6 6-6 6" />
+            </svg>
+            <span className="truncate text-[15px] font-semibold text-ink">
+              {title}
             </span>
-          )}
-          {flagged > 0 && (
-            <span className="shrink-0 rounded-full bg-caution-wash px-2 py-0.5 text-[11px] font-semibold text-caution">
-              {/* "1 to check", not "1 needs a look": the same word the panel's tally uses. */}
-              {flagged} to check
-            </span>
-          )}
-        </button>
+            {count !== undefined && (
+              <span className="tally shrink-0 text-[12px] font-semibold text-ink-faint">
+                {count}
+              </span>
+            )}
+            {flagged > 0 && (
+              <span className="shrink-0 rounded-full bg-caution-wash px-2 py-0.5 text-[11px] font-semibold text-caution">
+                {/* "1 to check", not "1 needs a look": the same word the panel's tally uses. */}
+                {flagged} to check
+              </span>
+            )}
+          </button>
+        </h2>
         {/*
           One rail, one width, whatever the row can do.
 
@@ -513,7 +546,10 @@ function Section({
         </div>
       </div>
       {open && (
-        <div className="flex flex-col gap-4 border-t border-hairline px-4 pb-4 pt-4">
+        <div
+          id={panelId}
+          className="flex flex-col gap-4 border-t border-hairline px-4 pb-4 pt-4"
+        >
           {children}
         </div>
       )}
