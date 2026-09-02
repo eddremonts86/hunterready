@@ -91,6 +91,25 @@ if (file.DATABASE_APP_PASSWORD === undefined) {
 
 env.DATABASE_URL ??= `postgres://hunterready_app:${file.DATABASE_APP_PASSWORD}@localhost:${DB_PORT}/hunterready`
 if (file.POSTGRES_PASSWORD !== undefined) {
+/*
+  The origin this loop actually serves, because Better Auth rejects every other one.
+
+  `.env` carries `BETTER_AUTH_URL=http://localhost:3000` — the compose default, and a port nothing on
+  this machine listens on. Better Auth trusts its `baseURL`'s origin and no other, so **every sign-in
+  and sign-up on `pnpm host` answered `403 INVALID_ORIGIN`**, on 3011 and on the launch.json 3013
+  alike. Not a broken form: a form that could never have worked here, which is why nothing about it
+  looked wrong. Everything behind an account was unreachable in the default local loop — the checkout,
+  the billing portal, saved CVs and the GDPR controls.
+
+  Derived rather than defaulted, for the same reason `DATABASE_URL` is: this script already owns the
+  URLs that depend on which port it was told to serve, and the file's copy is about a different one.
+  An explicit `BETTER_AUTH_URL` in the environment still wins, because that is somebody pointing this
+  build at a tunnel or a proxy on purpose.
+*/
+if (process.env.BETTER_AUTH_URL === undefined) {
+  env.BETTER_AUTH_URL = `http://localhost:${PORT}`
+}
+
   env.DATABASE_MIGRATION_URL ??= `postgres://hunterready_owner:${file.POSTGRES_PASSWORD}@localhost:${DB_PORT}/hunterready`
 }
 
