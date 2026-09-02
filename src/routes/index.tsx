@@ -2032,17 +2032,25 @@ function HunterReady({ consent }: { consent: ConsentState }) {
     try {
       const response = await fetch(`/api/resume?fixture=${id}`)
       const parsed = Resume.safeParse(await response.json())
-      if (parsed.success) {
-        setLoaded({
-          resume: parsed.data,
-          original: parsed.data,
-          provenance: [],
-          warnings: [],
-          method: 'rules',
-          ocr: false,
-          origin: 'file',
-        })
+      /*
+        The early return is the point. This was `if (parsed.success)` with nothing on the other side, so
+        a payload the schema rejected set no state and no error: the button looked dead and left no
+        trace, which is the failure mode this codebase has the most scar tissue about. The endpoint
+        parses today — checked — so this was one schema change away from biting.
+      */
+      if (!parsed.success) {
+        setError('Could not load the sample.')
+        return
       }
+      setLoaded({
+        resume: parsed.data,
+        original: parsed.data,
+        provenance: [],
+        warnings: [],
+        method: 'rules',
+        ocr: false,
+        origin: 'file',
+      })
     } catch {
       setError('Could not load the sample.')
     } finally {
