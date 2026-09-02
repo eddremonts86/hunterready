@@ -3120,6 +3120,28 @@ function HunterReady({ consent }: { consent: ConsentState }) {
                           Nothing to pay while we are in beta, and we will say
                           so before that changes.
                         </p>
+                      ) : consent.plan === 'pro' ? (
+                        /*
+                          Already theirs. This branch was missing, and the card offered `Get Pro` to
+                          somebody already on it — one press from a second subscription on the same
+                          card. The server refuses that now; this is so nobody is invited to try.
+
+                          It points at where cancelling actually lives rather than repeating the
+                          button, because the person reading a pricing card while already subscribed
+                          is usually checking what they pay or looking for the way out.
+                        */
+                        <p className="text-[13px] leading-relaxed text-ink-soft">
+                          <span className="font-medium text-ink">
+                            You are on Pro.
+                          </span>{' '}
+                          Everything here is already yours.{' '}
+                          <a
+                            href="/privacy#account"
+                            className="font-medium text-signal underline decoration-signal/30 underline-offset-4 hover:decoration-signal"
+                          >
+                            Subscription and invoices
+                          </a>
+                        </p>
                       ) : consent.checkoutOpen === true ? (
                         <button
                           type="button"

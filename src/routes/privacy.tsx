@@ -419,7 +419,13 @@ function Privacy() {
           this is the page somebody reads when they are deciding whether to trust us. A rights
           section that describes a right without offering it is an advertisement.
         */}
-        <AccountControls />
+        {/*
+          The target of `/privacy#account`, linked from the pricing card so somebody already on Pro
+          lands on the portal button rather than at the top of a long page.
+        */}
+        <div id="account" className="scroll-mt-24">
+          <AccountControls />
+        </div>
 
         <a
           href="/"

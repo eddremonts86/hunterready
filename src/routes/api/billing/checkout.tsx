@@ -14,8 +14,9 @@
  */
 import { createFileRoute } from '@tanstack/react-router'
 
-import { billingIdentity } from '@/db/repository'
+import { billingIdentity, getPlan } from '@/db/repository'
 import { currentUserId } from '@/lib/session'
+import { isPaidPlan } from '@/lib/entitlements'
 import { errorEvent, event, requestId } from '@/lib/log'
 import { hasCheckout, stripePriceId } from '@/lib/pricing'
 import { stripe } from '@/lib/stripe'
@@ -68,6 +69,38 @@ export const Route = createFileRoute('/api/billing/checkout')({
               requestId: id,
             },
             { status: 401 },
+          )
+        }
+
+        /*
+          Already paying, so there is nothing here to sell them.
+
+          Found by pressing the button as a `pro` account on a real build: the pricing card offered
+          `Get Pro` to somebody who already had it, and this endpoint created a second Checkout
+          Session without a word. Stripe would have honoured it — a second subscription on the same
+          customer, billed monthly, alongside the first. That is the *"pay twice and cancel once"*
+          failure this file already warns about thirty lines up, where it is careful never to create a
+          second customer; the plan was the half nobody checked.
+
+          `409` rather than a silent success, and the message names where cancelling lives, because
+          somebody pressing this twice is usually looking for the portal.
+
+          ⚠️ A plan that cannot be read does **not** land here. `getPlan` answers `free` for a missing
+          row and this guard is deliberately not wrapped in a catch: refusing a first purchase because
+          a query wobbled is a lost sale and an unexplainable one, while a duplicate subscription is
+          visible on both sides and cancellable from the portal. The asymmetry is the whole reason this
+          is a guard rather than a gate.
+        */
+        if (isPaidPlan(await getPlan(userId))) {
+          event('billing.checkout_already_paid', { requestId: id })
+          return Response.json(
+            {
+              error: 'already_subscribed',
+              message:
+                'This account is already on Pro. Manage or cancel it under Subscription and invoices.',
+              requestId: id,
+            },
+            { status: 409 },
           )
         }
 
