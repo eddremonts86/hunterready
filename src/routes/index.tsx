@@ -1153,6 +1153,121 @@ function PanelTabs({
   )
 }
 
+/**
+ * The catalogue strip, and why its specimens mount late.
+ *
+ * Seventeen specimens, each set in its theme's own face, is **nine document families — 300 KB across
+ * 17 woff2 files, measured on the landing's first load** — on a page whose hero legitimately needs
+ * three of them. A font is fetched because something renders in it, so no amount of `@font-face`
+ * tidying in `styles.css` moves this number: the specimens have to not exist until somebody is near
+ * them.
+ *
+ * **`content-visibility: auto` was tried first and does not do it.** It skips rendering the subtree,
+ * and the fonts download anyway — measured at `scrollY: 0` with the strip provably skipped (it
+ * reported its `contain-intrinsic-size` reserve rather than its real height) and still 17 files, 300
+ * KB. The saving it appeared to give was me reading the resource timeline before the fonts had
+ * finished arriving.
+ *
+ * It deliberately does **not** reuse `useReveal`, the other observer on this page. That hook shows
+ * immediately for `prefers-reduced-motion`, which is right for an animation and wrong here: whether
+ * to download 250 KB has nothing to do with whether somebody wants movement. So this one has no
+ * motion opinion and no escape hatch except a browser with no `IntersectionObserver`, where it mounts
+ * everything rather than showing seventeen empty boxes.
+ *
+ * `400px` of margin so the faces are already there by the time the strip is on screen.
+ *
+ * ## ⚠️ The saving is reasoned, not measured — and that is not the same thing
+ *
+ * The 300 KB is measured. The `content-visibility` dead end is measured. **The improvement this
+ * component is supposed to deliver is not**, because it cannot be measured in the browser pane this
+ * was written in: at `scrollY: 0` the strip mounted immediately and reported its real height, which
+ * means that pane's `IntersectionObserver` treats the whole document as visible. It is the same pane
+ * that reported `clientWidth: 0` twice during the same review.
+ *
+ * So this is the standard fix, applied correctly, with its effect unconfirmed. In a real browser:
+ * DevTools → Network → filter `font`, hard reload with the page at the top. Expect three files
+ * (Figtree plus Source Sans 3 at two weights, which the hero genuinely uses) and roughly 50 KB, then
+ * fourteen more arriving as the catalogue comes into view. If that is not what happens, this component
+ * is not earning its lines and the honest move is to delete it rather than tune it.
+ */
+function VoiceStrip() {
+  const ref = useRef<HTMLUListElement>(null)
+  const [near, setNear] = useState(false)
+
+  useEffect(() => {
+    const element = ref.current
+    if (element === null) return
+    if (typeof IntersectionObserver === 'undefined') {
+      setNear(true)
+      return
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        setNear(true)
+        // Once the faces are paid for they stay: re-hiding them would re-fetch nothing and re-flow
+        // seventeen cards for no reason.
+        observer.disconnect()
+      },
+      { rootMargin: '400px' },
+    )
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
+  // `-mx-4 px-4` so the strip bleeds to the edge of a phone: a row that stops inside the page gutter
+  // looks like it ended, and this one has not.
+  return (
+    <ul
+      ref={ref}
+      className="scrollbar-none -mx-4 mt-9 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+    >
+      {VOICES.map((design) => (
+        <li
+          key={design.id}
+          className="flex w-[13.5rem] shrink-0 snap-start flex-col gap-2"
+        >
+          {/*
+                    The ink on the top edge, because at swatch size the treatment that carries it
+                    is a 3px bar inside a pale card and the strip read as seventeen grey tiles.
+                    This is that design's own accent and nothing else: `minimal` and `editorial`
+                    come out near-black here, which is correct, because that is what they are.
+                  */}
+          <span
+            aria-hidden
+            className="h-[3px] w-full rounded-full"
+            style={{
+              backgroundColor: styleOf(getTheme(design.theme)).accent,
+            }}
+          />
+          {near ? (
+            <DesignSpecimen design={design} />
+          ) : (
+            /* The specimen's own height, measured at 58px, so the strip does not resize. */
+            <div aria-hidden className="h-[58px]" />
+          )}
+          {/*
+                    Left-aligned and adjacent, not `justify-between`. Pushed apart, each card's
+                    "Free" sat against the next card's name and read as belonging to it.
+                  */}
+          <span className="flex items-center gap-2 px-0.5">
+            <span className="text-[13px] font-semibold text-ink">
+              {design.label.split(' · ')[1] ?? design.label}
+            </span>
+            {/*
+                      Marked on the paid ones, not the free ones. The first version chipped the
+                      four included voices "Free", which reads as a distinction only while the
+                      other thirteen are unreachable. Beta hands all of them over, so the useful
+                      fact flipped: everything here works today, and this is which ones are Pro.
+                    */}
+            {design.tier === 'paid' ? <ProTag /> : null}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function HunterReady({ consent }: { consent: ConsentState }) {
   const search = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
@@ -2721,50 +2836,7 @@ function HunterReady({ consent }: { consent: ConsentState }) {
               </Reveal>
 
               <Reveal delay={80}>
-                {/*
-                  `-mx-4 px-4` so the strip bleeds to the edge of a phone: a row that stops inside the
-                  page gutter looks like it ended, and this one has not.
-                */}
-                <ul className="scrollbar-none -mx-4 mt-9 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-                  {VOICES.map((design) => (
-                    <li
-                      key={design.id}
-                      className="flex w-[13.5rem] shrink-0 snap-start flex-col gap-2"
-                    >
-                      {/*
-                        The ink on the top edge, because at swatch size the treatment that carries it
-                        is a 3px bar inside a pale card and the strip read as seventeen grey tiles.
-                        This is that design's own accent and nothing else: `minimal` and `editorial`
-                        come out near-black here, which is correct, because that is what they are.
-                      */}
-                      <span
-                        aria-hidden
-                        className="h-[3px] w-full rounded-full"
-                        style={{
-                          backgroundColor: styleOf(getTheme(design.theme))
-                            .accent,
-                        }}
-                      />
-                      <DesignSpecimen design={design} />
-                      {/*
-                        Left-aligned and adjacent, not `justify-between`. Pushed apart, each card's
-                        "Free" sat against the next card's name and read as belonging to it.
-                      */}
-                      <span className="flex items-center gap-2 px-0.5">
-                        <span className="text-[13px] font-semibold text-ink">
-                          {design.label.split(' · ')[1] ?? design.label}
-                        </span>
-                        {/*
-                          Marked on the paid ones, not the free ones. The first version chipped the
-                          four included voices "Free", which reads as a distinction only while the
-                          other thirteen are unreachable. Beta hands all of them over, so the useful
-                          fact flipped: everything here works today, and this is which ones are Pro.
-                        */}
-                        {design.tier === 'paid' ? <ProTag /> : null}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <VoiceStrip />
               </Reveal>
 
               {/*
