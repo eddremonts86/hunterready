@@ -17,6 +17,10 @@
 #   * **The WASM render path.** `vite build` exits 0 without emitting the renderer's WASM; only a
 #     real request against a built server proves it. That is what `test:parity` does, and it is the
 #     one failure this project has actually shipped to production.
+#   * **A database.** `repository.test.ts`, `webhook.test.ts` and `already-paying.test.ts` skip
+#     themselves without a connection string — 42 tests, including every assertion about erasure,
+#     encryption at rest and Stripe. The workflow now runs a Postgres service, so without this the
+#     local gate would measure 42 fewer tests than the thing it exists to reproduce.
 #
 # Usage:
 #   pnpm ci:local            # every step
@@ -37,6 +41,24 @@ done
 # Pinned, for the reason in the header. Never inherit this one.
 export NODE_ENV=production
 
+# The `db` service the dev loop already needs, if it happens to be up. Not started here: a gate that
+# starts containers is a gate that leaves them running.
+DB_PORT="${HR_DB_PORT:-5433}"
+DB_UP=0
+if (exec 3<>"/dev/tcp/127.0.0.1/${DB_PORT}") 2>/dev/null; then
+  # ⚠️ Only this one line out of `.env`, never `set -a; . ./.env`. Sourcing the file drags in
+  # `HR_THIRD_PARTY_FOR_ALL` and the provider keys, which flip eight entitlement and DeepSeek
+  # assertions and read exactly like a regression in code that is fine. Cost an hour once.
+  DB_PASSWORD="$(sed -n 's/^POSTGRES_PASSWORD=//p' .env 2>/dev/null | head -1)"
+  if [ -n "${DB_PASSWORD}" ]; then
+    export DATABASE_MIGRATION_URL="postgres://hunterready_owner:${DB_PASSWORD}@localhost:${DB_PORT}/hunterready"
+    # Without it the two ADR-021 assertions go red rather than skipping — see the note in the
+    # workflow. Generated, unless the shell already carries one.
+    export DATA_ENCRYPTION_KEY="${DATA_ENCRYPTION_KEY:-$(openssl rand -hex 32)}"
+    DB_UP=1
+  fi
+fi
+
 failed=()
 step() {
   local name="$1"
@@ -56,6 +78,19 @@ step() {
 step "format"    pnpm exec prettier --check .
 step "lint"      pnpm exec eslint
 step "typecheck" pnpm exec tsc --noEmit
+
+# Applied before the suites read it, the same way the workflow and the deploy do. Idempotent, but it
+# is a write against the dev database — so a branch carrying an unmerged migration leaves it applied
+# after you switch away, which is also the only state in which its tests could have run.
+if [ "$DB_UP" -eq 1 ]; then
+  step "schema" pnpm db:migrate
+else
+  echo
+  echo "── no database on :${DB_PORT} ─────────────────────────────────────────"
+  echo "   42 persistence, billing and encryption tests will skip. CI runs them."
+  echo "   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d db"
+fi
+
 step "unit"      pnpm exec vitest run
 
 if [ "$FAST" -eq 1 ]; then

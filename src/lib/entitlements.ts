@@ -46,6 +46,17 @@ import { currentUserId } from '@/lib/session'
 const THIRD_PARTY_PLANS = new Set(['pro'])
 
 /**
+ * Whether this plan is one somebody is paying for.
+ *
+ * Exported so `/api/billing/checkout` can refuse a second subscription to somebody who already has
+ * one, and reading the same set as the entitlement above so the two cannot drift: a tier that grants
+ * the third-party model is a tier that was paid for, and adding one stays a single edit.
+ */
+export function isPaidPlan(plan: string): boolean {
+  return THIRD_PARTY_PLANS.has(plan)
+}
+
+/**
  * **The one switch.** `HR_RELEASE=true` and the product stops being in beta, in every sense at once.
  *
  * ## Why one lever and not three
