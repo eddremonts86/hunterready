@@ -89,8 +89,6 @@ if (file.DATABASE_APP_PASSWORD === undefined) {
   process.exit(2)
 }
 
-env.DATABASE_URL ??= `postgres://hunterready_app:${file.DATABASE_APP_PASSWORD}@localhost:${DB_PORT}/hunterready`
-if (file.POSTGRES_PASSWORD !== undefined) {
 /*
   The origin this loop actually serves, because Better Auth rejects every other one.
 
@@ -110,6 +108,8 @@ if (process.env.BETTER_AUTH_URL === undefined) {
   env.BETTER_AUTH_URL = `http://localhost:${PORT}`
 }
 
+env.DATABASE_URL ??= `postgres://hunterready_app:${file.DATABASE_APP_PASSWORD}@localhost:${DB_PORT}/hunterready`
+if (file.POSTGRES_PASSWORD !== undefined) {
   env.DATABASE_MIGRATION_URL ??= `postgres://hunterready_owner:${file.POSTGRES_PASSWORD}@localhost:${DB_PORT}/hunterready`
 }
 
