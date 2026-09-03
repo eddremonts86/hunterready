@@ -121,7 +121,45 @@ function Workspace() {
   return (
     <BetaProvider value={consent.beta}>
       <HunterReady consent={consent} />
-      <Toaster position="bottom-right" closeButton />
+      <Toaster
+        position="bottom-right"
+        closeButton
+        /*
+          Light, because that is the only thing this product is.
+
+          `styles.css` has no `prefers-color-scheme` block, no `.dark` class and no theme provider —
+          62 tokens, one palette. The vendored component asks next-themes anyway, gets the default
+          `"system"`, and sonner resolves that against the OS: on a Mac set to dark it painted the
+          description `#e8e8e8`. On this app's white toast that measured **1.23:1**, against 4.5:1 for
+          body text — the sentence was rendered and invisible. Naming the theme is the fix rather than
+          overriding one more colour, because every other value sonner picks by theme was wrong too.
+        */
+        theme="light"
+        /*
+          The four variables sonner actually reads, under the names this project uses.
+
+          `components/ui/sonner.tsx` is vendored and passes `var(--popover)`, `var(--popover-foreground)`,
+          `var(--border)` and `var(--radius)` — shadcn's names. This app's tokens live in Tailwind v4's
+          `--color-*` namespace, so **all four resolved to the empty string** and the toast rendered with
+          no background, no text colour, no border and no radius: bare text over whatever was behind it.
+
+          Found by screenshotting the payment flow. Every text assertion passed the whole time — the
+          words were in the DOM and `getByRole` found them — which is the one thing a text-based check
+          cannot see. It is worst exactly where it matters most: the toast that says a payment went
+          through is the message somebody reads once, immediately after being charged.
+
+          Set here rather than in the vendored file, which must stay diffable against upstream. Sonner's
+          own `style` is overwritten by this one because the component spreads `{...props}` after it.
+        */
+        style={
+          {
+            '--normal-bg': 'var(--color-popover)',
+            '--normal-text': 'var(--color-popover-foreground)',
+            '--normal-border': 'var(--color-border)',
+            '--border-radius': 'var(--radius-card)',
+          } as React.CSSProperties
+        }
+      />
     </BetaProvider>
   )
 }
@@ -817,7 +855,16 @@ function StepBar({
   right?: React.ReactNode
 }) {
   return (
-    <header className="sticky top-0 z-20 border-b border-hairline bg-ground/95 backdrop-blur">
+    /*
+      The notch is this element's problem, not the body's. `sticky top-0` means it is the thing that
+      sits under the status bar when installed, so the top inset is padding *inside* it — the bar
+      grows to cover the notch and its background goes all the way up. Put on the body instead, it
+      would push this bar down and leave a white strip above it that scrolls away.
+    */
+    <header
+      className="sticky top-0 z-20 border-b border-hairline bg-ground/95 backdrop-blur"
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+    >
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         {/*
           Always available, never warned about: nothing in this product is destructive.

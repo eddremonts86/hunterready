@@ -756,6 +756,88 @@ line.
 
 ---
 
+## ADR-037 — The PWA is installable and resilient, not offline-first, and the service worker never caches a person
+
+**2026-09-02 · Accepted.**
+
+Edd asked for a PWA that works on his phone. What that should mean here is narrower than the default
+reading, and the narrowing is the decision.
+
+### Installable and resilient, not offline-first
+
+The obvious PWA ambition is "works without a network". This product cannot have that and should not
+pretend to: reading a CV is a model on our own hardware, rendering a PDF is a WASM binary in the
+server bundle, and the plan and the library are database rows. Every capability the app has lives on
+the other side of a request — which is the privacy promise ([ADR-023](#adr-023)), not an
+implementation gap to be closed by caching.
+
+So the worker buys exactly two things:
+
+1. **Installability.** Chrome will not offer "Add to Home screen" without a worker carrying a `fetch`
+   handler, so the alternative is a manifest nobody can install.
+2. **A page of our own when the network is gone**, instead of the browser's error page on a product
+   that just promised to be reliable. `public/offline.html` says _why_ it cannot work rather than
+   only that it cannot, because the reason is the product's best argument.
+
+What was rejected: caching the app shell so `/` renders offline. It would show a signed-in-looking
+interface whose every button fails, which is worse than an honest stop.
+
+### The service worker never caches anything about a person
+
+`/api/*` is passed straight through — the worker declines to answer it at all, rather than answering
+and choosing not to store it. Those responses carry CV content, session state and entitlements, and a
+Cache Storage entry is a plaintext copy on the device that outlives the session, survives a sign-out,
+and is readable by anything with access to the origin's storage. [docs/07](07-privacy.md) forbids CV
+content in logs, errors and telemetry; this is the same rule with a longer-lived store.
+
+Server-rendered HTML is not cached either. Nothing renders CV content into the document today — the
+workspace fetches it — but a cache write there would turn any future server-rendered field into a
+copy on disk, silently, and whoever made that change would have no reason to look in the worker.
+
+Only content-addressed URLs are cached: `/assets/*` and `/icons/*`. A hashed filename is its own
+version, so cache-first is a fact about the URL rather than a bet on freshness.
+
+`sw-privacy.test.ts` runs the worker in a constructed scope and asserts both halves. It took a second
+attempt to be worth anything: the first version passed with the privacy guard deleted, because an
+`/api/` GET matches no caching branch and is declined either way. The case that discriminates is a
+_navigation_ to an API path, which does match a branch — so that single test is what the ordering
+claim rests on.
+
+### `public/` is an input to the build, never an output of it
+
+Nitro bakes a manifest of `public/` into the server bundle — `etag`, `mtime`, `size` and `path` per
+file — and serves each asset against the recorded size. The first implementation stamped the worker's
+cache version from `scripts/copy-assets.mjs`, after the build, exactly as that script already adds the
+WASM and the fonts. The result:
+
+```
+TypeError: ServiceWorker script evaluation failed
+SyntaxError: Unexpected end of input
+```
+
+The file on disk was correct and complete; the response was truncated to the recorded 6670 bytes of a
+6726-byte file, dropping the final `})`. `pnpm build` exited 0 and the only symptom was a PWA that
+could not install — ADR-005's shape exactly. `scripts/make-sw.mjs` now writes `public/sw.js` before
+`vite build`, and the parity suite asserts the _served_ bytes are a complete script rather than a 200.
+
+`copy-assets.mjs` gets away with post-build writes only because it targets `.output/server/`, which
+carries no such manifest. That distinction is now stated in both scripts.
+
+### Consequences
+
+- The cache version is the build commit, so every deploy turns the caches over and `activate` purges
+  the old ones. A hand-typed version is one somebody forgets, and being wrong here means a phone
+  served a previous deploy's assets with no way to notice.
+- The worker does not call `skipWaiting`. An update waits until every tab is closed, because taking
+  over immediately can swap the asset cache under a page mid-review to save one reload.
+- `theme_color` is Ground, not Signal. DESIGN.md's one-accent rule is about controls, and a blue
+  status bar over this product's white chrome reads as a rendering fault.
+- **Installing requires HTTPS.** A phone on the LAN reaching `http://192.168.x.x:3013` gets the site
+  and no worker, because `navigator.serviceWorker` is undefined outside a secure context.
+  `localhost` is exempt by spec, which is why the whole path is testable on `:3013`.
+- Not done, and deliberately: `share_target` (receiving a CV from the phone's share sheet), which is a
+  feature with a server endpoint behind it rather than infrastructure.
+
 ## ADR-036 — DeepSeek is the only third-party model, and MiniMax is removed rather than left configured
 
 **2026-08-29 · Accepted. Edd's decision; the engineering consequences are recorded here, including the one that contradicts it.**

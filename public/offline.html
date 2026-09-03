@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>No connection | HunterReady</title>
+    <!--
+      Self-contained on purpose. This is the one page that has to render when the network is gone, so
+      it carries no stylesheet link, no font file and no script: a reference to a hashed asset that
+      happens not to be in the cache would leave somebody staring at unstyled text at the exact moment
+      the product is meant to look reliable. Figtree first in the stack if it is already loaded, the
+      system face otherwise — the same trade `styles.css` makes.
+    -->
+    <style>
+      :root {
+        --ground: #ffffff;
+        --band: #f4f6fa;
+        --ink: #101a33;
+        --ink-soft: #5a6478;
+        --signal: #1b3bd8;
+        --hairline: #e2e7f0;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: max(24px, env(safe-area-inset-top)) 24px
+          max(24px, env(safe-area-inset-bottom));
+        background: var(--ground);
+        color: var(--ink);
+        font-family:
+          'Figtree Variable',
+          'Figtree',
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      main {
+        max-width: 26rem;
+      }
+      .mark {
+        font-size: 17px;
+        font-weight: 800;
+        letter-spacing: -0.01em;
+      }
+      .mark span {
+        color: var(--signal);
+      }
+      h1 {
+        margin: 20px 0 0;
+        font-size: clamp(28px, 8vw, 36px);
+        font-weight: 800;
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+      }
+      h1 span {
+        color: var(--signal);
+      }
+      p {
+        margin: 14px 0 0;
+        font-size: 15px;
+        line-height: 1.6;
+        color: var(--ink-soft);
+      }
+      .note {
+        margin-top: 24px;
+        padding: 12px 14px;
+        border: 1px solid var(--hairline);
+        border-radius: 12px;
+        background: var(--band);
+        font-size: 13px;
+        line-height: 1.6;
+        color: var(--ink-soft);
+      }
+      button {
+        margin-top: 24px;
+        width: 100%;
+        min-height: 48px;
+        border: 0;
+        border-radius: 999px;
+        background: var(--signal);
+        color: #fff;
+        font: inherit;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:active {
+        transform: translateY(1px);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="mark">HunterReady<span>.</span></p>
+      <h1>You are offline<span>.</span></h1>
+      <!--
+        Says why rather than just that. Reading a CV happens on our machines, not in the browser
+        (ADR-023) — that is the privacy promise, and it is also the reason this screen cannot offer to
+        work anyway. Pretending otherwise would be the more annoying lie.
+      -->
+      <p>
+        Reading a CV happens on our server, not in your browser — that is what
+        keeps the file off other companies' machines. So this part genuinely
+        needs a connection.
+      </p>
+      <div class="note">
+        Nothing was lost. Any CV saved to your account is on the server, and it
+        will be there when you come back.
+      </div>
+      <button type="button" onclick="location.reload()">Try again</button>
+    </main>
+  </body>
+</html>
