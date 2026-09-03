@@ -30,14 +30,42 @@ const FROM = join(ROOT, 'src/pwa/service-worker.js')
 const TO = join(ROOT, 'public/sw.js')
 
 /**
- * `HR_COMMIT` is the build arg `docker-compose.yml` passes; `SOURCE_COMMIT` is Coolify's name for it.
- * Absent — a bare `pnpm build` on a laptop — the timestamp keeps the only property that matters: two
- * builds never share a cache name, so an activate always purges what came before.
+ * The build's identity, and `??` is the wrong operator for it.
+ *
+ * The Dockerfile declares `ARG HR_COMMIT=unknown` with `ENV HR_COMMIT=$HR_COMMIT` behind it, so in any
+ * build that does not pass the arg **the variable exists and its value is the string `"unknown"`** —
+ * and a `??` chain can never reach past it. The first version of this file was
+ * `HR_COMMIT ?? SOURCE_COMMIT ?? timestamp`, and the first production deploy shipped
+ * `const BUILD = 'unknown'`: a constant cache name, so no deploy would ever turn the caches over and
+ * the precached offline page would be frozen at that release forever. Caught by reading the served
+ * worker, not by anything failing.
+ *
+ * `src/lib/build-stamp.ts` exists for this exact trap and its docblock predicts this mistake almost
+ * word for word. Its rule is duplicated rather than imported because that is TypeScript and this
+ * script runs before the build; the three lines are worth less than the pointer.
+ *
+ * Unlike `buildStamp`, `unknown` is not an acceptable answer here. A stamp may honestly say it does
+ * not know; a cache name may not, because two builds sharing one is the whole failure. So the last
+ * resort is a timestamp, which is unique by construction.
  */
+const ABSENT = new Set(['', 'unknown'])
+const usable = (raw) => {
+  const trimmed = typeof raw === 'string' ? raw.trim() : ''
+  return ABSENT.has(trimmed) ? undefined : trimmed
+}
+
 const BUILD =
-  process.env.HR_COMMIT ??
-  process.env.SOURCE_COMMIT ??
-  `local-${Date.now().toString(36)}`
+  usable(process.env.HR_COMMIT) ??
+  usable(process.env.SOURCE_COMMIT) ??
+  `build-${Date.now().toString(36)}`
+
+/* Which source answered, because `build-…` in a production log is a question worth being able to ask. */
+const SOURCE =
+  usable(process.env.HR_COMMIT) !== undefined
+    ? 'HR_COMMIT'
+    : usable(process.env.SOURCE_COMMIT) !== undefined
+      ? 'SOURCE_COMMIT'
+      : 'neither — timestamp'
 
 const source = await readFile(FROM, 'utf8')
 
@@ -57,4 +85,4 @@ if (!LINE.test(source)) {
 
 await mkdir(dirname(TO), { recursive: true })
 await writeFile(TO, source.replace(LINE, `const BUILD = '${BUILD}'`))
-console.log(`make-sw: public/sw.js  cache version ${BUILD}`)
+console.log(`make-sw: public/sw.js  cache version ${BUILD}  (from ${SOURCE})`)
