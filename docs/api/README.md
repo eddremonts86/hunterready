@@ -63,10 +63,13 @@ nothing to consent to. This is the safe path and it is what you get if you do no
 **To use the larger third-party model, assert the consent on each request:**
 
 ```
-X-HunterReady-Consent: minimax
+X-HunterReady-Consent: deepseek
 ```
 
-Valid values are `minimax`, `deepseek`, and `local` (which is the same as sending nothing). Anything
+Valid values are `deepseek` and `local` (which is the same as sending nothing). `minimax` was valid
+until 2026-08-29 and is not any more (ADR-036): it is now read as **no consent**, never as consent to
+whoever replaced it, so a caller holding an old record gets the local model rather than a transfer
+nobody agreed to. Anything
 unrecognised is treated as no consent, and the CV stays here.
 
 By sending that header you are stating that the person whose CV this is agreed to the transfer, to
@@ -196,7 +199,7 @@ the three questions a client would otherwise discover through a `402` in the mid
 
 ```json
 {
-  "providers": [{ "id": "minimax", "name": "MiniMax" }],
+  "providers": [{ "id": "deepseek", "name": "DeepSeek" }],
   "paidDesigns": true,
   "encryptsAtRest": true,
   "rateLimit": { "requests": 12, "windowMinutes": 10 },

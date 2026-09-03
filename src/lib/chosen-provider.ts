@@ -31,8 +31,15 @@ export const LOCAL_CHOICE = 'local'
  * yes. Nothing would have been sent anywhere — `providerById` refuses it too — but the request would
  * have counted as consent and dropped the CV onto the rule engine instead of the local model, which
  * is a worse read for a person who never asked for it.
+ *
+ * **Kept in step with `BY_ID` in `structure/provider.ts` by hand, and `minimax` left with it on
+ * 2026-08-29 (ADR-036).** Not derived from it, because that module constructs the Anthropic SDK at
+ * import time and this one is reached from the request path; the duplication is two short lists and
+ * `chosen-provider.test.ts` asserts what this one accepts. A name that passes here and resolves to
+ * nothing there is not dangerous — `providerById` refuses it and the CV stays local — but it would
+ * count as consent, which is the wrong record to keep.
  */
-const KNOWN = new Set(['deepseek', 'minimax', 'anthropic'])
+const KNOWN = new Set(['deepseek', 'anthropic'])
 
 export function chosenProvider(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined

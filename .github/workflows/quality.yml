@@ -35,6 +35,47 @@ jobs:
       # a function" (found in v0.1 Block 1b). `scripts/ci/local-quality.sh` pins the same value; the
       # two must agree or "it passed locally" stops meaning anything.
       NODE_ENV: production
+
+    # A database, because three suites skipped themselves without one and nobody noticed.
+    #
+    # `repository.test.ts` (31 tests), `webhook.test.ts` and `already-paying.test.ts` all
+    # `describe.skipIf` on a missing connection string — correct behaviour on a laptop, and it meant
+    # **the two suites covering money never ran in CI at all**. Between them they assert that an
+    # erasure request actually erases, that stored CV rows are unreadable (ADR-021), that a Stripe
+    # signature is verified against real bytes, that a redelivered event is a no-op, and that a
+    # paying account cannot buy the same subscription twice. Adding this turns 42 skips into 42 runs.
+    #
+    # Same major and same role name as `docker-compose.yml`'s `db`, so the schema these migrations
+    # apply is the schema production has.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: hunterready_owner
+          POSTGRES_DB: hunterready
+          # No password, and deliberately not a fake one.
+          #
+          # This cluster lives for the length of one job on an ephemeral runner, bound to that
+          # runner's loopback, holding fixtures. There is nothing to protect, and inventing a
+          # credential-shaped string to protect it would put something in git that looks like a
+          # secret, has to be repeated in every step below, and would eventually be copied somewhere
+          # it matters. `trust` says what is true instead.
+          #
+          # ⚠️ It is true *here* and nowhere else. Production authenticates with a password that
+          # deployment automation rotates out of band, and `drizzle/0001_roles.sql` creates the
+          # runtime roles with no credentials precisely so no migration in git ever holds one.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        # Published, because steps run on the runner rather than inside the job's network.
+        ports:
+          - 5432:5432
+        # The step after `install` would otherwise race the cluster's first boot, which takes about
+        # two seconds and fails as "connection refused" — the least diagnosable shape of flake.
+        options: >-
+          --health-cmd "pg_isready -U hunterready_owner -d hunterready"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
     steps:
       - uses: actions/checkout@v4
 
@@ -54,9 +95,25 @@ jobs:
       - run: pnpm exec eslint
       - run: pnpm exec tsc --noEmit
 
+      # The schema, applied as the owner exactly as the deploy does it — `scripts/deploy/orchestrate.mjs`
+      # runs this same script. So a failure here is also the earliest warning that a migration in the
+      # branch does not apply to an empty database, which is otherwise discovered during a release.
+      - name: The schema the persistence suites read
+        run: pnpm db:migrate
+        env:
+          DATABASE_MIGRATION_URL: postgres://hunterready_owner@localhost:5432/hunterready
+
       # The fast suite. Skips the `.doc` and OCR cases, which is why the Docker step below is not
       # optional.
-      - run: pnpm exec vitest run
+      #
+      # `DATA_ENCRYPTION_KEY` is not optional here and its absence is not a skip: without it rows are
+      # stored in plaintext by design (ADR-021 — unset means plaintext, announced rather than
+      # assumed), so the two assertions that prove the ciphertext is unreadable go **red** rather than
+      # quiet. Generated per run, because a fixed key checked into a workflow is a key somebody
+      # reuses somewhere real.
+      - run: DATA_ENCRYPTION_KEY=$(openssl rand -hex 32) pnpm exec vitest run
+        env:
+          DATABASE_MIGRATION_URL: postgres://hunterready_owner@localhost:5432/hunterready
 
       # The suites that need system binaries. LibreOffice, Tesseract and poppler live in the image
       # and deliberately nowhere else (ADR-012), so this is the only place they run — and a laptop's
@@ -64,6 +121,10 @@ jobs:
       #
       # It builds the same Dockerfile the deploy builds, so a pass is also evidence the image is
       # still buildable before master ever triggers a release.
+      #
+      # No database is handed to this one on purpose: the suites above already ran the persistence
+      # cases on the runner, and reaching the service from inside a container would mean host
+      # networking for no coverage that is not already green. What this step is for is the binaries.
       - name: Suites that need the image's system binaries
         run: pnpm test:docker
 

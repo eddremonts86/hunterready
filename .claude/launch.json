@@ -6,12 +6,13 @@
       "//2": "This is the most complete of them: a real build (`pnpm host`, ~5s, same Postgres and same models as production), plus `HR_RELEASE=true` so it shows the product as it will be the day pricing opens, plus the two Stripe fixtures so the pricing card renders `Get Pro`, plus `SOURCE_COMMIT` so `/api/health` reports a commit instead of `unknown`.",
       "//3": "⚠️ It is therefore NOT what production serves today. Production is in beta: the word appears in the interface, every Pro capability is included, and an anonymous visitor's CV goes to the third-party model. To see that instead, run `pnpm host` in a terminal — no switches, port 3011 — which is what CLAUDE.md documents as the default loop and is unaffected by this file.",
       "//4": "The Stripe values are fixtures, not credentials, and are shaped so a scanner cannot mistake them for any. So the button renders and the checkout it starts fails at Stripe with a 502: everything up to the network is real, and whether Stripe accepts our payload needs Edd's keys (plan 01 block 3).",
+      "//4b": "\u26a0 `STRIPE_WEBHOOK_SECRET` is a fixture too, and it is the one that makes the paid path testable without Edd's keys. Stripe's signature scheme is HMAC-SHA256 over `<timestamp>.<body>` with this secret, so a `checkout.session.completed` and a `customer.subscription.created` can be signed locally and posted to /api/billing/webhook \u2014 which is the only path to the `plan` column, so that is the whole grant proved end to end. Without it the endpoint answers 503 and the plan can never move on this machine.",
       "//5": "What the deleted entries were, each one line if you want it back: released but unconfigured — `HR_RELEASE=true PORT=3012 pnpm host`. The shipping image, for .doc, OCR and the last check before a release — `pnpm app`, then browse http://localhost:3100. And before those there was a `hunterready-ui` on 3007 running Vite with HMR and proxying /api to the container; it went on 2026-08-18 once `pnpm host` was measured at five seconds.",
       "name": "hunterready",
       "runtimeExecutable": "sh",
       "runtimeArgs": [
         "-c",
-        "HR_RELEASE=true STRIPE_SECRET_KEY=sk_test_fixture_not_a_credential_0000 HR_STRIPE_PRICE_ID=price_fixture_not_a_credential_0000 SOURCE_COMMIT=$(git rev-parse HEAD) PORT=3013 pnpm host"
+        "HR_RELEASE=true STRIPE_SECRET_KEY=sk_test_fixture_not_a_credential_0000 HR_STRIPE_PRICE_ID=price_fixture_not_a_credential_0000 STRIPE_WEBHOOK_SECRET=whsec_fixture_not_a_credential_0000 SOURCE_COMMIT=$(git rev-parse HEAD) PORT=3013 pnpm host"
       ],
       "port": 3013
     }

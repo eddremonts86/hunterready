@@ -125,6 +125,68 @@ describe('the built server can render a PDF', () => {
     expect(res.status).toBe(200)
   })
 
+  /**
+   * The PWA's delivery path, and the one bug that made it worth a parity test.
+   *
+   * Nitro manifests `public/` into the server bundle with a `size` per file and serves each asset
+   * against the recorded length. The first version of this feature stamped the service worker's cache
+   * version from `copy-assets.mjs` — after the build, the way the WASM above is copied — which left
+   * the manifest describing 6670 bytes of a 6726-byte file. The server truncated the response
+   * mid-comment, the final `})` never arrived, and the browser answered
+   *
+   *     TypeError: ServiceWorker script evaluation failed
+   *
+   * Nothing else would have caught it: the file on disk was correct, `pnpm build` exited 0, and the
+   * only symptom was a PWA that could not install. So the assertion is not "200" — it is that the
+   * bytes on the wire are a complete script.
+   */
+  it('serves a service worker that is not truncated', async () => {
+    const res = await fetch(`${baseUrl}/sw.js`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toMatch(/javascript/)
+
+    const body = await res.text()
+
+    // Complete, not merely present. A truncated file still answers 200 with a plausible prefix.
+    expect(body.trimEnd().endsWith('})')).toBe(true)
+    expect(new Function(body)).toBeTypeOf('function')
+
+    // And stamped, or its caches would never turn over between deploys.
+    const version = /const BUILD = '([^']*)'/.exec(body)?.[1]
+    expect(version).toBeDefined()
+    expect(version).not.toBe('__HR_BUILD__')
+  })
+
+  it('serves the manifest and every icon it names', async () => {
+    const res = await fetch(`${baseUrl}/manifest.webmanifest`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toMatch(
+      /manifest\+json|application\/json/,
+    )
+
+    const manifest = (await res.json()) as {
+      icons: Array<{ src: string; sizes: string }>
+    }
+
+    /*
+      Requested through the server rather than checked on disk — `pwa-manifest.test.ts` does the disk
+      half. What this adds is that Vite's publicDir reached the output and Nitro is willing to serve
+      it, which is the part that would break silently on a config change.
+    */
+    for (const icon of manifest.icons) {
+      const asset = await fetch(`${baseUrl}${icon.src}`)
+      expect(
+        asset.status,
+        `${icon.src} is in the manifest and not served`,
+      ).toBe(200)
+      expect(asset.headers.get('content-type')).toBe('image/png')
+    }
+
+    const offline = await fetch(`${baseUrl}/offline.html`)
+    expect(offline.status).toBe(200)
+    expect(await offline.text()).toContain('You are offline')
+  })
+
   it('reports healthy, including the render prerequisites', async () => {
     const res = await fetch(`${baseUrl}/api/health`)
     expect(res.status).toBe(200)

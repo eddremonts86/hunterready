@@ -121,7 +121,45 @@ function Workspace() {
   return (
     <BetaProvider value={consent.beta}>
       <HunterReady consent={consent} />
-      <Toaster position="bottom-right" closeButton />
+      <Toaster
+        position="bottom-right"
+        closeButton
+        /*
+          Light, because that is the only thing this product is.
+
+          `styles.css` has no `prefers-color-scheme` block, no `.dark` class and no theme provider —
+          62 tokens, one palette. The vendored component asks next-themes anyway, gets the default
+          `"system"`, and sonner resolves that against the OS: on a Mac set to dark it painted the
+          description `#e8e8e8`. On this app's white toast that measured **1.23:1**, against 4.5:1 for
+          body text — the sentence was rendered and invisible. Naming the theme is the fix rather than
+          overriding one more colour, because every other value sonner picks by theme was wrong too.
+        */
+        theme="light"
+        /*
+          The four variables sonner actually reads, under the names this project uses.
+
+          `components/ui/sonner.tsx` is vendored and passes `var(--popover)`, `var(--popover-foreground)`,
+          `var(--border)` and `var(--radius)` — shadcn's names. This app's tokens live in Tailwind v4's
+          `--color-*` namespace, so **all four resolved to the empty string** and the toast rendered with
+          no background, no text colour, no border and no radius: bare text over whatever was behind it.
+
+          Found by screenshotting the payment flow. Every text assertion passed the whole time — the
+          words were in the DOM and `getByRole` found them — which is the one thing a text-based check
+          cannot see. It is worst exactly where it matters most: the toast that says a payment went
+          through is the message somebody reads once, immediately after being charged.
+
+          Set here rather than in the vendored file, which must stay diffable against upstream. Sonner's
+          own `style` is overwritten by this one because the component spreads `{...props}` after it.
+        */
+        style={
+          {
+            '--normal-bg': 'var(--color-popover)',
+            '--normal-text': 'var(--color-popover-foreground)',
+            '--normal-border': 'var(--color-border)',
+            '--border-radius': 'var(--radius-card)',
+          } as React.CSSProperties
+        }
+      />
     </BetaProvider>
   )
 }
@@ -817,7 +855,16 @@ function StepBar({
   right?: React.ReactNode
 }) {
   return (
-    <header className="sticky top-0 z-20 border-b border-hairline bg-ground/95 backdrop-blur">
+    /*
+      The notch is this element's problem, not the body's. `sticky top-0` means it is the thing that
+      sits under the status bar when installed, so the top inset is padding *inside* it — the bar
+      grows to cover the notch and its background goes all the way up. Put on the body instead, it
+      would push this bar down and leave a white strip above it that scrolls away.
+    */
+    <header
+      className="sticky top-0 z-20 border-b border-hairline bg-ground/95 backdrop-blur"
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+    >
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         {/*
           Always available, never warned about: nothing in this product is destructive.
@@ -1150,6 +1197,121 @@ function PanelTabs({
         })}
       </TabsList>
     </Tabs>
+  )
+}
+
+/**
+ * The catalogue strip, and why its specimens mount late.
+ *
+ * Seventeen specimens, each set in its theme's own face, is **nine document families — 300 KB across
+ * 17 woff2 files, measured on the landing's first load** — on a page whose hero legitimately needs
+ * three of them. A font is fetched because something renders in it, so no amount of `@font-face`
+ * tidying in `styles.css` moves this number: the specimens have to not exist until somebody is near
+ * them.
+ *
+ * **`content-visibility: auto` was tried first and does not do it.** It skips rendering the subtree,
+ * and the fonts download anyway — measured at `scrollY: 0` with the strip provably skipped (it
+ * reported its `contain-intrinsic-size` reserve rather than its real height) and still 17 files, 300
+ * KB. The saving it appeared to give was me reading the resource timeline before the fonts had
+ * finished arriving.
+ *
+ * It deliberately does **not** reuse `useReveal`, the other observer on this page. That hook shows
+ * immediately for `prefers-reduced-motion`, which is right for an animation and wrong here: whether
+ * to download 250 KB has nothing to do with whether somebody wants movement. So this one has no
+ * motion opinion and no escape hatch except a browser with no `IntersectionObserver`, where it mounts
+ * everything rather than showing seventeen empty boxes.
+ *
+ * `400px` of margin so the faces are already there by the time the strip is on screen.
+ *
+ * ## ⚠️ The saving is reasoned, not measured — and that is not the same thing
+ *
+ * The 300 KB is measured. The `content-visibility` dead end is measured. **The improvement this
+ * component is supposed to deliver is not**, because it cannot be measured in the browser pane this
+ * was written in: at `scrollY: 0` the strip mounted immediately and reported its real height, which
+ * means that pane's `IntersectionObserver` treats the whole document as visible. It is the same pane
+ * that reported `clientWidth: 0` twice during the same review.
+ *
+ * So this is the standard fix, applied correctly, with its effect unconfirmed. In a real browser:
+ * DevTools → Network → filter `font`, hard reload with the page at the top. Expect three files
+ * (Figtree plus Source Sans 3 at two weights, which the hero genuinely uses) and roughly 50 KB, then
+ * fourteen more arriving as the catalogue comes into view. If that is not what happens, this component
+ * is not earning its lines and the honest move is to delete it rather than tune it.
+ */
+function VoiceStrip() {
+  const ref = useRef<HTMLUListElement>(null)
+  const [near, setNear] = useState(false)
+
+  useEffect(() => {
+    const element = ref.current
+    if (element === null) return
+    if (typeof IntersectionObserver === 'undefined') {
+      setNear(true)
+      return
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        setNear(true)
+        // Once the faces are paid for they stay: re-hiding them would re-fetch nothing and re-flow
+        // seventeen cards for no reason.
+        observer.disconnect()
+      },
+      { rootMargin: '400px' },
+    )
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
+  // `-mx-4 px-4` so the strip bleeds to the edge of a phone: a row that stops inside the page gutter
+  // looks like it ended, and this one has not.
+  return (
+    <ul
+      ref={ref}
+      className="scrollbar-none -mx-4 mt-9 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+    >
+      {VOICES.map((design) => (
+        <li
+          key={design.id}
+          className="flex w-[13.5rem] shrink-0 snap-start flex-col gap-2"
+        >
+          {/*
+                    The ink on the top edge, because at swatch size the treatment that carries it
+                    is a 3px bar inside a pale card and the strip read as seventeen grey tiles.
+                    This is that design's own accent and nothing else: `minimal` and `editorial`
+                    come out near-black here, which is correct, because that is what they are.
+                  */}
+          <span
+            aria-hidden
+            className="h-[3px] w-full rounded-full"
+            style={{
+              backgroundColor: styleOf(getTheme(design.theme)).accent,
+            }}
+          />
+          {near ? (
+            <DesignSpecimen design={design} />
+          ) : (
+            /* The specimen's own height, measured at 58px, so the strip does not resize. */
+            <div aria-hidden className="h-[58px]" />
+          )}
+          {/*
+                    Left-aligned and adjacent, not `justify-between`. Pushed apart, each card's
+                    "Free" sat against the next card's name and read as belonging to it.
+                  */}
+          <span className="flex items-center gap-2 px-0.5">
+            <span className="text-[13px] font-semibold text-ink">
+              {design.label.split(' · ')[1] ?? design.label}
+            </span>
+            {/*
+                      Marked on the paid ones, not the free ones. The first version chipped the
+                      four included voices "Free", which reads as a distinction only while the
+                      other thirteen are unreachable. Beta hands all of them over, so the useful
+                      fact flipped: everything here works today, and this is which ones are Pro.
+                    */}
+            {design.tier === 'paid' ? <ProTag /> : null}
+          </span>
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -2032,17 +2194,25 @@ function HunterReady({ consent }: { consent: ConsentState }) {
     try {
       const response = await fetch(`/api/resume?fixture=${id}`)
       const parsed = Resume.safeParse(await response.json())
-      if (parsed.success) {
-        setLoaded({
-          resume: parsed.data,
-          original: parsed.data,
-          provenance: [],
-          warnings: [],
-          method: 'rules',
-          ocr: false,
-          origin: 'file',
-        })
+      /*
+        The early return is the point. This was `if (parsed.success)` with nothing on the other side, so
+        a payload the schema rejected set no state and no error: the button looked dead and left no
+        trace, which is the failure mode this codebase has the most scar tissue about. The endpoint
+        parses today — checked — so this was one schema change away from biting.
+      */
+      if (!parsed.success) {
+        setError('Could not load the sample.')
+        return
       }
+      setLoaded({
+        resume: parsed.data,
+        original: parsed.data,
+        provenance: [],
+        warnings: [],
+        method: 'rules',
+        ocr: false,
+        origin: 'file',
+      })
     } catch {
       setError('Could not load the sample.')
     } finally {
@@ -2713,50 +2883,7 @@ function HunterReady({ consent }: { consent: ConsentState }) {
               </Reveal>
 
               <Reveal delay={80}>
-                {/*
-                  `-mx-4 px-4` so the strip bleeds to the edge of a phone: a row that stops inside the
-                  page gutter looks like it ended, and this one has not.
-                */}
-                <ul className="scrollbar-none -mx-4 mt-9 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-                  {VOICES.map((design) => (
-                    <li
-                      key={design.id}
-                      className="flex w-[13.5rem] shrink-0 snap-start flex-col gap-2"
-                    >
-                      {/*
-                        The ink on the top edge, because at swatch size the treatment that carries it
-                        is a 3px bar inside a pale card and the strip read as seventeen grey tiles.
-                        This is that design's own accent and nothing else: `minimal` and `editorial`
-                        come out near-black here, which is correct, because that is what they are.
-                      */}
-                      <span
-                        aria-hidden
-                        className="h-[3px] w-full rounded-full"
-                        style={{
-                          backgroundColor: styleOf(getTheme(design.theme))
-                            .accent,
-                        }}
-                      />
-                      <DesignSpecimen design={design} />
-                      {/*
-                        Left-aligned and adjacent, not `justify-between`. Pushed apart, each card's
-                        "Free" sat against the next card's name and read as belonging to it.
-                      */}
-                      <span className="flex items-center gap-2 px-0.5">
-                        <span className="text-[13px] font-semibold text-ink">
-                          {design.label.split(' · ')[1] ?? design.label}
-                        </span>
-                        {/*
-                          Marked on the paid ones, not the free ones. The first version chipped the
-                          four included voices "Free", which reads as a distinction only while the
-                          other thirteen are unreachable. Beta hands all of them over, so the useful
-                          fact flipped: everything here works today, and this is which ones are Pro.
-                        */}
-                        {design.tier === 'paid' ? <ProTag /> : null}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <VoiceStrip />
               </Reveal>
 
               {/*
@@ -3039,6 +3166,28 @@ function HunterReady({ consent }: { consent: ConsentState }) {
                           </span>{' '}
                           Nothing to pay while we are in beta, and we will say
                           so before that changes.
+                        </p>
+                      ) : consent.plan === 'pro' ? (
+                        /*
+                          Already theirs. This branch was missing, and the card offered `Get Pro` to
+                          somebody already on it — one press from a second subscription on the same
+                          card. The server refuses that now; this is so nobody is invited to try.
+
+                          It points at where cancelling actually lives rather than repeating the
+                          button, because the person reading a pricing card while already subscribed
+                          is usually checking what they pay or looking for the way out.
+                        */
+                        <p className="text-[13px] leading-relaxed text-ink-soft">
+                          <span className="font-medium text-ink">
+                            You are on Pro.
+                          </span>{' '}
+                          Everything here is already yours.{' '}
+                          <a
+                            href="/privacy#account"
+                            className="font-medium text-signal underline decoration-signal/30 underline-offset-4 hover:decoration-signal"
+                          >
+                            Subscription and invoices
+                          </a>
                         </p>
                       ) : consent.checkoutOpen === true ? (
                         <button

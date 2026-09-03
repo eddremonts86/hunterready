@@ -11,8 +11,24 @@
  *
  * Keeping both in the output is what lets the image ship `.output/` with no node_modules.
  * Runs as part of `pnpm build`; the production-parity test fails if it silently stops working.
+ *
+ * The third is a check rather than a copy: that `public/` reached the build output at all.
+ *
+ * ⚠️ **This script may not write to `.output/public/`.** Nitro manifests that directory into the
+ * server bundle with a `size` per file and serves each asset against the recorded length, so a file
+ * grown here is truncated on the wire. Stamping the service worker's cache version from this script
+ * is exactly what that cost: `TypeError: ServiceWorker script evaluation failed`, because the
+ * response stopped mid-comment. `scripts/make-sw.mjs` now does it before `vite build`. The WASM and
+ * the fonts above are fine because `.output/server/` carries no such manifest.
  */
-import { copyFile, mkdir, readdir, stat } from 'node:fs/promises'
+import {
+  copyFile,
+  mkdir,
+  readdir,
+  readFile,
+  stat,
+  writeFile,
+} from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -63,3 +79,36 @@ for (const file of fontFiles) {
 console.log(
   `copy-assets: ${fontFiles.length} fonts → .output/server/fonts/ (${Math.round(fontBytes / 1024)} KB)`,
 )
+
+// --- did public/ reach the build? -------------------------------------------------------
+/**
+ * A check, not a copy. `public/` carries the manifest, the icons, the offline page and the service
+ * worker — the entire PWA delivery path — and if Vite's publicDir ever stops being copied the symptom
+ * is an app that quietly cannot be installed, with a green build. ADR-005's failure shape exactly, so
+ * it gets the same treatment: assert the artefact, loudly.
+ */
+const SW = join(ROOT, '.output/public/sw.js')
+let sw
+try {
+  sw = await readFile(SW, 'utf8')
+} catch {
+  console.error(
+    `copy-assets: ${SW} is missing, so public/ did not reach the build output — the PWA cannot install`,
+  )
+  process.exit(1)
+}
+
+/*
+  The assignment, not the string. The worker's own docblock names `__HR_BUILD__` while explaining
+  itself, so a substring check on the whole file fails on a correctly stamped build — which is what
+  it did on the first run of this guard.
+*/
+const version = /const BUILD = '([^']*)'/.exec(sw)?.[1]
+if (version === undefined || version === '__HR_BUILD__') {
+  console.error(
+    'copy-assets: the service worker in the build output is unstamped, so scripts/make-sw.mjs did not run before vite build',
+  )
+  process.exit(1)
+}
+
+console.log(`copy-assets: public/ present, sw.js cache version ${version}`)

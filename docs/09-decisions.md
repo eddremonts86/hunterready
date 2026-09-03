@@ -756,6 +756,175 @@ line.
 
 ---
 
+## ADR-037 — The PWA is installable and resilient, not offline-first, and the service worker never caches a person
+
+**2026-09-02 · Accepted.**
+
+Edd asked for a PWA that works on his phone. What that should mean here is narrower than the default
+reading, and the narrowing is the decision.
+
+### Installable and resilient, not offline-first
+
+The obvious PWA ambition is "works without a network". This product cannot have that and should not
+pretend to: reading a CV is a model on our own hardware, rendering a PDF is a WASM binary in the
+server bundle, and the plan and the library are database rows. Every capability the app has lives on
+the other side of a request — which is the privacy promise ([ADR-023](#adr-023)), not an
+implementation gap to be closed by caching.
+
+So the worker buys exactly two things:
+
+1. **Installability.** Chrome will not offer "Add to Home screen" without a worker carrying a `fetch`
+   handler, so the alternative is a manifest nobody can install.
+2. **A page of our own when the network is gone**, instead of the browser's error page on a product
+   that just promised to be reliable. `public/offline.html` says _why_ it cannot work rather than
+   only that it cannot, because the reason is the product's best argument.
+
+What was rejected: caching the app shell so `/` renders offline. It would show a signed-in-looking
+interface whose every button fails, which is worse than an honest stop.
+
+### The service worker never caches anything about a person
+
+`/api/*` is passed straight through — the worker declines to answer it at all, rather than answering
+and choosing not to store it. Those responses carry CV content, session state and entitlements, and a
+Cache Storage entry is a plaintext copy on the device that outlives the session, survives a sign-out,
+and is readable by anything with access to the origin's storage. [docs/07](07-privacy.md) forbids CV
+content in logs, errors and telemetry; this is the same rule with a longer-lived store.
+
+Server-rendered HTML is not cached either. Nothing renders CV content into the document today — the
+workspace fetches it — but a cache write there would turn any future server-rendered field into a
+copy on disk, silently, and whoever made that change would have no reason to look in the worker.
+
+Only content-addressed URLs are cached: `/assets/*` and `/icons/*`. A hashed filename is its own
+version, so cache-first is a fact about the URL rather than a bet on freshness.
+
+`sw-privacy.test.ts` runs the worker in a constructed scope and asserts both halves. It took a second
+attempt to be worth anything: the first version passed with the privacy guard deleted, because an
+`/api/` GET matches no caching branch and is declined either way. The case that discriminates is a
+_navigation_ to an API path, which does match a branch — so that single test is what the ordering
+claim rests on.
+
+### `public/` is an input to the build, never an output of it
+
+Nitro bakes a manifest of `public/` into the server bundle — `etag`, `mtime`, `size` and `path` per
+file — and serves each asset against the recorded size. The first implementation stamped the worker's
+cache version from `scripts/copy-assets.mjs`, after the build, exactly as that script already adds the
+WASM and the fonts. The result:
+
+```
+TypeError: ServiceWorker script evaluation failed
+SyntaxError: Unexpected end of input
+```
+
+The file on disk was correct and complete; the response was truncated to the recorded 6670 bytes of a
+6726-byte file, dropping the final `})`. `pnpm build` exited 0 and the only symptom was a PWA that
+could not install — ADR-005's shape exactly. `scripts/make-sw.mjs` now writes `public/sw.js` before
+`vite build`, and the parity suite asserts the _served_ bytes are a complete script rather than a 200.
+
+`copy-assets.mjs` gets away with post-build writes only because it targets `.output/server/`, which
+carries no such manifest. That distinction is now stated in both scripts.
+
+### Consequences
+
+- The cache version is the build commit, so every deploy turns the caches over and `activate` purges
+  the old ones. A hand-typed version is one somebody forgets, and being wrong here means a phone
+  served a previous deploy's assets with no way to notice.
+- The worker does not call `skipWaiting`. An update waits until every tab is closed, because taking
+  over immediately can swap the asset cache under a page mid-review to save one reload.
+- `theme_color` is Ground, not Signal. DESIGN.md's one-accent rule is about controls, and a blue
+  status bar over this product's white chrome reads as a rendering fault.
+- **Installing requires HTTPS.** A phone on the LAN reaching `http://192.168.x.x:3013` gets the site
+  and no worker, because `navigator.serviceWorker` is undefined outside a secure context.
+  `localhost` is exempt by spec, which is why the whole path is testable on `:3013`.
+- Not done, and deliberately: `share_target` (receiving a CV from the phone's share sheet), which is a
+  feature with a server endpoint behind it rather than infrastructure.
+
+## ADR-036 — DeepSeek is the only third-party model, and MiniMax is removed rather than left configured
+
+**2026-08-29 · Accepted. Edd's decision; the engineering consequences are recorded here, including the one that contradicts it.**
+
+Instruction, verbatim: _"anteriormente habíamos usado minimax como llm externo por def, debemos
+eliminarlo y usar solo deepseek como llm externo."_ This supersedes the "for now" in
+[ADR-013](#adr-013--model-provider-is-configurable-minimax-m3-for-now), which chose MiniMax on
+2026-08-13 and said so provisionally.
+
+### The measurement points the other way, and that is not a reason to ignore the decision
+
+The only head-to-head this project has actually run is plan 08's provenance scoring, and **MiniMax
+won it**:
+
+| provider | fixture          | fields | before | after |
+| -------- | ---------------- | ------ | ------ | ----- |
+| DeepSeek | plain.txt        | 33     | 0%     | 70%   |
+| DeepSeek | nurse-senior.pdf | 75     | 0%     | 0→67% |
+| MiniMax  | plain.txt        | 35     | 34%    | 97%   |
+| MiniMax  | nurse-senior.pdf | 72     | 86%    | 100%  |
+
+Plan 08's own words: _"the item's title understates it — 'MiniMax sometimes returns no provenance'
+describes the better of the two providers."_ The schema fix closed the gap without reversing it.
+
+Provenance is one axis and not the important one — nobody has scored the two on extraction accuracy,
+which is what a CV reader is for. So this table does not say the decision is wrong. It says the
+decision was **not made on these numbers**, and it is written down so that whoever reads
+`provider.ts` in six months does not infer that the surviving provider won on quality. There is a
+`provider-accuracy.test.ts` if the question is ever worth settling.
+
+### Removed, not left configured-but-unused
+
+`MINIMAX_API_KEY` and the `minimax()` provider are gone from the code and from `docker-compose.yml`.
+Leaving them would have been less work and would have created exactly the state this repository keeps
+finding at the wrong end of a debugging session: a credential present in the deployment, a code path
+present in the bundle, and no agreement between them about which is live.
+
+**Kept, deliberately:**
+
+- **The multi-provider machinery.** `BY_ID`, `NAMES`, `HR_PROVIDER` and the consent gate that names a
+  company all stay. The choice they carry was never really _which_ company — it is whether the CV
+  leaves this machine at all, and that question survives having one answer on the other side of it.
+  ADR-023 built that line and it is unchanged.
+- **The MiniMax row in the display-name table** (`processing.tsx`). That is a host-to-name lookup, not
+  a provider registry, and resolution steps 1 to 3 accept any base URL — including a MiniMax gateway
+  reached through `HUNTERREADY_LLM_*`. Deleting it would report a bare hostname to somebody deciding
+  whether to send that company their CV.
+- **Every historical mention.** ADR-013, plan 08, and the note in `provider.ts` that `extract.ts`
+  guards response shapes "because MiniMax taught it to" are records of how the code got here.
+
+### The privacy consequence, which is the part with a test
+
+A name that is no longer offered is a **refusal**, never consent to whatever replaced it. A browser
+tab open since before today, or an API caller holding an old record, still sends
+`X-HunterReady-Consent: minimax` — and the person named a company that is not on offer, so the CV
+stays on our own hardware. It falls out of checking against `KNOWN` rather than needing a rule, which
+is the argument for that list existing, and `chosen-provider.test.ts` now pins it.
+
+### The ordering constraint, resolved by choosing the consequence
+
+This section warned that shipping without DeepSeek credentials would leave production with **no
+third-party model at all** — no provider reported, no consent gate because there is no transfer to
+agree to, and every read on the container's 3B local model, which ADR-030 measured at around 57
+seconds.
+
+**Edd chose exactly that, on 2026-08-31: "por el momento solo déjalo en el modelo local (el docker con
+Ollama)."** So it is the intent rather than an accident, and the warning above is kept only to record
+what was traded.
+
+What that took, and what it did not:
+
+- **`MINIMAX_API_KEY` was deleted from Coolify** (both rows — every variable on this compose app is
+  stored twice). That alone is enough: without the key `minimax()` returned `undefined` even before
+  this change removed the function.
+- **No code was needed.** Verified rather than assumed: with every third-party credential unset,
+  `resolveProvider()` is `undefined`, `availableProviders()` is `[]`, and the local provider resolves
+  to `qwen2.5:3b-instruct` at `http://llm:11434` with `locality: 'local'`. The consent gate does not
+  appear because there is nothing to consent to, which is the behaviour ADR-023 built.
+- **`DEEPSEEK_*` are declared in Coolify and empty**, which is what roadmap item 13 meant. `MINIMAX_BASE_URL`
+  and `MINIMAX_MODEL` still hold values and are now inert — they are read by nothing.
+
+The slowness is the whole trade and it is not hidden: the waiting screen narrates a long read and was
+watched doing it for 126 seconds (plan 04), so a two-minute wait is a narrated wait rather than a dead
+end. Setting the three DeepSeek variables reverses this at any time, with no deploy of new code.
+
+---
+
 ## ADR-035 — Right-to-left: the layout is right, the text layer is not, and the `.docx` is the ATS-safe format
 
 **2026-08-23 · Accepted for the part that is a measurement. The one branch that changes behaviour is Edd's and is named at the end.**

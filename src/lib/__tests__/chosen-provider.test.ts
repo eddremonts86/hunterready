@@ -4,7 +4,7 @@
  * This is the smallest function in the privacy path and the one with the least room for error: every
  * value it does not recognise has to mean *no*. The failure it guards against is not hypothetical —
  * five endpoints compared this field to the string `'provider'`, and the moment the gate started
- * naming companies four of them would have read `'minimax'` as a refusal and quietly done the work
+ * naming companies four of them would have read a company name as a refusal and quietly done the work
  * locally, with nothing on screen to say so.
  *
  * The other direction is the one that matters: a value this treats as consent by accident is
@@ -19,9 +19,26 @@ import {
 
 describe('the answer about where a CV may go', () => {
   it('reads a named company as consent to that company', () => {
-    expect(consentedToTransfer('minimax')).toBe(true)
-    expect(providerIdFrom('minimax')).toBe('minimax')
-    expect(providerIdFrom('DeepSeek')).toBe('deepseek')
+    expect(consentedToTransfer('deepseek')).toBe(true)
+    expect(providerIdFrom('deepseek')).toBe('deepseek')
+    expect(providerIdFrom('Anthropic')).toBe('anthropic')
+  })
+
+  /**
+   * The safety property of ADR-036, and the reason removing a provider is a privacy change.
+   *
+   * `minimax` was a company somebody could consent to until 2026-08-29. A browser tab open since
+   * before that, or an API caller holding an old record, still sends the name — and the only correct
+   * reading is **no**. It must not become consent to whoever replaced it: the person named a company,
+   * that company is not on offer, and nobody agreed to the substitute.
+   *
+   * It falls out of `KNOWN` rather than needing a rule of its own, which is the whole argument for
+   * checking against a list instead of "not empty and not local".
+   */
+  it('reads a company that is no longer offered as a refusal, not as consent to its replacement', () => {
+    expect(consentedToTransfer('minimax')).toBe(false)
+    expect(providerIdFrom('minimax')).toBeUndefined()
+    expect(chosenProvider('minimax')).toBeUndefined()
   })
 
   it('reads local as a refusal', () => {
@@ -69,7 +86,9 @@ describe('the answer about where a CV may go', () => {
   })
 
   it('is not fooled by case or stray whitespace', () => {
-    expect(providerIdFrom('  MiniMax  ')).toBe('minimax')
+    expect(providerIdFrom('  DeepSeek  ')).toBe('deepseek')
     expect(consentedToTransfer('  LOCAL ')).toBe(false)
+    // And a retired name is still a refusal however it is spelled.
+    expect(consentedToTransfer('  MiniMax  ')).toBe(false)
   })
 })

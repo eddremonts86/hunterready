@@ -198,6 +198,21 @@ body {
   font-family: var(--font-sans);
   font-size: 1rem;
   line-height: 1.6;
+  /*
+    The other half of `viewport-fit=cover` (see the viewport meta in `__root.tsx`). Installed on a
+    phone this app owns the whole screen, notch and home indicator included, so the insets have to be
+    spent somewhere or content sits under both.
+
+    Spent on the sides and the bottom here, and **not** the top: the topbar is `sticky top-0`, so a
+    body padding would push it below the notch and leave a white strip above it that scrolls. The top
+    inset belongs to that element and is applied there.
+
+    Zero in a browser tab and on a phone without a notch — `env()` resolves to `0px` — so this costs
+    nothing everywhere else.
+  */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
   /* The reference's headings are tightly set and optically even; without kerning and ligatures on,
      a geometric sans at 68px shows visible gaps around A/V/W. */
   font-kerning: normal;

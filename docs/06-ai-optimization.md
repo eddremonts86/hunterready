@@ -114,7 +114,7 @@ why, and the short version is that it described a product with a different provi
 
 What actually decides:
 
-- **The person picks a named company** at the consent gate — MiniMax, DeepSeek, or our own server —
+- **The person picks a named company** at the consent gate — DeepSeek, or our own server (ADR-036) —
   because ADR-023 makes the third-party model a paid capability and docs/07 requires consent to a
   named provider rather than to "an AI partner". A routing table that overrode that choice would be
   the product deciding where somebody's CV goes _after_ asking them.
