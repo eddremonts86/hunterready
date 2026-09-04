@@ -3,17 +3,18 @@
  *
  * Configurable rather than hardcoded, because the endpoint is an operational decision and the
  * extraction code should not care: any provider exposing an Anthropic-compatible Messages API with
- * tool use works. DeepSeek publishes one at `https://api.deepseek.com/anthropic`, which is what this
- * project is pointed at (Edd, 2026-08-29, ADR-036).
+ * tool use works. MiniMax publishes one at `https://api.minimax.io/anthropic`, which is what this
+ * project is pointed at (Edd, 2026-09-03, ADR-038).
  *
  * ## One company, and the machinery for several is still here
  *
  * MiniMax was the original provider (2026-08-13) and DeepSeek joined it to be measured against it.
- * **DeepSeek is now the only one** — ADR-036 — and MiniMax is gone from this file rather than left
+ * **MiniMax is the only one** — ADR-038, which reverses ADR-036 — and DeepSeek is gone from this file
+ * rather than left
  * configured-but-unused, because a provider that is present in the code and absent from the deployment
  * is the shape this repository keeps finding at the wrong end of a debugging session.
  *
- * `HR_PROVIDER=deepseek|anthropic` still picks explicitly, and the registry below still takes more than
+ * `HR_PROVIDER=minimax|anthropic` still picks explicitly, and the registry below still takes more than
  * one entry. That is deliberate: the day another company is added, the consent gate already names each
  * and the person's answer already records which, and none of that has to be rebuilt.
  *
@@ -21,7 +22,7 @@
  *   1. `HUNTERREADY_LLM_*`      — explicit, and what the Docker image should set
  *   2. `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` (+ `ANTHROPIC_MODEL`)
  *   3. `ANTHROPIC_API_KEY`      — Anthropic proper
- *   4. `DEEPSEEK_API_KEY` + `DEEPSEEK_BASE_URL` + `DEEPSEEK_MODEL`
+ *   4. `MINIMAX_API_KEY` + `MINIMAX_BASE_URL` + `MINIMAX_MODEL`
  *
  * Nothing here logs a token, and nothing writes one to disk.
  */
@@ -30,13 +31,13 @@ import Anthropic from '@anthropic-ai/sdk'
 import { event } from '@/lib/log'
 
 /**
- * DeepSeek's Anthropic-compatible endpoint, used when only the OpenAI-style vars are present.
+ * MiniMax's Anthropic-compatible endpoint, used when only the OpenAI-style vars are present.
  *
  * They publish it for Claude Code, which is why it exists and why it takes the same tool-call shapes
  * this file already speaks. `extract.ts` still reads defensively at the boundary — compatible is not
  * identical, and this project has met three gateways that proved it.
  */
-const DEEPSEEK_ANTHROPIC_BASE = 'https://api.deepseek.com/anthropic'
+const MINIMAX_ANTHROPIC_BASE = 'https://api.minimax.io/anthropic'
 
 export interface Provider {
   client: Anthropic
@@ -54,7 +55,7 @@ export interface Provider {
   /**
    * This model reasons unless told not to, and its gateway refuses a forced tool call while it does.
    *
-   * Measured against DeepSeek's Anthropic-compatible endpoint: `tool_choice: {type:'tool'}` returns
+   * Measured against MiniMax's Anthropic-compatible endpoint: `tool_choice: {type:'tool'}` returns
    * **400 "Thinking mode does not support this tool_choice"**, on every model name it accepts, with or
    * without a temperature. `thinking: {type:'disabled'}` alongside the same forced call returns 200
    * with the `tool_use` block we asked for.
@@ -107,41 +108,34 @@ function value(name: string): string | undefined {
 }
 
 /**
- * DeepSeek — the third-party model, singular, since ADR-036.
+ * MiniMax — the third-party model, singular, since ADR-038.
  *
- * It arrived on 2026-08-17 to be measured against MiniMax on the same CVs, and **it lost the one
- * comparison that was actually run.** Plan 08 scored provenance across both: MiniMax at 34% and 86%
- * where DeepSeek produced none at all on a 75-field document, three passes running. The schema fix
- * lifted DeepSeek to 67–96%, which closes the gap without reversing it.
+ * It was the original provider on 2026-08-13, was removed on 2026-08-29 by ADR-036 in favour of
+ * DeepSeek, and is back because Edd asked for it: *"tienes que usar minimax m3 (solo él) como modelo
+ * externo."*
  *
- * That is written here rather than tidied away because the decision to keep this one was Edd's and was
- * not a quality conclusion (ADR-036). Anybody who finds this file and assumes the surviving provider
- * won on the numbers will be wrong, and will re-derive the wrong reason for it.
+ * **The measurement always pointed here.** ADR-036 recorded, in its own second heading, that it was
+ * deciding against the only head-to-head this project ever ran: plan 08 scored provenance across both
+ * and MiniMax won it — 34% and 97% on the fixtures where DeepSeek produced none at all on a 75-field
+ * document, three passes running. So this reversal restores the provider the data preferred, and the
+ * intervening month cost the release nothing, because `DEEPSEEK_API_KEY` was never set in production
+ * (roadmap item 13) and the third-party path was dark the whole time.
+ *
+ * `MiniMax-M3` by name, which is both the model Edd named and what this defaulted to before. Unlike
+ * DeepSeek's endpoint — which answered 200 to invented model names and quietly served something else
+ * — a wrong name here is a 404, which is the failure mode to prefer.
  */
-function deepseek(): Provider | undefined {
-  const key = value('DEEPSEEK_API_KEY')
+function minimax(): Provider | undefined {
+  const key = value('MINIMAX_API_KEY')
   if (key === undefined) return undefined
   return {
     client: new Anthropic({
       authToken: key,
-      baseURL: value('DEEPSEEK_BASE_URL') ?? DEEPSEEK_ANTHROPIC_BASE,
+      baseURL: value('MINIMAX_BASE_URL') ?? MINIMAX_ANTHROPIC_BASE,
     }),
-    /**
-     * An explicit name, because the wrong ones do not fail.
-     *
-     * Asked for `deepseek-chat` or `deepseek-reasoner`, this endpoint answers 200 and serves
-     * `deepseek-v4-flash` regardless — so the previous default here was quietly running a model nobody
-     * chose. Only `deepseek-v4-pro` and `deepseek-v4-flash` are real names.
-     *
-     * **Flash and not pro, and that is a measured decision rather than a preference.** Edd asked for
-     * pro; against our real tool schema pro returns an *empty* tool input, every time, and every upload
-     * degrades to the rule engine. See `deepseek-schema.test.ts`, which reproduces it in one command.
-     * Set `DEEPSEEK_MODEL=deepseek-v4-pro` the day that changes; nothing else here needs touching.
-     */
-    model: value('DEEPSEEK_MODEL') ?? 'deepseek-v4-flash',
-    label: value('DEEPSEEK_BASE_URL') ?? DEEPSEEK_ANTHROPIC_BASE,
+    model: value('MINIMAX_MODEL') ?? 'MiniMax-M3',
+    label: value('MINIMAX_BASE_URL') ?? MINIMAX_ANTHROPIC_BASE,
     locality: 'third-party',
-    forcesThinking: true,
   }
 }
 
@@ -173,7 +167,7 @@ function anthropic(): Provider | undefined {
  * not agree to.
  */
 const BY_ID: Record<string, () => Provider | undefined> = {
-  deepseek,
+  minimax,
   anthropic,
 }
 
@@ -181,7 +175,7 @@ export type ProviderId = keyof typeof BY_ID
 
 /** The name a person would recognise. Not derived from the host, so a new one is named on purpose. */
 const NAMES: Record<string, string> = {
-  deepseek: 'DeepSeek',
+  minimax: 'MiniMax',
   anthropic: 'Anthropic',
 }
 
@@ -195,7 +189,7 @@ export interface ProviderChoice {
  * Every third-party model this deployment could use — the list the person chooses from.
  *
  * It used to be one: whichever the resolution order landed on, offered as "send it" or "do not". Then
- * it was two, and the gate named each because the choice was the person's. It is one again — DeepSeek,
+ * it was two, and the gate named each because the choice was the person's. It is one again — MiniMax,
  * ADR-036 — and the machinery stays, because the choice it carries was never really *which* company: it
  * is whether the CV leaves this machine at all. That question survives having a single answer on the
  * other side of it, and the gate still has to name the company for the consent to mean anything.
@@ -216,7 +210,7 @@ export function availableProviders(): Array<ProviderChoice> {
  * Say once, at boot, which providers resolved and which did not.
  *
  * **Because the absence was silent, and that cost a release.** DeepSeek shipped on 2026-08-18 and did
- * not appear in production: `deepseek()` returns `undefined` without `DEEPSEEK_API_KEY`, so the app
+ * not appear in production: a provider factory returns `undefined` without its key, so the app
  * started clean, health was green, and a model somebody had deliberately added was simply not in the
  * list. Nothing was wrong enough to log. It was found by reading `/api/processing` after the deploy.
  *
@@ -311,14 +305,14 @@ export function resolveProvider(): Provider | undefined {
   }
 
   /*
-    4. DeepSeek, the only third-party model this product offers (ADR-036).
+    4. MiniMax, the only third-party model this product offers (ADR-038).
 
-    There were two here and the line read `minimax() ?? deepseek()`, which made MiniMax the default by
-    position rather than by decision. One company is now the answer, so there is no order left to get
-    wrong — and nothing silently substitutes another if this one is unconfigured, because consent under
-    docs/07 is consent to a *named* company.
+    There were two here once and the line read `minimax() ?? deepseek()`, which made MiniMax the
+    default by position rather than by decision. One company is the answer either way, so there is no
+    order left to get wrong — and nothing silently substitutes another if this one is unconfigured,
+    because consent under docs/07 is consent to a *named* company.
   */
-  return deepseek()
+  return minimax()
 }
 
 export function isConfigured(): boolean {

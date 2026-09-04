@@ -21,11 +21,11 @@
  *
  * ## Why it scans string literals and not just `process.env.X`
  *
- * Half of these are read through a helper — `value('DEEPSEEK_API_KEY')` in `structure/provider.ts`
+ * Half of these are read through a helper — `value('MINIMAX_API_KEY')` in `structure/provider.ts`
  * does `process.env[name]` — so a check that only understood dot access would pass while missing
- * every provider credential. (That example used to be `MINIMAX_API_KEY`; the canary below was swapped
- * with it when MiniMax was removed, because a guard whose canary no longer exists is a guard that has
- * stopped checking the thing it names.) Matching quoted literals that look like one of this app's variables
+ * every provider credential. (The canary below has been swapped twice, once in each direction, as the
+ * third-party provider changed under it — a guard whose canary names a variable nothing reads any more
+ * is a guard that has quietly stopped checking.) Matching quoted literals that look like one of this app's variables
  * catches both, and it does not have to know the helper's name, which is the part that would rot.
  *
  * Backticks are deliberately not matched: prose refers to these names constantly (`` `HR_RELEASE` ``)
@@ -166,7 +166,7 @@ describe('the deployment can set what the code reads', () => {
       expect.arrayContaining([
         'STRIPE_SECRET_KEY',
         'HR_RELEASE',
-        'DEEPSEEK_API_KEY',
+        'MINIMAX_API_KEY',
         'DATABASE_URL',
       ]),
     )

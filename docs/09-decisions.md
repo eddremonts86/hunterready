@@ -756,6 +756,65 @@ line.
 
 ---
 
+## ADR-038 — MiniMax M3 is the only third-party model, reversing ADR-036
+
+**2026-09-03 · Accepted. Edd's decision, and it agrees with the only measurement this project has.**
+
+Instruction, verbatim: _"tienes que usar minimax m3 (solo el) como modelo externo."_ This supersedes
+[ADR-036](#adr-036--deepseek-is-the-only-third-party-model-and-minimax-is-removed-rather-than-left-configured),
+which removed MiniMax on 2026-08-29 and made DeepSeek the single provider.
+
+### The measurement pointed here all along, and ADR-036 said so itself
+
+ADR-036's second heading is _"The measurement points the other way, and that is not a reason to ignore
+the decision"_. It recorded that the only head-to-head this project has actually run — plan 08's
+provenance scoring — **MiniMax won**:
+
+| provider | fixture          | fields | before | after |
+| -------- | ---------------- | ------ | ------ | ----- |
+| DeepSeek | plain.txt        | 33     | 0%     | 70%   |
+| DeepSeek | nurse-senior.pdf | 75     | 0%     | 0→67% |
+| MiniMax  | plain.txt        | 35     | 34%    | 97%   |
+
+So this reversal does not overturn evidence; it stops overriding it. Nothing needs re-measuring to
+justify it, and nothing new was measured to support it either — the instruction is the reason, and the
+data simply does not contradict it.
+
+### The month DeepSeek was the choice cost the release nothing
+
+`DEEPSEEK_API_KEY` was never set in any environment. Read from the running production container on
+2026-09-03: `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL` and `DEEPSEEK_MODEL` are all **empty**, and
+`/api/processing` answers `thirdPartyConfigured: false` with `providers: []`. The third-party path has
+been dark since it shipped (roadmap item 13), so no user was ever served by the provider this ADR
+removes, and the switch changes what production _would_ do rather than what it does.
+
+`MINIMAX_BASE_URL` and `MINIMAX_MODEL` are still set in Coolify — inert since ADR-036, because
+`docker-compose.yml` stopped declaring them. They are declared again, so those two rows start working
+the moment `MINIMAX_API_KEY` joins them.
+
+### What changed
+
+- `minimax()` is restored in `src/structure/provider.ts`, defaulting to `MiniMax-M3` — the model Edd
+  named and the one this defaulted to before. `deepseek()` is gone from the file; the prose that
+  records why both existed stays.
+- `docker-compose.yml` declares `MINIMAX_API_KEY`, `MINIMAX_BASE_URL` and `MINIMAX_MODEL` and no
+  longer declares the DeepSeek three. `compose-environment.test.ts`'s canary followed, for the second
+  time and in the opposite direction — a guard naming a variable nothing reads has quietly stopped
+  checking.
+- The live probe is renamed `provider-schema.test.ts` and asks its question of MiniMax. **Nobody has
+  ever asked it of M3**: MiniMax was the provider until 2026-08-29 and the probe was written after it
+  left, so it is the only thing that would catch M3 returning an empty tool input the way
+  `deepseek-v4-pro` did. It is `skipIf` on `MINIMAX_API_KEY`, so it has never run.
+- Roadmap item 12 is closed by this; item 13 is not, and is now the same single credential.
+
+### The consequence to be honest about
+
+Reversing a provider decision a month later, on instruction and without new measurement, is a thing
+this log should be able to show plainly rather than dress up. Two ADRs, one month, opposite
+directions, and the second one restores what the data preferred. The cost was a month in which the
+product's third-party option was configured to a company nobody had a key for — which is not the
+reversal's fault, but it is why item 13 has outlived two providers.
+
 ## ADR-037 — The PWA is installable and resilient, not offline-first, and the service worker never caches a person
 
 **2026-09-02 · Accepted.**

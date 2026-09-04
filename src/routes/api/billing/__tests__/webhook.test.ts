@@ -27,7 +27,7 @@ const URL_ENV = (
   ''
 ).trim()
 
-/** Not a real secret and shaped so a scanner cannot mistake it for one — see `deepseek-schema.test.ts`. */
+/** Not a real secret and shaped so a scanner cannot mistake it for one — see `provider-schema.test.ts`. */
 const SECRET = 'whsec_test_fixture_not_a_credential_0000'
 
 /**

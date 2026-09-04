@@ -43,7 +43,7 @@
  *
  * ## Why this stays as a test
  *
- * It is a characterisation test, like `deepseek-schema.test.ts`: it records an answer that is true
+ * It is a characterisation test, like `provider-schema.test.ts`: it records an answer that is true
  * today and is **notification when it stops being true**. Bundle a Hebrew or Arabic face and the first
  * cases go red — deliberately, because that is a decision with ADR-035 attached and not a font drop.
  *
