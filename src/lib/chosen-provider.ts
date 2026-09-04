@@ -32,14 +32,24 @@ export const LOCAL_CHOICE = 'local'
  * have counted as consent and dropped the CV onto the rule engine instead of the local model, which
  * is a worse read for a person who never asked for it.
  *
- * **Kept in step with `BY_ID` in `structure/provider.ts` by hand, and `minimax` left with it on
- * 2026-08-29 (ADR-036).** Not derived from it, because that module constructs the Anthropic SDK at
- * import time and this one is reached from the request path; the duplication is two short lists and
- * `chosen-provider.test.ts` asserts what this one accepts. A name that passes here and resolves to
- * nothing there is not dangerous — `providerById` refuses it and the CV stays local — but it would
- * count as consent, which is the wrong record to keep.
+ * **Kept in step with `BY_ID` in `structure/provider.ts`, and by a test rather than by hand.**
+ * Not derived from it, because that module constructs the Anthropic SDK at import time and this one is
+ * reached from the request path. A name that passes here and resolves to nothing there is not
+ * dangerous — `providerById` refuses it and the CV stays local — but it would count as consent, which
+ * is the wrong record to keep.
+ *
+ * ⚠️ **This list has been wrong twice, in both directions, and it fails silently both times.**
+ * `minimax` left on 2026-08-29 with ADR-036 and came back on 2026-09-03 with ADR-038 — and the second
+ * time the provider was swapped in `BY_ID` and *not* here. The consequence was exactly what the first
+ * section of this file warns about: `'minimax'` read as not-consent, and every upload through the
+ * third-party path quietly extracted on the local model instead. `pnpm test` was green throughout,
+ * because `chosen-provider.test.ts` asserted the list as it then stood. Found by ingesting a real CV
+ * against a real build and reading `method` in the answer, which said `local`.
+ *
+ * `chosen-provider.test.ts` now parses `BY_ID` out of `provider.ts` and asserts every id in it is
+ * accepted here, so the two lists cannot drift again without something going red.
  */
-const KNOWN = new Set(['deepseek', 'anthropic'])
+const KNOWN = new Set(['minimax', 'anthropic'])
 
 export function chosenProvider(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
