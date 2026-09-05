@@ -114,6 +114,13 @@ const NOT_CLAIMS: ReadonlyMap<string, string> = new Map([
 const NOT_DESCRIPTIONS = new Set([
   'docs/10-plan-v0.1.md',
   'tests/documented-files.test.ts',
+  /**
+   * `docs/plans/12-deepseek-v4-pro.md` joins them for the same reason as the v0.1 plan: the test it
+   * names was called that when it was written, and ADR-038 renamed it to `provider-schema.test.ts`
+   * when the provider changed back to MiniMax. Editing a finished plan so a checker passes is
+   * rewriting the record to suit the tooling, which is the opposite of what this file is for.
+   */
+  'docs/plans/12-deepseek-v4-pro.md',
 ])
 
 /** A path-shaped reference: has a directory in it, and an extension we can resolve. */

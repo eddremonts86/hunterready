@@ -60,16 +60,19 @@ services:
       # `src/structure/provider.ts` for why that is a model on our own hardware and not a regex.
       OLLAMA_BASE_URL: http://llm:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b-instruct}
-      # The third-party provider, used only with explicit consent (docs/07). DeepSeek is the only one
-      # since ADR-036; MINIMAX_* was removed with it and setting it here now does nothing.
+      # The third-party provider, used only with explicit consent (docs/07). MiniMax is the only one
+      # since ADR-038, which reverses ADR-036; DEEPSEEK_* went with it and setting it here now does
+      # nothing.
       #
       # ⚠️ Without these the product has NO third-party model: `/api/processing` reports no provider,
       # the consent gate does not appear because there is no transfer to agree to, and every read falls
       # to the local model. That is a working product and a slower one — not an outage — but it is not
-      # what this deployment is for.
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-}
-      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
+      # what this deployment is for. **That is production's state today**: `MINIMAX_API_KEY` has never
+      # been set there and `DEEPSEEK_API_KEY` was empty for the month DeepSeek was the choice, so the
+      # third-party path has been dark since it shipped (roadmap item 13).
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
+      MINIMAX_BASE_URL: ${MINIMAX_BASE_URL:-}
+      MINIMAX_MODEL: ${MINIMAX_MODEL:-}
       # Which one answers when several are configured. Unset, the resolution order in provider.ts
       # applies and nothing changes for an existing deployment.
       HR_PROVIDER: ${HR_PROVIDER:-}

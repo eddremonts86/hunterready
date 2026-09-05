@@ -26,7 +26,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { PRICING, hasCheckout, stripePriceId } from '@/lib/pricing'
 
-/** Not real, and shaped so a secret scanner cannot mistake it for one — see `deepseek-schema.test.ts`. */
+/** Not real, and shaped so a secret scanner cannot mistake it for one — see `provider-schema.test.ts`. */
 const KEY = 'sk_test_fixture_not_a_credential_0000'
 const PRICE = 'price_fixture_not_a_credential_0000'
 

@@ -690,14 +690,17 @@ is the argument for the verification step and not against the plan.
 
 ### Found while deploying 2026-08-18, not while planning
 
-12. **DeepSeek v4-pro returns an empty tool input.** Asked for, and it does not work: against the real
-    7,303-character schema v4-pro calls the tool with `{}` while `deepseek-v4-flash` fills it in 1.8s.
-    Both were measured on the same prompt through the same Anthropic-compatible endpoint, with
-    `thinking: {type: 'disabled'}` (v4-pro rejects a forced `tool_choice` otherwise). Flash ships.
-    `deepseek-schema.test.ts` goes red the day the vendor fixes it — **on a machine that has a key.**
-    Checked 2026-08-23: it is `skipIf` on `DEEPSEEK_API_KEY`, which is set in no environment at all, so
-    the test has never run and the notification cannot arrive on its own. That makes this item and item
-    13 **the same credential**, not two items waiting on different things.
+12. ~~**DeepSeek v4-pro returns an empty tool input.**~~ **Closed 2026-09-03 by ADR-038**, which makes
+    MiniMax the only third-party model again on Edd's instruction. The finding itself stands and is why
+    the probe exists — against the real 7,303-character schema v4-pro called the tool with `{}` while
+    `deepseek-v4-flash` filled it in 1.8s — but it is no longer a decision anyone has to make, because
+    neither model is reachable from this product now.
+    <br><br>
+    **What replaced it is not smaller.** The probe is now `provider-schema.test.ts` and it asks the same
+    question of `MiniMax-M3`, which **nobody has ever asked**: MiniMax was the provider until
+    2026-08-29 and the probe was written after it left. So a pass there is new information, and it is
+    the only thing that would catch M3 doing to us what pro did. It is `skipIf` on `MINIMAX_API_KEY`,
+    which is set in no environment at all — so this item and item 13 are still **the same credential**.
     **Decide, once it is fixed:** pro by default, or leave flash and keep pro as a choice.
 13. **DeepSeek is configured nowhere in production — and since 2026-08-29 that blocks a release.**
     `deepseek()` returns `undefined` without `DEEPSEEK_API_KEY`, so the app starts clean and the model

@@ -26,9 +26,9 @@ const withHeader = (value?: string) =>
 
 describe('the header names a company', () => {
   it('survives the whole chain to a provider id', () => {
-    const asked = consentOn(withHeader('deepseek'), null)
+    const asked = consentOn(withHeader('minimax'), null)
     expect(consentedToTransfer(asked)).toBe(true)
-    expect(providerIdFrom(asked)).toBe('deepseek')
+    expect(providerIdFrom(asked)).toBe('minimax')
   })
 
   it('carries the legacy value through as consent without a name', () => {
@@ -59,15 +59,15 @@ describe('it falls to local, which is the only safe direction', () => {
 describe('a body beats a header', () => {
   it('prefers the person s own click over a machine s assertion', () => {
     // A browser field is a person answering. A header on the same request would be an override.
-    const asked = consentOn(withHeader('deepseek'), 'local')
+    const asked = consentOn(withHeader('minimax'), 'local')
     expect(consentedToTransfer(asked)).toBe(false)
   })
 
   it('falls through to the header when the body field is absent or blank', () => {
-    expect(consentedToTransfer(consentOn(withHeader('deepseek'), null))).toBe(
+    expect(consentedToTransfer(consentOn(withHeader('minimax'), null))).toBe(
       true,
     )
-    expect(consentedToTransfer(consentOn(withHeader('deepseek'), '  '))).toBe(
+    expect(consentedToTransfer(consentOn(withHeader('minimax'), '  '))).toBe(
       true,
     )
   })

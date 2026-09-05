@@ -3,8 +3,8 @@
  *
  * ## Why this line exists
  *
- * DeepSeek shipped on 2026-08-18 and did not appear in production. `deepseek()` returns `undefined`
- * without `DEEPSEEK_API_KEY`, so the app started clean, `/api/health` was green, and a model somebody
+ * DeepSeek shipped on 2026-08-18 and did not appear in production. A provider factory returns
+ * `undefined` without its key, so the app started clean, `/api/health` was green, and a model somebody
  * had deliberately added was simply absent from the list. Nothing was broken enough to log. It was
  * found by reading `/api/processing` after the deploy, which is not a method.
  *
@@ -53,7 +53,7 @@ afterEach(() => {
 describe('the boot line names what resolved and what did not', () => {
   it('reports a configured provider and a skipped one', async () => {
     const lines = await boot({
-      DEEPSEEK_API_KEY: SECRET,
+      MINIMAX_API_KEY: SECRET,
       ANTHROPIC_API_KEY: undefined,
       HUNTERREADY_LLM_TOKEN: undefined,
     })
@@ -64,7 +64,7 @@ describe('the boot line names what resolved and what did not', () => {
       providersConfigured: string
       providersSkipped: string
     }
-    expect(parsed.providersConfigured).toContain('deepseek')
+    expect(parsed.providersConfigured).toContain('minimax')
     // The skipped one is Anthropic now. MiniMax was removed as a provider on 2026-08-29 (ADR-036),
     // so it cannot be reported as skipped — there is nothing left to skip.
     expect(parsed.providersSkipped).toContain('anthropic')
@@ -73,7 +73,7 @@ describe('the boot line names what resolved and what did not', () => {
 
   it('says so plainly when nothing is configured', async () => {
     const lines = await boot({
-      DEEPSEEK_API_KEY: undefined,
+      MINIMAX_API_KEY: undefined,
       ANTHROPIC_API_KEY: undefined,
       HUNTERREADY_LLM_TOKEN: undefined,
     })
@@ -86,7 +86,7 @@ describe('the boot line names what resolved and what did not', () => {
 
   it('is said once per process, not once per request', async () => {
     vi.resetModules()
-    vi.stubEnv('DEEPSEEK_API_KEY', SECRET)
+    vi.stubEnv('MINIMAX_API_KEY', SECRET)
     const lines: Array<string> = []
     const spy = vi
       .spyOn(console, 'log')
@@ -123,7 +123,7 @@ describe('the boot line carries nothing secret', () => {
     vi.setSystemTime(new Date('2026-08-19T08:19:18.540Z'))
 
     try {
-      const lines = await boot({ DEEPSEEK_API_KEY: SECRET })
+      const lines = await boot({ MINIMAX_API_KEY: SECRET })
       const all = lines.join('\n')
 
       expect(all).not.toContain(SECRET)
